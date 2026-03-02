@@ -14,15 +14,30 @@
         "typescript": "^5.9.3",
       },
     },
-    "packages/server": {
-      "name": "server",
+    "packages/client": {
+      "name": "relog-client",
       "version": "0.1.0",
-      "peerDependencies": {
-        "typescript": ">=4.5.0",
+      "dependencies": {
+        "picocolors": "^1.1.1",
+        "relog-shared": "workspace:*",
       },
-      "optionalPeers": [
-        "typescript",
-      ],
+    },
+    "packages/server": {
+      "name": "relog",
+      "version": "0.1.0",
+      "bin": {
+        "relog": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@drizzle-team/brocli": "^0.10.2",
+        "picocolors": "^1.1.1",
+        "relog-client": "workspace:*",
+        "relog-shared": "workspace:*",
+      },
+    },
+    "packages/shared": {
+      "name": "relog-shared",
+      "version": "0.1.0",
     },
   },
   "packages": {
@@ -37,6 +52,8 @@
     "@bunup/dts": ["@bunup/dts@0.14.53", "", { "dependencies": { "@babel/parser": "^7.28.6", "coffi": "^0.1.37", "oxc-minify": "^0.93.0", "oxc-resolver": "^11.16.2", "oxc-transform": "^0.93.0", "picocolors": "^1.1.1", "std-env": "^3.10.0", "ts-import-resolver": "^0.1.23" }, "peerDependencies": { "typescript": ">=4.5.0" }, "optionalPeers": ["typescript"] }, "sha512-qyHgYEYxcghoChICEhuFKfA/EqqRA9WHOHLXcIkR9c70DgLAEXcOlkYhfBPmGxfMKJYL0X4VtQwst0/AMk9D3g=="],
 
     "@bunup/shared": ["@bunup/shared@0.16.28", "", { "peerDependencies": { "typescript": ">=4.5.0" }, "optionalPeers": ["typescript"] }, "sha512-6xyJB5/OFYf0tLCQSRL+PrgzYlS0KabysM06cBY0Ijuk1tr5Aak8/NqzE6ifu+s6K0mstnGXQ+6DqtNlOMEazw=="],
+
+    "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
 
     "@emnapi/core": ["@emnapi/core@1.8.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.1.0", "tslib": "^2.4.0" } }, "sha512-AvT9QFpxK0Zd8J0jopedNm+w/2fIzvtPKPjqyw9jwvBaReTTqPBk9Hixaz7KbjimP+QNz605/XnjFcDAL2pqBg=="],
 
@@ -328,9 +345,13 @@
 
     "readdirp": ["readdirp@5.0.0", "", {}, "sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ=="],
 
-    "semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
+    "relog": ["relog@workspace:packages/server"],
 
-    "server": ["server@workspace:packages/server"],
+    "relog-client": ["relog-client@workspace:packages/client"],
+
+    "relog-shared": ["relog-shared@workspace:packages/shared"],
+
+    "semver": ["semver@7.7.4", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA=="],
 
     "simple-git-hooks": ["simple-git-hooks@2.13.1", "", { "bin": { "simple-git-hooks": "cli.js" } }, "sha512-WszCLXwT4h2k1ufIXAgsbiTOazqqevFCIncOuUBZJ91DdvWcC5+OFkluWRQPrcuSYd8fjq+o2y1QfWqYMoAToQ=="],
 

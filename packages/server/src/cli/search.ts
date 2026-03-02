@@ -1,0 +1,51 @@
+import { type Command, command, number, string } from "@drizzle-team/brocli";
+import { printLogRecord } from "relog-client";
+import type { LogRecord } from "relog-client";
+import { resolveAuth } from "./shared.ts";
+
+export const searchCommand: Command = command({
+	name: "search",
+	desc: "Search logs with filters",
+	options: {
+		url: string().desc("Server URL").default("http://localhost:3485"),
+		from: string().desc("Start time (ISO 8601 or relative like '1h')"),
+		to: string().desc("End time (ISO 8601)"),
+		level: string().desc("Filter by log level"),
+		service: string().desc("Filter by service name"),
+		grep: string().desc("Search message text"),
+		limit: number().desc("Max results to return").default(100),
+		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
+	},
+	handler: async (opts) => {
+		const params = new URLSearchParams();
+		if (opts.level) params.set("level", opts.level);
+		if (opts.service) params.set("service", opts.service);
+		if (opts.grep) params.set("grep", opts.grep);
+		if (opts.from) params.set("from", opts.from);
+		if (opts.to) params.set("to", opts.to);
+		params.set("limit", String(opts.limit));
+
+		const headers: Record<string, string> = {};
+		const auth = resolveAuth(opts.auth);
+		if (auth) headers["Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
+
+		const qs = params.toString();
+		const response = await fetch(`${opts.url}/logs?${qs}`, { headers });
+
+		if (!response.ok) {
+			console.error(`Search failed: ${response.status}`);
+			process.exit(1);
+		}
+
+		const result = (await response.json()) as {
+			rows: LogRecord[];
+			total: number;
+		};
+
+		for (const row of result.rows) {
+			printLogRecord(row);
+		}
+
+		console.error(`\n${result.rows.length} of ${result.total} results`);
+	},
+});

@@ -1,8 +1,8 @@
 {
-	"name": "relog",
+	"name": "relog-client",
 	"version": "0.1.0",
-	"description": "Universal logging system - server and CLI",
-	"homepage": "https://github.com/TimMikeladze/relog/tree/main/packages/server#readme",
+	"description": "Client SDK for relog - universal logging system",
+	"homepage": "https://github.com/TimMikeladze/relog/tree/main/packages/client#readme",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
@@ -14,9 +14,6 @@
 	"type": "module",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
-	"bin": {
-		"relog": "./dist/cli.js"
-	},
 	"exports": {
 		".": {
 			"import": {
@@ -30,9 +27,7 @@
 		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@drizzle-team/brocli": "^0.10.2",
 		"picocolors": "^1.1.1",
-		"relog-client": "workspace:*",
 		"relog-shared": "workspace:*"
 	}
 }
