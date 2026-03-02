@@ -1,6 +1,6 @@
 import type { RelogDatabase } from "../../db/database.ts";
 import { LOG_LEVELS } from "../../types.ts";
-import type { IngestPayload, LogLevel } from "../../types.ts";
+import type { IngestPayload } from "../../types.ts";
 
 const VALID_LEVELS = new Set<string>(Object.keys(LOG_LEVELS));
 

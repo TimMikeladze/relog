@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { formatLogRecord } from "../src/console.ts";
 import { createLogger, Logger } from "../src/logger.ts";
 import { Transport } from "../src/transport.ts";

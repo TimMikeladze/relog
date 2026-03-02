@@ -1,5 +1,5 @@
 import type { RelogDatabase } from "../../db/database.ts";
-import type { LogEntry, LogLevel, StreamFilters } from "../../types.ts";
+import type { LogLevel, StreamFilters } from "../../types.ts";
 
 type StreamClient = {
 	controller: ReadableStreamDefaultController;
