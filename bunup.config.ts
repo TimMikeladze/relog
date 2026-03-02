@@ -1,21 +1,8 @@
-import { defineWorkspace } from "bunup";
+import { defineConfig } from "bunup";
 
-export default defineWorkspace([
-	{
-		name: "server",
-		root: "packages/server",
-		entry: {
-			index: "src/index.ts",
-			cli: "src/cli.ts",
-		},
-		dts: true,
-		target: "node",
-		external: ["bun:sqlite"],
-	},
-	{
-		name: "client",
-		root: "packages/client",
-		dts: true,
-		target: "node",
-	},
-]);
+export default defineConfig({
+	entry: ["src/index.ts", "src/cli.ts", "src/client.ts"],
+	dts: true,
+	target: "node",
+	external: ["bun:sqlite"],
+});

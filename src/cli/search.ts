@@ -1,6 +1,6 @@
 import { type Command, command, number, string } from "@drizzle-team/brocli";
-import { printLogRecord } from "relog-client";
-import type { LogRecord } from "relog-client";
+import { printLogRecord } from "../console.ts";
+import type { LogRecord } from "../types.ts";
 import { resolveAuth } from "./shared.ts";
 
 export const searchCommand: Command = command({
