@@ -13,18 +13,9 @@ jobs:
 
     services:
       minio:
-        image: minio/minio:latest
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
+        image: fclairamb/minio-github-actions
         ports:
           - 9000:9000
-        options: >-
-          --health-cmd "curl -sf http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --entrypoint "minio server /data"
 
     steps:
       - name: Checkout code

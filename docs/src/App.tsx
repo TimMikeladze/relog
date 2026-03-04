@@ -62,7 +62,7 @@ function Hero() {
 			<h1 className="text-[2.75rem] sm:text-5xl font-bold tracking-[-0.035em] leading-[1.08] mb-5">
 				Structured logging
 				<br />
-				<span className="gradient-agent">for the agent era.</span>
+				<span className="gradient-agent">for the agentic era.</span>
 			</h1>
 			<p className="text-dim text-[15px] leading-[1.7] mb-10 max-w-md">
 				Self-hosted log server backed by SQLite. Ship structured logs from any app, query with SQL,
