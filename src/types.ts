@@ -1,6 +1,13 @@
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
 
-export const VALID_LEVELS: Set<string> = new Set<string>(["trace", "debug", "info", "warn", "error", "fatal"]);
+export const VALID_LEVELS: Set<string> = new Set<string>([
+	"trace",
+	"debug",
+	"info",
+	"warn",
+	"error",
+	"fatal",
+]);
 
 export const LOG_LEVELS: Record<LogLevel, number> = {
 	trace: 10,
