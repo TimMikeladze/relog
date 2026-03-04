@@ -53,8 +53,7 @@ export class Logger {
 		this.pid = PID;
 		this.isChild = !!parentTransport;
 
-		this.consoleEnabled =
-			options.console ?? process.env.NODE_ENV !== "production";
+		this.consoleEnabled = options.console ?? process.env.NODE_ENV !== "production";
 
 		if (parentTransport) {
 			this.transport = parentTransport;

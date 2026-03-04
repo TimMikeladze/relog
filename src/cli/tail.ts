@@ -61,9 +61,7 @@ export const tailCommand: Command = command({
 						const line = lines[i]!;
 						if (line.startsWith("event: error")) {
 							const nextLine = lines[i + 1];
-							const msg = nextLine?.startsWith("data: ")
-								? nextLine.slice(6)
-								: "Stream error";
+							const msg = nextLine?.startsWith("data: ") ? nextLine.slice(6) : "Stream error";
 							console.error(msg);
 							process.exit(1);
 						}

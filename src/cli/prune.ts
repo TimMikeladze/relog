@@ -1,10 +1,4 @@
-import {
-	type Command,
-	boolean,
-	command,
-	number,
-	string,
-} from "@drizzle-team/brocli";
+import { type Command, boolean, command, number, string } from "@drizzle-team/brocli";
 import { authHeaders } from "./shared.ts";
 
 export const pruneCommand: Command = command({
@@ -35,13 +29,9 @@ export const pruneCommand: Command = command({
 
 		if (!opts.yes) {
 			const cutoff = new Date(beforeMs).toISOString();
-			process.stdout.write(
-				`This will delete all logs before ${cutoff}. Continue? [y/N] `,
-			);
+			process.stdout.write(`This will delete all logs before ${cutoff}. Continue? [y/N] `);
 			const input = await new Promise<string>((resolve) => {
-				process.stdin.once("data", (data) =>
-					resolve(data.toString().trim().toLowerCase()),
-				);
+				process.stdin.once("data", (data) => resolve(data.toString().trim().toLowerCase()));
 			});
 			if (input !== "y" && input !== "yes") {
 				console.log("Aborted.");

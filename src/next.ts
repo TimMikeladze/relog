@@ -60,11 +60,8 @@ function patchConsole(logger: Logger): void {
 	};
 
 	for (const [method, level] of Object.entries(levelMap)) {
-		const original =
-			originalConsole[method as keyof typeof originalConsole];
-		(console as unknown as Record<string, unknown>)[method] = (
-			...args: unknown[]
-		) => {
+		const original = originalConsole[method as keyof typeof originalConsole];
+		(console as unknown as Record<string, unknown>)[method] = (...args: unknown[]) => {
 			// Always call original so terminal output is preserved
 			original.apply(console, args);
 
@@ -73,12 +70,7 @@ function patchConsole(logger: Logger): void {
 			_insideRelog = true;
 			try {
 				const message = args.map(safeStringify).join(" ");
-				logger[
-					level as keyof Pick<
-						Logger,
-						"info" | "warn" | "error" | "debug"
-					>
-				](message, {
+				logger[level as keyof Pick<Logger, "info" | "warn" | "error" | "debug">](message, {
 					source: "console",
 				});
 			} finally {
@@ -111,7 +103,7 @@ export function withRelog(config: RelogNextConfig = {}) {
 		if (singleton) return;
 
 		// Dynamic imports so that middleware.ts (Edge runtime) can import
-		// relog/next without pulling in node:os / node:child_process.
+		// relog.dev/next without pulling in node:os / node:child_process.
 		const { Transport } = await import("./transport.ts");
 		const { Logger } = await import("./logger.ts");
 
@@ -123,9 +115,7 @@ export function withRelog(config: RelogNextConfig = {}) {
 			onError(error) {
 				_insideRelog = true;
 				try {
-					originalConsole.warn(
-						`[relog] Transport error: ${error.message}`,
-					);
+					originalConsole.warn(`[relog.dev] Transport error: ${error.message}`);
 				} finally {
 					_insideRelog = false;
 				}
@@ -164,8 +154,7 @@ export function withRelog(config: RelogNextConfig = {}) {
 	) {
 		if (!singleton) return;
 
-		const err =
-			error instanceof Error ? error : new Error(String(error));
+		const err = error instanceof Error ? error : new Error(String(error));
 
 		singleton.error(err, {
 			source: "onRequestError",
@@ -200,16 +189,12 @@ export function withRelog(config: RelogNextConfig = {}) {
 export function relogMiddleware(
 	userMiddleware?: (request: Request) => Response | Promise<Response>,
 ) {
-	return async (
-		request: Request,
-	): Promise<Response | undefined> => {
+	return async (request: Request): Promise<Response | undefined> => {
 		const start = Date.now();
 		const traceId = generateTraceId();
 		const url = new URL(request.url);
 		const traceHeader = singletonConfig?.traceHeader ?? "x-trace-id";
-		const isEdge =
-			typeof process !== "undefined" &&
-			process.env.NEXT_RUNTIME === "edge";
+		const isEdge = typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge";
 
 		let response: Response | undefined;
 		if (userMiddleware) {
@@ -249,8 +234,7 @@ export function relogMiddleware(
 
 		if (isEdge) {
 			// In Edge runtime, send directly via fetch to avoid Node.js dependencies
-			const edgeUrl =
-				process.env.RELOG_URL ?? "http://localhost:3485";
+			const edgeUrl = process.env.RELOG_URL ?? "http://localhost:3485";
 			const edgeHeaders: Record<string, string> = {
 				"Content-Type": "application/json",
 			};
@@ -277,44 +261,42 @@ function warnIfNoSingleton(): void {
 	if (!singleton && !logProxyWarned) {
 		logProxyWarned = true;
 		originalConsole.warn(
-			"[relog] log.* called before register(). Logs will be dropped until withRelog().register() is called.",
+			"[relog.dev] log.* called before register(). Logs will be dropped until withRelog().register() is called.",
 		);
 	}
 }
 
 /** Proxy to the singleton Logger for explicit structured logging. */
-export const log: Pick<
-	Logger,
-	"trace" | "debug" | "info" | "warn" | "error" | "fatal" | "flush"
-> = {
-	trace(message, meta?) {
-		warnIfNoSingleton();
-		singleton?.trace(message, meta);
-	},
-	debug(message, meta?) {
-		warnIfNoSingleton();
-		singleton?.debug(message, meta);
-	},
-	info(message, meta?) {
-		warnIfNoSingleton();
-		singleton?.info(message, meta);
-	},
-	warn(message, meta?) {
-		warnIfNoSingleton();
-		singleton?.warn(message, meta);
-	},
-	error(message, meta?) {
-		warnIfNoSingleton();
-		singleton?.error(message, meta);
-	},
-	fatal(message, meta?) {
-		warnIfNoSingleton();
-		singleton?.fatal(message, meta);
-	},
-	async flush() {
-		await singleton?.flush();
-	},
-};
+export const log: Pick<Logger, "trace" | "debug" | "info" | "warn" | "error" | "fatal" | "flush"> =
+	{
+		trace(message, meta?) {
+			warnIfNoSingleton();
+			singleton?.trace(message, meta);
+		},
+		debug(message, meta?) {
+			warnIfNoSingleton();
+			singleton?.debug(message, meta);
+		},
+		info(message, meta?) {
+			warnIfNoSingleton();
+			singleton?.info(message, meta);
+		},
+		warn(message, meta?) {
+			warnIfNoSingleton();
+			singleton?.warn(message, meta);
+		},
+		error(message, meta?) {
+			warnIfNoSingleton();
+			singleton?.error(message, meta);
+		},
+		fatal(message, meta?) {
+			warnIfNoSingleton();
+			singleton?.fatal(message, meta);
+		},
+		async flush() {
+			await singleton?.flush();
+		},
+	};
 
 /** Reset singleton — exposed for testing only. */
 export function _resetSingleton(): void {

@@ -17,11 +17,7 @@ export class StreamManager {
 	private maxClients: number;
 	private closed = false;
 
-	constructor(
-		db: RelogDatabase,
-		debounceMs: number = 50,
-		maxClients: number = 100,
-	) {
+	constructor(db: RelogDatabase, debounceMs: number = 50, maxClients: number = 100) {
 		this.db = db;
 		this.debounceMs = debounceMs;
 		this.maxClients = maxClients;
@@ -77,22 +73,14 @@ export class StreamManager {
 
 		for (const client of this.clients) {
 			try {
-				const logs = this.db.getLogsSince(
-					client.lastPollId,
-					client.filters,
-					500,
-				);
+				const logs = this.db.getLogsSince(client.lastPollId, client.filters, 500);
 				if (logs.length === 0) continue;
 
 				let clientFailed = false;
 				for (const log of logs) {
 					if (clientFailed) break;
 					try {
-						client.controller.enqueue(
-							this.encoder.encode(
-								`data: ${JSON.stringify(log)}\n\n`,
-							),
-						);
+						client.controller.enqueue(this.encoder.encode(`data: ${JSON.stringify(log)}\n\n`));
 						if (log.id && log.id > client.lastPollId) {
 							client.lastPollId = log.id;
 						}
@@ -144,11 +132,7 @@ export function handleStream(
 			client = { controller, filters, lastPollId: db.getMaxId() };
 			const added = streamManager.addClient(client);
 			if (!added) {
-				controller.enqueue(
-					encoder.encode(
-						"event: error\ndata: Too many stream clients\n\n",
-					),
-				);
+				controller.enqueue(encoder.encode("event: error\ndata: Too many stream clients\n\n"));
 				controller.close();
 				return;
 			}

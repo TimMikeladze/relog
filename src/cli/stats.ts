@@ -44,9 +44,7 @@ export const statsCommand: Command = command({
 
 		console.log(pc.bold("Relog Statistics"));
 		console.log(`  Total logs:  ${pc.green(String(health.log_count))}`);
-		console.log(
-			`  DB size:     ${pc.cyan(formatBytes(health.db_size_bytes))}`,
-		);
+		console.log(`  DB size:     ${pc.cyan(formatBytes(health.db_size_bytes))}`);
 		console.log(`  Uptime:      ${formatUptime(health.uptime)}`);
 		console.log();
 		console.log(pc.bold("By Level:"));

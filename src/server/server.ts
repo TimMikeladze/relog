@@ -23,10 +23,7 @@ function resolveCorsOrigin(
 	return null;
 }
 
-function corsHeaders(
-	config: ServerConfig,
-	requestOrigin: string | null,
-): Record<string, string> {
+function corsHeaders(config: ServerConfig, requestOrigin: string | null): Record<string, string> {
 	const origin = resolveCorsOrigin(config.cors, requestOrigin);
 	if (!origin) return {};
 	const headers: Record<string, string> = {
@@ -91,10 +88,7 @@ export function startServer(config: ServerConfig): ServerInstance {
 				} else if (method === "GET" && path === "/health") {
 					response = handleHealth(db, startTime);
 				} else {
-					response = Response.json(
-						{ error: "Not found" },
-						{ status: 404 },
-					);
+					response = Response.json({ error: "Not found" }, { status: 404 });
 				}
 
 				if (config.cors) {
@@ -105,10 +99,7 @@ export function startServer(config: ServerConfig): ServerInstance {
 
 				return response;
 			} catch {
-				return Response.json(
-					{ error: "Internal server error" },
-					{ status: 500, headers: cors },
-				);
+				return Response.json({ error: "Internal server error" }, { status: 500, headers: cors });
 			}
 		},
 	});

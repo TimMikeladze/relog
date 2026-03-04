@@ -12,10 +12,7 @@ function queryErrorMessage(err: unknown): string {
 	return "Query execution failed";
 }
 
-export async function handleQuery(
-	request: Request,
-	db: RelogDatabase,
-): Promise<Response> {
+export async function handleQuery(request: Request, db: RelogDatabase): Promise<Response> {
 	let body: QueryBody;
 	try {
 		body = (await request.json()) as QueryBody;
@@ -31,17 +28,11 @@ export async function handleQuery(
 		const result = db.query(body.sql, body.params);
 		return Response.json(result);
 	} catch (err) {
-		return Response.json(
-			{ error: queryErrorMessage(err) },
-			{ status: 400 },
-		);
+		return Response.json({ error: queryErrorMessage(err) }, { status: 400 });
 	}
 }
 
-export async function handleQueryStream(
-	request: Request,
-	db: RelogDatabase,
-): Promise<Response> {
+export async function handleQueryStream(request: Request, db: RelogDatabase): Promise<Response> {
 	let body: QueryBody;
 	try {
 		body = (await request.json()) as QueryBody;
@@ -57,10 +48,7 @@ export async function handleQueryStream(
 	try {
 		iterator = db.queryIterator(body.sql, body.params);
 	} catch (err) {
-		return Response.json(
-			{ error: queryErrorMessage(err) },
-			{ status: 400 },
-		);
+		return Response.json({ error: queryErrorMessage(err) }, { status: 400 });
 	}
 
 	const encoder = new TextEncoder();
@@ -72,9 +60,7 @@ export async function handleQueryStream(
 				controller.close();
 				return;
 			}
-			controller.enqueue(
-				encoder.encode(`${JSON.stringify(value)}\n`),
-			);
+			controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`));
 		},
 		cancel() {
 			iterator.return?.();

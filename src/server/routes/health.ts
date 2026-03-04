@@ -1,10 +1,7 @@
 import type { RelogDatabase } from "../../db/database.ts";
 import type { HealthResponse } from "../../types.ts";
 
-export function handleHealth(
-	db: RelogDatabase,
-	startTime: number,
-): Response {
+export function handleHealth(db: RelogDatabase, startTime: number): Response {
 	const response: HealthResponse = {
 		ok: true,
 		uptime: Math.round((Date.now() - startTime) / 1000),

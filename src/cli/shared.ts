@@ -17,9 +17,7 @@ export function authHeaders(auth?: string): Record<string, string> {
 	};
 }
 
-export function buildParams(
-	values: Record<string, string | number | undefined>,
-): URLSearchParams {
+export function buildParams(values: Record<string, string | number | undefined>): URLSearchParams {
 	const params = new URLSearchParams();
 	for (const [key, val] of Object.entries(values)) {
 		if (val !== undefined) params.set(key, String(val));

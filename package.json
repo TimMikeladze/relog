@@ -1,5 +1,5 @@
 {
-	"name": "relog",
+	"name": "relog.dev",
 	"version": "0.1.0",
 	"description": "Universal logging system",
 	"homepage": "https://github.com/TimMikeladze/relog#readme",
@@ -11,15 +11,15 @@
 		"type": "git",
 		"url": "git+https://github.com/TimMikeladze/relog.git"
 	},
+	"bin": {
+		"relog.dev": "./dist/cli.js"
+	},
 	"files": [
 		"dist"
 	],
 	"type": "module",
 	"module": "./dist/index.js",
 	"types": "./dist/index.d.ts",
-	"bin": {
-		"relog": "./dist/cli.js"
-	},
 	"exports": {
 		".": {
 			"import": {
@@ -75,6 +75,6 @@
 		"typescript": "^5.9.3"
 	},
 	"simple-git-hooks": {
-		"pre-commit": "bun run lint && bun run type-check"
+		"pre-commit": "bun run lint && bun run format && bun run type-check"
 	}
 }

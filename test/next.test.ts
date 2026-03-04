@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import {
-	_resetSingleton,
-	log,
-	relogMiddleware,
-	restoreConsole,
-	withRelog,
-} from "../src/next.ts";
+import { _resetSingleton, log, relogMiddleware, restoreConsole, withRelog } from "../src/next.ts";
 import type { LogRecord } from "../src/types.ts";
 
 afterEach(() => {
@@ -76,9 +70,7 @@ describe("console patching", () => {
 		await log.flush();
 		await new Promise((r) => setTimeout(r, 200));
 
-		const record = received.flat().find(
-			(r) => r.message === "hello from patched",
-		);
+		const record = received.flat().find((r) => r.message === "hello from patched");
 		expect(record).toBeDefined();
 		expect(record!.meta!.source).toBe("console");
 
@@ -307,9 +299,7 @@ describe("console patching edge cases", () => {
 		await log.flush();
 		await new Promise((r) => setTimeout(r, 200));
 
-		const record = received.flat().find(
-			(r) => r.message === "info message captured",
-		);
+		const record = received.flat().find((r) => r.message === "info message captured");
 		expect(record).toBeDefined();
 
 		server.stop();
@@ -342,9 +332,7 @@ describe("console patching edge cases", () => {
 		await log.flush();
 		await new Promise((r) => setTimeout(r, 200));
 
-		const record = received.flat().find(
-			(r) => r.message.includes("circular test"),
-		);
+		const record = received.flat().find((r) => r.message.includes("circular test"));
 		expect(record).toBeDefined();
 
 		server.stop();

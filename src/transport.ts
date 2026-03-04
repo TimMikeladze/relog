@@ -9,8 +9,7 @@ function registerShutdownHandlers(): void {
 
 	if (typeof process === "undefined") return;
 
-	const flushAll = () =>
-		Promise.allSettled([...activeTransports].map((t) => t.flush()));
+	const flushAll = () => Promise.allSettled([...activeTransports].map((t) => t.flush()));
 
 	const shutdownFlush = () => {
 		// Keep event loop alive until flush completes
@@ -96,9 +95,7 @@ export class Transport {
 
 	private async sendBatch(batch: LogRecord[]): Promise<void> {
 		if (typeof fetch === "undefined") {
-			console.warn(
-				`[relog] fetch is not available, dropping ${batch.length} log(s)`,
-			);
+			console.warn(`[relog.dev] fetch is not available, dropping ${batch.length} log(s)`);
 			return;
 		}
 
@@ -107,9 +104,7 @@ export class Transport {
 		};
 		if (this.auth) {
 			const encoded =
-				typeof Buffer !== "undefined"
-					? Buffer.from(this.auth).toString("base64")
-					: btoa(this.auth);
+				typeof Buffer !== "undefined" ? Buffer.from(this.auth).toString("base64") : btoa(this.auth);
 			headers["Authorization"] = `Basic ${encoded}`;
 		}
 
@@ -133,8 +128,7 @@ export class Transport {
 				}
 				lastError = new Error(`Ingest failed: ${response.status}`);
 			} catch (err) {
-				lastError =
-					err instanceof Error ? err : new Error("Network error");
+				lastError = err instanceof Error ? err : new Error("Network error");
 			}
 
 			if (attempt < 2 && !this.destroyed) {
@@ -154,9 +148,7 @@ export class Transport {
 					// onError should not throw
 				}
 			} else {
-				console.warn(
-					`[relog] Failed to send ${batch.length} log(s): ${lastError.message}`,
-				);
+				console.warn(`[relog.dev] Failed to send ${batch.length} log(s): ${lastError.message}`);
 			}
 		}
 	}

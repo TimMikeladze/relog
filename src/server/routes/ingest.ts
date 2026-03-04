@@ -53,9 +53,7 @@ export async function handleIngest(
 		}
 		if (
 			entry.meta !== undefined &&
-			(typeof entry.meta !== "object" ||
-				entry.meta === null ||
-				Array.isArray(entry.meta))
+			(typeof entry.meta !== "object" || entry.meta === null || Array.isArray(entry.meta))
 		) {
 			return Response.json(
 				{ error: "Invalid log entry: 'meta' must be a plain object" },
@@ -63,10 +61,7 @@ export async function handleIngest(
 			);
 		}
 		if (entry.pid !== undefined && typeof entry.pid !== "number") {
-			return Response.json(
-				{ error: "Invalid log entry: 'pid' must be a number" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Invalid log entry: 'pid' must be a number" }, { status: 400 });
 		}
 		if (entry.host !== undefined && typeof entry.host !== "string") {
 			return Response.json(

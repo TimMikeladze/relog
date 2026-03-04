@@ -4,7 +4,7 @@ import { resolveAuth } from "./shared.ts";
 
 export const serveCommand: Command = command({
 	name: "serve",
-	desc: "Start the relog server",
+	desc: "Start the relog.dev server",
 	options: {
 		port: number().desc("Port to listen on").default(3485),
 		db: string().desc("SQLite database path").default("relog.db"),
@@ -20,7 +20,7 @@ export const serveCommand: Command = command({
 			cors: opts.cors === "true",
 		});
 
-		console.log(`relog server listening on http://localhost:${server.port}`);
+		console.log(`relog.dev server listening on http://localhost:${server.port}`);
 		console.log(`  database: ${opts.db}`);
 		if (auth) console.log("  auth: enabled");
 		if (opts.cors === "true") console.log("  cors: enabled");

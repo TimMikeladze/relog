@@ -1,9 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 
-export function checkAuth(
-	request: Request,
-	expectedAuth: string | undefined,
-): Response | null {
+export function checkAuth(request: Request, expectedAuth: string | undefined): Response | null {
 	if (!expectedAuth) return null;
 
 	const header = request.headers.get("Authorization");

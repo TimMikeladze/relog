@@ -39,8 +39,20 @@ describe("MCP Server", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify([
 				{ level: "info", message: "mcp-test-1", service: "api", project: "proj-a", branch: "main" },
-				{ level: "error", message: "mcp-test-2", service: "api", project: "proj-a", branch: "main" },
-				{ level: "warn", message: "mcp-test-3", service: "worker", project: "proj-b", branch: "dev" },
+				{
+					level: "error",
+					message: "mcp-test-2",
+					service: "api",
+					project: "proj-a",
+					branch: "main",
+				},
+				{
+					level: "warn",
+					message: "mcp-test-3",
+					service: "worker",
+					project: "proj-b",
+					branch: "dev",
+				},
 				{ level: "info", message: "mcp-test-4", project: "proj-a", branch: "feat" },
 				{ level: "debug", message: "mcp-test-5" },
 			]),
@@ -116,12 +128,16 @@ describe("MCP Server", () => {
 			fetch(`${baseUrl}/query`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ sql: "SELECT service, COUNT(*) as count FROM logs WHERE service IS NOT NULL GROUP BY service" }),
+				body: JSON.stringify({
+					sql: "SELECT service, COUNT(*) as count FROM logs WHERE service IS NOT NULL GROUP BY service",
+				}),
 			}),
 			fetch(`${baseUrl}/query`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ sql: "SELECT project, COUNT(*) as count FROM logs WHERE project IS NOT NULL GROUP BY project" }),
+				body: JSON.stringify({
+					sql: "SELECT project, COUNT(*) as count FROM logs WHERE project IS NOT NULL GROUP BY project",
+				}),
 			}),
 		]);
 

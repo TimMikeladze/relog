@@ -1,11 +1,6 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { CREATE_INDEXES, CREATE_LOGS_TABLE } from "./schema.ts";
-import type {
-	IngestPayload,
-	LogEntry,
-	QueryResult,
-	StreamFilters,
-} from "../types.ts";
+import type { IngestPayload, LogEntry, QueryResult, StreamFilters } from "../types.ts";
 
 const BLOCKED_KEYWORDS =
 	/\b(ATTACH|DETACH|LOAD_EXTENSION|REINDEX|VACUUM|ALTER|CREATE|DROP|INSERT|UPDATE|DELETE|REPLACE|MERGE|TRUNCATE|GRANT|REVOKE)\b/i;
@@ -58,8 +53,7 @@ function stripSqlComments(sql: string): string {
 			while (i < sql.length && sql[i] !== "\n") i++;
 		} else if (sql[i] === "/" && sql[i + 1] === "*") {
 			i += 2;
-			while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/"))
-				i++;
+			while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) i++;
 			i += 2;
 		} else {
 			result += sql[i];
@@ -149,8 +143,12 @@ export class RelogDatabase {
 		this.db.exec("PRAGMA busy_timeout = 5000");
 		this.db.exec(CREATE_LOGS_TABLE);
 		// Migrate: add project/branch columns for existing DBs
-		try { this.db.exec("ALTER TABLE logs ADD COLUMN project TEXT"); } catch {}
-		try { this.db.exec("ALTER TABLE logs ADD COLUMN branch TEXT"); } catch {}
+		try {
+			this.db.exec("ALTER TABLE logs ADD COLUMN project TEXT");
+		} catch {}
+		try {
+			this.db.exec("ALTER TABLE logs ADD COLUMN branch TEXT");
+		} catch {}
 		for (const idx of CREATE_INDEXES) {
 			this.db.exec(idx);
 		}
@@ -177,9 +175,7 @@ export class RelogDatabase {
 				if (entry.timestamp) {
 					const parsed = new Date(entry.timestamp).getTime();
 					if (Number.isNaN(parsed)) {
-						console.warn(
-							`[relog] Invalid timestamp "${entry.timestamp}", using server time`,
-						);
+						console.warn(`[relog.dev] Invalid timestamp "${entry.timestamp}", using server time`);
 						ts = new Date(now).toISOString();
 						createdAt = now;
 					} else {
@@ -208,10 +204,7 @@ export class RelogDatabase {
 		})();
 	}
 
-	private validateAndPrepare(
-		sql: string,
-		maxRows: number,
-	): string {
+	private validateAndPrepare(sql: string, maxRows: number): string {
 		if (typeof sql !== "string") {
 			throw new QueryValidationError("SQL must be a string");
 		}
@@ -234,18 +227,14 @@ export class RelogDatabase {
 			!trimmed.startsWith("EXPLAIN") &&
 			!trimmed.startsWith("PRAGMA")
 		) {
-			throw new QueryValidationError(
-				"Only SELECT, EXPLAIN, and PRAGMA queries are allowed",
-			);
+			throw new QueryValidationError("Only SELECT, EXPLAIN, and PRAGMA queries are allowed");
 		}
 
 		if (trimmed.startsWith("PRAGMA")) {
 			const match = stripped.match(/^PRAGMA\s+(\w+)/i);
 			const pragmaName = match?.[1]?.toLowerCase();
 			if (!pragmaName || !SAFE_PRAGMAS.has(pragmaName)) {
-				throw new QueryValidationError(
-					"Only read-only PRAGMAs are allowed",
-				);
+				throw new QueryValidationError("Only read-only PRAGMAs are allowed");
 			}
 		}
 
@@ -256,11 +245,7 @@ export class RelogDatabase {
 		return stripped;
 	}
 
-	query(
-		sql: string,
-		params: SQLQueryBindings[] = [],
-		maxRows: number = 10000,
-	): QueryResult {
+	query(sql: string, params: SQLQueryBindings[] = [], maxRows: number = 10000): QueryResult {
 		const safeSql = this.validateAndPrepare(sql, maxRows);
 		const start = performance.now();
 		const stmt = this.readonlyDb.prepare(safeSql);
@@ -276,39 +261,31 @@ export class RelogDatabase {
 	): IterableIterator<Record<string, unknown>> {
 		const safeSql = this.validateAndPrepare(sql, maxRows);
 		const stmt = this.readonlyDb.prepare(safeSql);
-		return stmt.iterate(...params) as IterableIterator<
-			Record<string, unknown>
-		>;
+		return stmt.iterate(...params) as IterableIterator<Record<string, unknown>>;
 	}
 
 	getMaxId(): number {
-		const row = this.readonlyDb
-			.prepare("SELECT MAX(id) as max_id FROM logs")
-			.get() as { max_id: number | null } | null;
+		const row = this.readonlyDb.prepare("SELECT MAX(id) as max_id FROM logs").get() as {
+			max_id: number | null;
+		} | null;
 		return row?.max_id ?? 0;
 	}
 
 	getLogCount(): number {
-		const row = this.readonlyDb
-			.prepare("SELECT COUNT(*) as count FROM logs")
-			.get() as { count: number };
+		const row = this.readonlyDb.prepare("SELECT COUNT(*) as count FROM logs").get() as {
+			count: number;
+		};
 		return row.count;
 	}
 
 	getDbSize(): number {
 		const row = this.readonlyDb
-			.prepare(
-				"SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()",
-			)
+			.prepare("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()")
 			.get() as { size: number };
 		return row.size;
 	}
 
-	getLogsSince(
-		lastId: number,
-		filters: StreamFilters = {},
-		limit: number = 100,
-	): LogEntry[] {
+	getLogsSince(lastId: number, filters: StreamFilters = {}, limit: number = 100): LogEntry[] {
 		const conditions = ["id > ?"];
 		const params: SQLQueryBindings[] = [lastId];
 
@@ -372,8 +349,7 @@ export class RelogDatabase {
 			params.push(opts.to);
 		}
 
-		const where =
-			conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+		const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
 		const limit = opts.limit ?? 100;
 		const offset = opts.offset ?? 0;
@@ -388,9 +364,7 @@ export class RelogDatabase {
 
 		const queryParams = [...params, limit, offset];
 		const rows = this.readonlyDb
-			.prepare(
-				`SELECT * FROM logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
-			)
+			.prepare(`SELECT * FROM logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`)
 			.all(...queryParams) as LogEntry[];
 
 		return {

@@ -49,24 +49,18 @@ describe("RelogDatabase", () => {
 	});
 
 	test("query rejects non-SELECT statements", () => {
-		expect(() => db.query("DELETE FROM logs")).toThrow(
-			"blocked keyword",
-		);
+		expect(() => db.query("DELETE FROM logs")).toThrow("blocked keyword");
 		expect(() => db.query("DROP TABLE logs")).toThrow();
 		expect(() => db.query("INSERT INTO logs VALUES (1)")).toThrow();
 	});
 
 	test("query rejects stacked statements", () => {
-		expect(() => db.query("SELECT 1; DROP TABLE logs")).toThrow(
-			"Multiple statements",
-		);
+		expect(() => db.query("SELECT 1; DROP TABLE logs")).toThrow("Multiple statements");
 	});
 
 	test("query rejects ATTACH and LOAD_EXTENSION", () => {
 		expect(() => db.query("SELECT load_extension('x')")).toThrow();
-		expect(() =>
-			db.query("ATTACH DATABASE 'other.db' AS other"),
-		).toThrow("blocked keyword");
+		expect(() => db.query("ATTACH DATABASE 'other.db' AS other")).toThrow("blocked keyword");
 	});
 
 	test("query auto-appends LIMIT when missing", () => {
@@ -315,9 +309,7 @@ describe("DB edge cases", () => {
 	test("invalid timestamp in insert falls back to server time", () => {
 		const p = tmpDbPath();
 		const d = new RelogDatabase(p);
-		d.insert([
-			{ level: "info", message: "bad ts", timestamp: "not-a-date" },
-		]);
+		d.insert([{ level: "info", message: "bad ts", timestamp: "not-a-date" }]);
 		const logs = d.getLogsSince(0);
 		expect(logs.length).toBe(1);
 		expect(logs[0]!.timestamp).toContain("T");
@@ -1112,10 +1104,18 @@ describe("SSE streaming edge cases", () => {
 
 		// Fill up to maxClients by adding fake clients
 		const sm = s.streamManager;
-		const fakeClients: { controller: ReadableStreamDefaultController; filters: {}; lastPollId: number }[] = [];
+		const fakeClients: {
+			controller: ReadableStreamDefaultController;
+			filters: {};
+			lastPollId: number;
+		}[] = [];
 		for (let i = 0; i < 100; i++) {
 			let ctrl: ReadableStreamDefaultController;
-			new ReadableStream({ start(c) { ctrl = c; } });
+			new ReadableStream({
+				start(c) {
+					ctrl = c;
+				},
+			});
 			const client = { controller: ctrl!, filters: {}, lastPollId: 0 };
 			sm.addClient(client);
 			fakeClients.push(client);
@@ -1144,7 +1144,9 @@ describe("SSE streaming edge cases", () => {
 
 		for (const c of fakeClients) {
 			sm.removeClient(c);
-			try { c.controller.close(); } catch {}
+			try {
+				c.controller.close();
+			} catch {}
 		}
 
 		await reader.cancel();
@@ -1438,9 +1440,7 @@ describe("SQL injection advanced bypass attempts", () => {
 	});
 
 	test("WITH CTE is rejected (not SELECT/EXPLAIN/PRAGMA)", () => {
-		expect(() =>
-			db.query("WITH x AS (SELECT * FROM logs) SELECT * FROM x"),
-		).toThrow("Only SELECT");
+		expect(() => db.query("WITH x AS (SELECT * FROM logs) SELECT * FROM x")).toThrow("Only SELECT");
 	});
 
 	test("whitespace-only SQL is rejected", () => {
@@ -1471,7 +1471,11 @@ describe("SQL injection advanced bypass attempts", () => {
 	});
 
 	test("REPLACE keyword is blocked", () => {
-		expect(() => db.query("REPLACE INTO logs VALUES (1, 'a', 'b', 'c', NULL, NULL, NULL, NULL, NULL, NULL, 0)")).toThrow("blocked keyword");
+		expect(() =>
+			db.query(
+				"REPLACE INTO logs VALUES (1, 'a', 'b', 'c', NULL, NULL, NULL, NULL, NULL, NULL, 0)",
+			),
+		).toThrow("blocked keyword");
 	});
 
 	test("TRUNCATE keyword is blocked", () => {
@@ -1573,7 +1577,9 @@ describe("Ingest edge cases", () => {
 	});
 
 	test("deeply nested meta is accepted", async () => {
-		const deep: Record<string, unknown> = { level1: { level2: { level3: { level4: { data: "deep" } } } } };
+		const deep: Record<string, unknown> = {
+			level1: { level2: { level3: { level4: { data: "deep" } } } },
+		};
 		const res = await ingest({
 			level: "info",
 			message: "deep-meta",
@@ -1583,7 +1589,9 @@ describe("Ingest edge cases", () => {
 
 		const logsRes = await fetch(`${baseUrl}/logs?grep=deep-meta`);
 		const json = (await logsRes.json()) as { rows: LogEntry[] };
-		expect(json.rows[0]!.meta!.level1).toEqual({ level2: { level3: { level4: { data: "deep" } } } });
+		expect(json.rows[0]!.meta!.level1).toEqual({
+			level2: { level3: { level4: { data: "deep" } } },
+		});
 	});
 
 	test("message: empty string is accepted", async () => {
@@ -1732,7 +1740,11 @@ describe("StreamManager lifecycle", () => {
 		sm.shutdown();
 
 		let ctrl: ReadableStreamDefaultController;
-		new ReadableStream({ start(c) { ctrl = c; } });
+		new ReadableStream({
+			start(c) {
+				ctrl = c;
+			},
+		});
 		// After shutdown the set is cleared, but maxClients isn't reached—it should still add
 		// Actually, shutdown sets closed=true and clears clients, but addClient doesn't check closed
 		// This tests the actual behavior
@@ -1946,7 +1958,12 @@ describe("Project and branch fields", () => {
 			const res = await fetch(`${baseUrl}/ingest`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ level: "info", message: "proj-test", project: "my-proj", branch: "my-branch" }),
+				body: JSON.stringify({
+					level: "info",
+					message: "proj-test",
+					project: "my-proj",
+					branch: "my-branch",
+				}),
 			});
 			expect(res.status).toBe(201);
 

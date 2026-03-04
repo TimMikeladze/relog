@@ -2,7 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { formatLogRecord } from "../src/console.ts";
 import { createLogger, Logger } from "../src/logger.ts";
 import { Transport } from "../src/transport.ts";
-import { resolveAuth, resolveAuthHeader, authHeaders, buildParams, escapeCsv } from "../src/cli/shared.ts";
+import {
+	resolveAuth,
+	resolveAuthHeader,
+	authHeaders,
+	buildParams,
+	escapeCsv,
+} from "../src/cli/shared.ts";
 import type { LogRecord } from "../src/types.ts";
 
 describe("Logger", () => {
@@ -286,7 +292,7 @@ describe("Transport retry logic", () => {
 		console.warn = origWarn;
 
 		expect(warnings.length).toBeGreaterThan(0);
-		expect(warnings.some((w) => String(w).includes("[relog]"))).toBe(true);
+		expect(warnings.some((w) => String(w).includes("[relog.dev]"))).toBe(true);
 
 		transport.destroy();
 		server.stop();
@@ -990,8 +996,9 @@ describe("Console Formatter", () => {
 			message: "no proj",
 		};
 		const output = formatLogRecord(record);
-		expect(output).not.toContain("[");
-		expect(output).not.toContain("@");
+		const stripped = output.replace(/\x1b\[[0-9;]*m/g, "");
+		expect(stripped).not.toContain("[");
+		expect(stripped).not.toContain("@");
 	});
 
 	test("formatLogRecord with all log levels produces output", () => {

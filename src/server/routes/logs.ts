@@ -1,20 +1,14 @@
 import type { RelogDatabase, SearchOptions } from "../../db/database.ts";
 import { VALID_LEVELS } from "../../types.ts";
 
-export function handleLogs(
-	request: Request,
-	db: RelogDatabase,
-): Response {
+export function handleLogs(request: Request, db: RelogDatabase): Response {
 	const url = new URL(request.url);
 	const opts: SearchOptions = {};
 
 	const level = url.searchParams.get("level");
 	if (level) {
 		if (!VALID_LEVELS.has(level)) {
-			return Response.json(
-				{ error: `Invalid level '${level}'` },
-				{ status: 400 },
-			);
+			return Response.json({ error: `Invalid level '${level}'` }, { status: 400 });
 		}
 		opts.level = level;
 	}
@@ -31,10 +25,7 @@ export function handleLogs(
 	if (from) {
 		const parsed = parseTime(from);
 		if (Number.isNaN(parsed)) {
-			return Response.json(
-				{ error: "Invalid 'from' time format" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Invalid 'from' time format" }, { status: 400 });
 		}
 		opts.from = parsed;
 	}
@@ -43,10 +34,7 @@ export function handleLogs(
 	if (to) {
 		const parsed = parseTime(to);
 		if (Number.isNaN(parsed)) {
-			return Response.json(
-				{ error: "Invalid 'to' time format" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Invalid 'to' time format" }, { status: 400 });
 		}
 		opts.to = parsed;
 	}
@@ -55,10 +43,7 @@ export function handleLogs(
 	if (limit) {
 		const parsed = Number.parseInt(limit, 10);
 		if (Number.isNaN(parsed) || parsed < 1) {
-			return Response.json(
-				{ error: "Invalid 'limit' value" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Invalid 'limit' value" }, { status: 400 });
 		}
 		opts.limit = Math.min(parsed, 10000);
 	}
@@ -66,10 +51,7 @@ export function handleLogs(
 	if (offset) {
 		const parsed = Number.parseInt(offset, 10);
 		if (Number.isNaN(parsed) || parsed < 0) {
-			return Response.json(
-				{ error: "Invalid 'offset' value" },
-				{ status: 400 },
-			);
+			return Response.json({ error: "Invalid 'offset' value" }, { status: 400 });
 		}
 		opts.offset = parsed;
 	}
