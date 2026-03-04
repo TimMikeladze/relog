@@ -5,7 +5,7 @@ export function resolveAuth(explicit?: string): string | undefined {
 export function resolveAuthHeader(auth?: string): Record<string, string> {
 	const resolved = resolveAuth(auth);
 	if (resolved) {
-		return { Authorization: `Basic ${Buffer.from(resolved).toString("base64")}` };
+		return { Authorization: `Bearer ${resolved}` };
 	}
 	return {};
 }

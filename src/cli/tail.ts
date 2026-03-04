@@ -13,7 +13,7 @@ export const tailCommand: Command = command({
 		service: string().desc("Filter by service name"),
 		project: string().desc("Filter by project"),
 		branch: string().desc("Filter by branch"),
-		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
+		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
 		const params = buildParams({

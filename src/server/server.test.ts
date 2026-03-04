@@ -8,22 +8,28 @@ const TEST_PORT = 0; // random available port
 let instance: ServerInstance;
 let baseUrl: string;
 
+const ADMIN_KEY = "test-admin-key";
+const READ_KEY = "test-read-key";
+const INGEST_KEY = "test-ingest-key";
+
 function url(path: string): string {
 	return `${baseUrl}${path}`;
 }
 
-function authHeaders(user = "admin", pass = "secret"): Record<string, string> {
+function bearerHeaders(key: string = ADMIN_KEY): Record<string, string> {
 	return {
-		Authorization: `Basic ${Buffer.from(`${user}:${pass}`).toString("base64")}`,
+		Authorization: `Bearer ${key}`,
 	};
 }
 
-beforeAll(() => {
+beforeAll(async () => {
 	cleanup();
-	instance = startServer({
+	instance = await startServer({
 		port: TEST_PORT,
 		dbPath: TEST_DB,
-		auth: "admin:secret",
+		adminKey: ADMIN_KEY,
+		readKey: READ_KEY,
+		ingestKey: INGEST_KEY,
 		cors: true,
 		streamDebounceMs: 10,
 	});
@@ -46,23 +52,91 @@ function cleanup() {
 // ── Auth ────────────────────────────────────────────────────────────────
 
 describe("auth", () => {
-	test("rejects requests without auth", async () => {
+	test("health is unauthenticated", async () => {
 		const res = await fetch(url("/health"));
+		expect(res.status).toBe(200);
+	});
+
+	test("rejects requests without auth", async () => {
+		const res = await fetch(url("/logs"));
 		expect(res.status).toBe(401);
 	});
 
-	test("rejects requests with wrong credentials", async () => {
-		const res = await fetch(url("/health"), {
-			headers: authHeaders("wrong", "creds"),
+	test("rejects requests with wrong key", async () => {
+		const res = await fetch(url("/logs"), {
+			headers: bearerHeaders("wrong-key"),
 		});
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(401);
 	});
 
-	test("accepts requests with correct credentials", async () => {
-		const res = await fetch(url("/health"), {
-			headers: authHeaders(),
+	test("accepts requests with admin key", async () => {
+		const res = await fetch(url("/logs"), {
+			headers: bearerHeaders(ADMIN_KEY),
 		});
 		expect(res.status).toBe(200);
+	});
+
+	test("accepts requests with read key for read routes", async () => {
+		const res = await fetch(url("/logs"), {
+			headers: bearerHeaders(READ_KEY),
+		});
+		expect(res.status).toBe(200);
+	});
+
+	test("ingest key can ingest but not read", async () => {
+		const ingestRes = await fetch(url("/ingest"), {
+			method: "POST",
+			headers: { ...bearerHeaders(INGEST_KEY), "Content-Type": "application/json" },
+			body: JSON.stringify({ level: "info", message: "ingest-role-test" }),
+		});
+		expect(ingestRes.status).toBe(201);
+
+		const readRes = await fetch(url("/logs"), {
+			headers: bearerHeaders(INGEST_KEY),
+		});
+		expect(readRes.status).toBe(403);
+	});
+
+	test("read key can ingest and read but not prune", async () => {
+		const ingestRes = await fetch(url("/ingest"), {
+			method: "POST",
+			headers: { ...bearerHeaders(READ_KEY), "Content-Type": "application/json" },
+			body: JSON.stringify({ level: "info", message: "read-role-ingest" }),
+		});
+		expect(ingestRes.status).toBe(201);
+
+		const readRes = await fetch(url("/logs"), {
+			headers: bearerHeaders(READ_KEY),
+		});
+		expect(readRes.status).toBe(200);
+
+		const pruneRes = await fetch(url("/prune"), {
+			method: "POST",
+			headers: { ...bearerHeaders(READ_KEY), "Content-Type": "application/json" },
+			body: JSON.stringify({ before: Date.now() }),
+		});
+		expect(pruneRes.status).toBe(403);
+	});
+
+	test("admin key can do everything", async () => {
+		const ingestRes = await fetch(url("/ingest"), {
+			method: "POST",
+			headers: { ...bearerHeaders(ADMIN_KEY), "Content-Type": "application/json" },
+			body: JSON.stringify({ level: "info", message: "admin-role-test" }),
+		});
+		expect(ingestRes.status).toBe(201);
+
+		const readRes = await fetch(url("/logs"), {
+			headers: bearerHeaders(ADMIN_KEY),
+		});
+		expect(readRes.status).toBe(200);
+
+		const pruneRes = await fetch(url("/prune"), {
+			method: "POST",
+			headers: { ...bearerHeaders(ADMIN_KEY), "Content-Type": "application/json" },
+			body: JSON.stringify({ before: 0 }),
+		});
+		expect(pruneRes.status).toBe(200);
 	});
 });
 
@@ -81,7 +155,7 @@ describe("cors", () => {
 
 	test("response includes CORS headers", async () => {
 		const res = await fetch(url("/health"), {
-			headers: { ...authHeaders(), Origin: "http://example.com" },
+			headers: { ...bearerHeaders(), Origin: "http://example.com" },
 		});
 		expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
 	});
@@ -91,7 +165,7 @@ describe("cors", () => {
 
 describe("GET /health", () => {
 	test("returns health status", async () => {
-		const res = await fetch(url("/health"), { headers: authHeaders() });
+		const res = await fetch(url("/health"), { headers: bearerHeaders() });
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.ok).toBe(true);
@@ -107,7 +181,7 @@ describe("POST /ingest", () => {
 	test("ingests a single log entry", async () => {
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({
 				level: "info",
 				message: "hello world",
@@ -129,7 +203,7 @@ describe("POST /ingest", () => {
 		];
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify(entries),
 		});
 		expect(res.status).toBe(201);
@@ -140,7 +214,7 @@ describe("POST /ingest", () => {
 	test("rejects invalid level", async () => {
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "invalid", message: "test" }),
 		});
 		expect(res.status).toBe(400);
@@ -149,7 +223,7 @@ describe("POST /ingest", () => {
 	test("rejects missing message", async () => {
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "info" }),
 		});
 		expect(res.status).toBe(400);
@@ -158,7 +232,7 @@ describe("POST /ingest", () => {
 	test("rejects empty array", async () => {
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify([]),
 		});
 		expect(res.status).toBe(400);
@@ -167,7 +241,7 @@ describe("POST /ingest", () => {
 	test("rejects invalid JSON", async () => {
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: "not json",
 		});
 		expect(res.status).toBe(400);
@@ -176,7 +250,7 @@ describe("POST /ingest", () => {
 	test("rejects invalid meta type", async () => {
 		const res = await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "info", message: "test", meta: "string" }),
 		});
 		expect(res.status).toBe(400);
@@ -196,7 +270,7 @@ describe("POST /ingest", () => {
 		for (const c of cases) {
 			const res = await fetch(url("/ingest"), {
 				method: "POST",
-				headers: { ...authHeaders(), "Content-Type": "application/json" },
+				headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 				body: JSON.stringify(c),
 			});
 			expect(res.status).toBe(400);
@@ -208,7 +282,7 @@ describe("POST /ingest", () => {
 
 describe("GET /logs", () => {
 	test("returns all logs", async () => {
-		const res = await fetch(url("/logs"), { headers: authHeaders() });
+		const res = await fetch(url("/logs"), { headers: bearerHeaders() });
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.rows.length).toBeGreaterThanOrEqual(4);
@@ -216,7 +290,7 @@ describe("GET /logs", () => {
 	});
 
 	test("filters by level", async () => {
-		const res = await fetch(url("/logs?level=error"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?level=error"), { headers: bearerHeaders() });
 		const body = await res.json();
 		expect(body.rows.length).toBeGreaterThanOrEqual(1);
 		for (const row of body.rows) {
@@ -225,7 +299,7 @@ describe("GET /logs", () => {
 	});
 
 	test("filters by service", async () => {
-		const res = await fetch(url("/logs?service=test-svc"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?service=test-svc"), { headers: bearerHeaders() });
 		const body = await res.json();
 		expect(body.rows.length).toBeGreaterThanOrEqual(1);
 		for (const row of body.rows) {
@@ -234,7 +308,7 @@ describe("GET /logs", () => {
 	});
 
 	test("filters by project", async () => {
-		const res = await fetch(url("/logs?project=my-project"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?project=my-project"), { headers: bearerHeaders() });
 		const body = await res.json();
 		expect(body.rows.length).toBeGreaterThanOrEqual(1);
 		for (const row of body.rows) {
@@ -243,7 +317,7 @@ describe("GET /logs", () => {
 	});
 
 	test("filters by branch", async () => {
-		const res = await fetch(url("/logs?branch=main"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?branch=main"), { headers: bearerHeaders() });
 		const body = await res.json();
 		expect(body.rows.length).toBeGreaterThanOrEqual(1);
 		for (const row of body.rows) {
@@ -252,7 +326,7 @@ describe("GET /logs", () => {
 	});
 
 	test("filters by grep", async () => {
-		const res = await fetch(url("/logs?grep=hello"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?grep=hello"), { headers: bearerHeaders() });
 		const body = await res.json();
 		expect(body.rows.length).toBeGreaterThanOrEqual(1);
 		for (const row of body.rows) {
@@ -261,7 +335,7 @@ describe("GET /logs", () => {
 	});
 
 	test("supports limit and offset", async () => {
-		const res = await fetch(url("/logs?limit=2&offset=0"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?limit=2&offset=0"), { headers: bearerHeaders() });
 		const body = await res.json();
 		expect(body.rows.length).toBeLessThanOrEqual(2);
 		expect(body.limit).toBe(2);
@@ -269,23 +343,23 @@ describe("GET /logs", () => {
 	});
 
 	test("rejects invalid level", async () => {
-		const res = await fetch(url("/logs?level=nope"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?level=nope"), { headers: bearerHeaders() });
 		expect(res.status).toBe(400);
 	});
 
 	test("rejects invalid limit", async () => {
-		const res = await fetch(url("/logs?limit=-1"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?limit=-1"), { headers: bearerHeaders() });
 		expect(res.status).toBe(400);
 	});
 
 	test("rejects invalid offset", async () => {
-		const res = await fetch(url("/logs?offset=-1"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?offset=-1"), { headers: bearerHeaders() });
 		expect(res.status).toBe(400);
 	});
 
 	test("filters by time range", async () => {
 		const now = new Date().toISOString();
-		const res = await fetch(url(`/logs?from=1h&to=${now}`), { headers: authHeaders() });
+		const res = await fetch(url(`/logs?from=1h&to=${now}`), { headers: bearerHeaders() });
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(Array.isArray(body.rows)).toBe(true);
@@ -298,7 +372,7 @@ describe("POST /query", () => {
 	test("executes a SELECT query", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "SELECT * FROM logs LIMIT 5" }),
 		});
 		expect(res.status).toBe(200);
@@ -311,7 +385,7 @@ describe("POST /query", () => {
 	test("supports parameterized queries", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({
 				sql: "SELECT * FROM logs WHERE level = ? LIMIT 10",
 				params: ["info"],
@@ -327,7 +401,7 @@ describe("POST /query", () => {
 	test("rejects write queries", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "DELETE FROM logs" }),
 		});
 		expect(res.status).toBe(400);
@@ -336,7 +410,7 @@ describe("POST /query", () => {
 	test("rejects multiple statements", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "SELECT 1; SELECT 2" }),
 		});
 		expect(res.status).toBe(400);
@@ -345,26 +419,17 @@ describe("POST /query", () => {
 	test("rejects missing sql", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({}),
 		});
 		expect(res.status).toBe(400);
 	});
 
-	test("allows safe PRAGMAs", async () => {
+	test("rejects PRAGMAs", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "PRAGMA table_info(logs)" }),
-		});
-		expect(res.status).toBe(200);
-	});
-
-	test("rejects unsafe PRAGMAs", async () => {
-		const res = await fetch(url("/query"), {
-			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
-			body: JSON.stringify({ sql: "PRAGMA journal_mode = DELETE" }),
 		});
 		expect(res.status).toBe(400);
 	});
@@ -372,7 +437,7 @@ describe("POST /query", () => {
 	test("auto-adds LIMIT to unbounded SELECTs", async () => {
 		const res = await fetch(url("/query"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "SELECT * FROM logs" }),
 		});
 		expect(res.status).toBe(200);
@@ -387,7 +452,7 @@ describe("POST /query/stream", () => {
 	test("returns NDJSON stream", async () => {
 		const res = await fetch(url("/query/stream"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "SELECT * FROM logs LIMIT 3" }),
 		});
 		expect(res.status).toBe(200);
@@ -405,7 +470,7 @@ describe("POST /query/stream", () => {
 	test("rejects write queries", async () => {
 		const res = await fetch(url("/query/stream"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ sql: "INSERT INTO logs VALUES (1)" }),
 		});
 		expect(res.status).toBe(400);
@@ -414,7 +479,7 @@ describe("POST /query/stream", () => {
 	test("rejects missing sql", async () => {
 		const res = await fetch(url("/query/stream"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({}),
 		});
 		expect(res.status).toBe(400);
@@ -426,7 +491,7 @@ describe("POST /query/stream", () => {
 describe("GET /stream", () => {
 	test("receives SSE events for new logs", async () => {
 		const res = await fetch(url("/stream"), {
-			headers: authHeaders(),
+			headers: bearerHeaders(),
 		});
 		expect(res.status).toBe(200);
 		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
@@ -442,7 +507,7 @@ describe("GET /stream", () => {
 		// Ingest a log to trigger an SSE event
 		await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "info", message: "sse-test-msg" }),
 		});
 
@@ -468,7 +533,7 @@ describe("GET /stream", () => {
 
 	test("supports stream filters", async () => {
 		const res = await fetch(url("/stream?level=error&service=filtered-svc"), {
-			headers: authHeaders(),
+			headers: bearerHeaders(),
 		});
 		expect(res.status).toBe(200);
 		expect(res.headers.get("Content-Type")).toBe("text/event-stream");
@@ -482,14 +547,14 @@ describe("GET /stream", () => {
 		// Ingest a non-matching log
 		await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "info", message: "should-not-appear", service: "other" }),
 		});
 
 		// Ingest a matching log
 		await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "error", message: "should-appear", service: "filtered-svc" }),
 		});
 
@@ -515,7 +580,7 @@ describe("GET /stream", () => {
 
 	test("rejects invalid level filter", async () => {
 		const res = await fetch(url("/stream?level=nope"), {
-			headers: authHeaders(),
+			headers: bearerHeaders(),
 		});
 		expect(res.status).toBe(400);
 	});
@@ -529,14 +594,14 @@ describe("POST /prune", () => {
 		const oldTimestamp = new Date(Date.now() - 86_400_000 * 30).toISOString();
 		await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ level: "info", message: "old-log", timestamp: oldTimestamp }),
 		});
 
 		const cutoff = Date.now() - 86_400_000 * 7; // 7 days ago
 		const res = await fetch(url("/prune"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({ before: cutoff }),
 		});
 		expect(res.status).toBe(200);
@@ -548,7 +613,7 @@ describe("POST /prune", () => {
 	test("rejects missing before field", async () => {
 		const res = await fetch(url("/prune"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({}),
 		});
 		expect(res.status).toBe(400);
@@ -557,7 +622,7 @@ describe("POST /prune", () => {
 	test("rejects invalid JSON", async () => {
 		const res = await fetch(url("/prune"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: "not json",
 		});
 		expect(res.status).toBe(400);
@@ -568,7 +633,7 @@ describe("POST /prune", () => {
 
 describe("unknown routes", () => {
 	test("returns 404", async () => {
-		const res = await fetch(url("/nonexistent"), { headers: authHeaders() });
+		const res = await fetch(url("/nonexistent"), { headers: bearerHeaders() });
 		expect(res.status).toBe(404);
 	});
 });
@@ -580,7 +645,7 @@ describe("meta and fields roundtrip", () => {
 		const meta = { userId: 42, tags: ["a", "b"], nested: { x: 1 } };
 		await fetch(url("/ingest"), {
 			method: "POST",
-			headers: { ...authHeaders(), "Content-Type": "application/json" },
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
 			body: JSON.stringify({
 				level: "info",
 				message: "meta-roundtrip",
@@ -595,7 +660,7 @@ describe("meta and fields roundtrip", () => {
 			}),
 		});
 
-		const res = await fetch(url("/logs?grep=meta-roundtrip"), { headers: authHeaders() });
+		const res = await fetch(url("/logs?grep=meta-roundtrip"), { headers: bearerHeaders() });
 		const body = await res.json();
 		const row = body.rows[0];
 

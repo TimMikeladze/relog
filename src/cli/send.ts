@@ -16,7 +16,7 @@ export const sendCommand: Command = command({
 		pid: number().desc("Process ID"),
 		traceId: string("trace-id").desc("Trace ID"),
 		spanId: string("span-id").desc("Span ID"),
-		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
+		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
 		const entry: Record<string, unknown> = {

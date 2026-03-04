@@ -1,7 +1,8 @@
-import type { RelogDatabase, SearchOptions } from "../../db/database.ts";
+import type { SearchOptions } from "../../db/database.ts";
+import type { DuckDBReader } from "../../db/duckdb.ts";
 import { VALID_LEVELS } from "../../types.ts";
 
-export function handleLogs(request: Request, db: RelogDatabase): Response {
+export async function handleLogs(request: Request, duckdb: DuckDBReader): Promise<Response> {
 	const url = new URL(request.url);
 	const opts: SearchOptions = {};
 
@@ -56,7 +57,7 @@ export function handleLogs(request: Request, db: RelogDatabase): Response {
 		opts.offset = parsed;
 	}
 
-	const result = db.searchLogs(opts);
+	const result = await duckdb.searchLogs(opts);
 
 	return Response.json({
 		rows: result.rows,

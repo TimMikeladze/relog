@@ -7,13 +7,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+
+    services:
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -sf http://localhost:9000/minio/health/live || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --entrypoint "minio server /data"
 
     steps:
       - name: Checkout code
@@ -36,5 +47,23 @@ jobs:
       - name: Lint
         run: bun run lint
 
+      - name: Create MinIO test bucket
+        run: |
+          curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+          chmod +x /usr/local/bin/mc
+          mc alias set local http://localhost:9000 minioadmin minioadmin
+          mc mb local/relog-test
+
       - name: Run tests
         run: bun run test
+        env:
+          MINIO_ENDPOINT: http://localhost:9000
+          MINIO_ACCESS_KEY: minioadmin
+          MINIO_SECRET_KEY: minioadmin
+          MINIO_BUCKET: relog-test
+
+      - name: Build docs
+        working-directory: docs
+        run: |
+          bun install --frozen-lockfile
+          bun run build

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { RelogDatabase } from "../src/db/database.ts";
+import { DuckDBReader } from "../src/db/duckdb.ts";
 import { startServer } from "../src/server/server.ts";
 import type { ServerInstance } from "../src/server/server.ts";
 import type { IngestPayload, LogEntry, QueryResult } from "../src/types.ts";
@@ -23,58 +24,62 @@ function cleanupDb(path: string): void {
 
 describe("RelogDatabase", () => {
 	let db: RelogDatabase;
+	let duckdb: DuckDBReader;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
 		db = new RelogDatabase(dbPath);
+		duckdb = new DuckDBReader(dbPath);
+		await duckdb.init();
 	});
 
 	afterAll(() => {
+		duckdb.close();
 		db.close();
 		cleanupDb(dbPath);
 	});
 
-	test("insert and query logs", () => {
+	test("insert and query logs", async () => {
 		db.insert([
 			{ level: "info", message: "hello world", service: "test-svc" },
 			{ level: "error", message: "something failed" },
 		]);
 
-		const result = db.query("SELECT * FROM logs ORDER BY id ASC");
+		const result = await duckdb.query("SELECT * FROM logs ORDER BY id ASC");
 		expect(result.count).toBe(2);
 		expect(result.rows[0]!.message).toBe("hello world");
 		expect(result.rows[0]!.service).toBe("test-svc");
 		expect(result.rows[1]!.level).toBe("error");
 	});
 
-	test("query rejects non-SELECT statements", () => {
-		expect(() => db.query("DELETE FROM logs")).toThrow("blocked keyword");
-		expect(() => db.query("DROP TABLE logs")).toThrow();
-		expect(() => db.query("INSERT INTO logs VALUES (1)")).toThrow();
+	test("query rejects non-SELECT statements", async () => {
+		expect(() => duckdb.query("DELETE FROM logs")).toThrow("blocked keyword");
+		expect(() => duckdb.query("DROP TABLE logs")).toThrow();
+		expect(() => duckdb.query("INSERT INTO logs VALUES (1)")).toThrow();
 	});
 
-	test("query rejects stacked statements", () => {
-		expect(() => db.query("SELECT 1; DROP TABLE logs")).toThrow("Multiple statements");
+	test("query rejects stacked statements", async () => {
+		expect(() => duckdb.query("SELECT 1; DROP TABLE logs")).toThrow("Multiple statements");
 	});
 
-	test("query rejects ATTACH and LOAD_EXTENSION", () => {
-		expect(() => db.query("SELECT load_extension('x')")).toThrow();
-		expect(() => db.query("ATTACH DATABASE 'other.db' AS other")).toThrow("blocked keyword");
+	test("query rejects ATTACH and LOAD_EXTENSION", async () => {
+		expect(() => duckdb.query("SELECT load_extension('x')")).toThrow();
+		expect(() => duckdb.query("ATTACH DATABASE 'other.db' AS other")).toThrow("blocked keyword");
 	});
 
-	test("query auto-appends LIMIT when missing", () => {
+	test("query auto-appends LIMIT when missing", async () => {
 		db.insert([
 			{ level: "info", message: "limit-test-1" },
 			{ level: "info", message: "limit-test-2" },
 			{ level: "info", message: "limit-test-3" },
 		]);
-		const result = db.query("SELECT * FROM logs", [], 2);
+		const result = await duckdb.query("SELECT * FROM logs", [], 2);
 		expect(result.count).toBe(2);
 	});
 
-	test("query respects explicit LIMIT", () => {
-		const result = db.query("SELECT * FROM logs LIMIT 1");
+	test("query respects explicit LIMIT", async () => {
+		const result = await duckdb.query("SELECT * FROM logs LIMIT 1");
 		expect(result.count).toBe(1);
 	});
 
@@ -103,44 +108,47 @@ describe("RelogDatabase", () => {
 		expect(maxId).toBeGreaterThan(0);
 	});
 
-	test("searchLogs with filters and pagination", () => {
-		const result = db.searchLogs({ level: "info", limit: 1 });
+	test("searchLogs with filters and pagination", async () => {
+		const result = await duckdb.searchLogs({ level: "info", limit: 1 });
 		expect(result.rows.length).toBe(1);
 		expect(result.total).toBe(5);
 
-		const page2 = db.searchLogs({ level: "info", limit: 1, offset: 1 });
+		const page2 = await duckdb.searchLogs({ level: "info", limit: 1, offset: 1 });
 		expect(page2.rows.length).toBe(1);
 		expect(page2.rows[0]!.id).not.toBe(result.rows[0]!.id);
 	});
 
-	test("searchLogs with grep", () => {
-		const result = db.searchLogs({ grep: "failed" });
+	test("searchLogs with grep", async () => {
+		const result = await duckdb.searchLogs({ grep: "failed" });
 		expect(result.total).toBe(1);
 		expect(result.rows[0]!.message).toBe("something failed");
 	});
 
-	test("stats returns counts", () => {
-		const stats = db.stats();
+	test("stats returns counts", async () => {
+		const stats = await duckdb.stats();
 		expect(stats.log_count).toBe(6);
 		expect(stats.levels["info"]).toBe(5);
 		expect(stats.levels["error"]).toBe(1);
 	});
 
-	test("prune removes old logs in batches", () => {
+	test("prune removes old logs in batches", async () => {
 		const removed = db.prune(Date.now() + 1000);
 		expect(removed).toBe(6);
-		const stats = db.stats();
+		const stats = await duckdb.stats();
 		expect(stats.log_count).toBe(0);
 	});
 });
 
 describe("SQL injection defenses", () => {
 	let db: RelogDatabase;
+	let duckdb: DuckDBReader;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
 		db = new RelogDatabase(dbPath);
+		duckdb = new DuckDBReader(dbPath);
+		await duckdb.init();
 		db.insert([
 			{ level: "info", message: "DELETE this", service: "test" },
 			{ level: "info", message: "normal log" },
@@ -148,60 +156,56 @@ describe("SQL injection defenses", () => {
 	});
 
 	afterAll(() => {
+		duckdb.close();
 		db.close();
 		cleanupDb(dbPath);
 	});
 
-	test("blocked keywords inside string literals are NOT rejected", () => {
-		const result = db.query("SELECT * FROM logs WHERE message = 'DELETE this'");
+	test("blocked keywords inside string literals are NOT rejected", async () => {
+		const result = await duckdb.query("SELECT * FROM logs WHERE message = 'DELETE this'");
 		expect(result.count).toBe(1);
 		expect(result.rows[0]!.message).toBe("DELETE this");
 	});
 
-	test("semicolons inside string literals are NOT rejected", () => {
-		const result = db.query("SELECT ';' as semi FROM logs LIMIT 1");
+	test("semicolons inside string literals are NOT rejected", async () => {
+		const result = await duckdb.query("SELECT ';' as semi FROM logs LIMIT 1");
 		expect(result.count).toBe(1);
 	});
 
-	test("-- line comments are stripped", () => {
-		const result = db.query("SELECT 1 as val -- DROP TABLE logs");
+	test("-- line comments are stripped", async () => {
+		const result = await duckdb.query("SELECT 1 as val -- DROP TABLE logs");
 		expect(result.count).toBe(1);
 		expect(result.rows[0]!.val).toBe(1);
 	});
 
-	test("/* */ block comments are stripped", () => {
-		const result = db.query("SELECT 1 as val /* DROP TABLE */ FROM logs LIMIT 1");
+	test("/* */ block comments are stripped", async () => {
+		const result = await duckdb.query("SELECT 1 as val /* DROP TABLE */ FROM logs LIMIT 1");
 		expect(result.count).toBe(1);
 	});
 
-	test("double-quoted identifiers with special chars", () => {
-		const result = db.query('SELECT message AS "my;col" FROM logs LIMIT 1');
+	test("double-quoted identifiers with special chars", async () => {
+		const result = await duckdb.query('SELECT message AS "my;col" FROM logs LIMIT 1');
 		expect(result.count).toBe(1);
 		expect(result.rows[0]!["my;col"]).toBeDefined();
 	});
 
-	test("escaped single quotes don't confuse semicolon check", () => {
-		const result = db.query("SELECT 'it''s fine' as val FROM logs LIMIT 1");
+	test("escaped single quotes don't confuse semicolon check", async () => {
+		const result = await duckdb.query("SELECT 'it''s fine' as val FROM logs LIMIT 1");
 		expect(result.count).toBe(1);
 		expect(result.rows[0]!.val).toBe("it's fine");
 	});
 
-	test("EXPLAIN SELECT is allowed", () => {
-		const result = db.query("EXPLAIN SELECT * FROM logs LIMIT 1");
+	test("EXPLAIN SELECT is allowed", async () => {
+		const result = await duckdb.query("EXPLAIN SELECT * FROM logs LIMIT 1");
 		expect(result.count).toBeGreaterThan(0);
 	});
 
-	test("safe PRAGMAs are allowed", () => {
-		const result = db.query("PRAGMA table_info(logs)");
-		expect(result.count).toBeGreaterThan(0);
+	test("PRAGMAs are rejected", () => {
+		expect(() => duckdb.query("PRAGMA table_info(logs)")).toThrow();
 	});
 
-	test("unsafe PRAGMAs are rejected", () => {
-		expect(() => db.query("PRAGMA journal_mode")).toThrow("read-only PRAGMAs");
-	});
-
-	test("query with bind params works", () => {
-		const result = db.query("SELECT * FROM logs WHERE level = ?", ["info"]);
+	test("query with bind params works", async () => {
+		const result = await duckdb.query("SELECT * FROM logs WHERE level = ?", ["info"]);
 		expect(result.count).toBe(2);
 	});
 });
@@ -243,65 +247,77 @@ describe("DB edge cases", () => {
 		cleanupDb(p);
 	});
 
-	test("searchLogs with includeTotal: false returns total: -1", () => {
+	test("searchLogs with includeTotal: false returns total: -1", async () => {
 		const p = tmpDbPath();
 		const d = new RelogDatabase(p);
+		const duck = new DuckDBReader(p);
+		await duck.init();
 		d.insert([{ level: "info", message: "test" }]);
-		const result = d.searchLogs({ includeTotal: false });
+		const result = await duck.searchLogs({ includeTotal: false });
 		expect(result.total).toBe(-1);
 		expect(result.rows.length).toBe(1);
+		duck.close();
 		d.close();
 		cleanupDb(p);
 	});
 
-	test("searchLogs with grep containing LIKE special chars % and _", () => {
+	test("searchLogs with grep containing LIKE special chars % and _", async () => {
 		const p = tmpDbPath();
 		const d = new RelogDatabase(p);
+		const duck = new DuckDBReader(p);
+		await duck.init();
 		d.insert([
 			{ level: "info", message: "100% complete" },
 			{ level: "info", message: "file_name.txt" },
 			{ level: "info", message: "normal message" },
 		]);
-		const pctResult = d.searchLogs({ grep: "100%" });
+		const pctResult = await duck.searchLogs({ grep: "100%" });
 		expect(pctResult.total).toBe(1);
 		expect(pctResult.rows[0]!.message).toBe("100% complete");
 
-		const underResult = d.searchLogs({ grep: "file_name" });
+		const underResult = await duck.searchLogs({ grep: "file_name" });
 		expect(underResult.total).toBe(1);
 		expect(underResult.rows[0]!.message).toBe("file_name.txt");
+		duck.close();
 		d.close();
 		cleanupDb(p);
 	});
 
-	test("stats includes services breakdown", () => {
+	test("stats includes services breakdown", async () => {
 		const p = tmpDbPath();
 		const d = new RelogDatabase(p);
+		const duck = new DuckDBReader(p);
+		await duck.init();
 		d.insert([
 			{ level: "info", message: "a", service: "api" },
 			{ level: "info", message: "b", service: "api" },
 			{ level: "warn", message: "c", service: "worker" },
 		]);
-		const stats = d.stats();
+		const stats = await duck.stats();
 		expect(stats.services["api"]).toBe(2);
 		expect(stats.services["worker"]).toBe(1);
+		duck.close();
 		d.close();
 		cleanupDb(p);
 	});
 
-	test("queryIterator returns iterable results", () => {
+	test("queryStream returns iterable results", async () => {
 		const p = tmpDbPath();
 		const d = new RelogDatabase(p);
+		const duck = new DuckDBReader(p);
+		await duck.init();
 		d.insert([
 			{ level: "info", message: "iter-1" },
 			{ level: "info", message: "iter-2" },
 		]);
-		const iter = d.queryIterator("SELECT * FROM logs ORDER BY id ASC");
+		const iter = duck.queryStream("SELECT * FROM logs ORDER BY id ASC");
 		const rows: Record<string, unknown>[] = [];
-		for (const row of iter) {
+		for await (const row of iter) {
 			rows.push(row);
 		}
 		expect(rows.length).toBe(2);
 		expect(rows[0]!.message).toBe("iter-1");
+		duck.close();
 		d.close();
 		cleanupDb(p);
 	});
@@ -324,9 +340,9 @@ describe("HTTP Server", () => {
 	let baseUrl: string;
 	let httpDbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		httpDbPath = tmpDbPath();
-		const result = startServer({ port: 0, dbPath: httpDbPath });
+		const result = await startServer({ port: 0, dbPath: httpDbPath });
 		shutdown = result.shutdown;
 		baseUrl = `http://localhost:${result.server.port}`;
 	});
@@ -511,23 +527,28 @@ describe("HTTP Server", () => {
 
 	test("auth rejects unauthorized requests", async () => {
 		const authDbPath = tmpDbPath();
-		const authResult = startServer({
+		const authResult = await startServer({
 			port: 0,
 			dbPath: authDbPath,
-			auth: "admin:secret",
+			adminKey: "test-admin-key",
 		});
 		const authUrl = `http://localhost:${authResult.server.port}`;
 
-		const noAuth = await fetch(`${authUrl}/health`);
+		// Health is unauthenticated (for load balancer probes)
+		const healthNoAuth = await fetch(`${authUrl}/health`);
+		expect(healthNoAuth.status).toBe(200);
+
+		// Other endpoints require auth
+		const noAuth = await fetch(`${authUrl}/logs`);
 		expect(noAuth.status).toBe(401);
 
-		const wrongAuth = await fetch(`${authUrl}/health`, {
-			headers: { Authorization: `Basic ${btoa("admin:wrong")}` },
+		const wrongAuth = await fetch(`${authUrl}/logs`, {
+			headers: { Authorization: "Bearer wrong-key" },
 		});
-		expect(wrongAuth.status).toBe(403);
+		expect(wrongAuth.status).toBe(401);
 
-		const authed = await fetch(`${authUrl}/health`, {
-			headers: { Authorization: `Basic ${btoa("admin:secret")}` },
+		const authed = await fetch(`${authUrl}/logs`, {
+			headers: { Authorization: "Bearer test-admin-key" },
 		});
 		expect(authed.status).toBe(200);
 
@@ -603,7 +624,7 @@ describe("HTTP Server", () => {
 
 	test("CORS headers present when enabled", async () => {
 		const corsDbPath = tmpDbPath();
-		const corsResult = startServer({
+		const corsResult = await startServer({
 			port: 0,
 			dbPath: corsDbPath,
 			cors: true,
@@ -623,7 +644,7 @@ describe("HTTP Server", () => {
 
 	test("SSE delivers ingested logs to stream clients", async () => {
 		const sseDbPath = tmpDbPath();
-		const sseResult = startServer({ port: 0, dbPath: sseDbPath });
+		const sseResult = await startServer({ port: 0, dbPath: sseDbPath });
 		const sseUrl = `http://localhost:${sseResult.server.port}`;
 
 		// Connect to stream
@@ -674,7 +695,7 @@ describe("HTTP Server", () => {
 
 	test("rejects oversized request body", async () => {
 		const smallDbPath = tmpDbPath();
-		const smallServer = startServer({
+		const smallServer = await startServer({
 			port: 0,
 			dbPath: smallDbPath,
 			maxBodySize: 100,
@@ -701,9 +722,9 @@ describe("Ingest validation", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath, maxBatchSize: 5 });
+		server = await startServer({ port: 0, dbPath, maxBatchSize: 5 });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -822,7 +843,7 @@ describe("/logs endpoint validation", () => {
 
 	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 
 		await fetch(`${baseUrl}/ingest`, {
@@ -912,9 +933,9 @@ describe("/query edge cases", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -999,7 +1020,7 @@ describe("/query edge cases", () => {
 describe("CORS edge cases", () => {
 	test("string origin returns that origin", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p, cors: "https://example.com" });
+		const s = await startServer({ port: 0, dbPath: p, cors: "https://example.com" });
 		const url = `http://localhost:${s.server.port}`;
 
 		const res = await fetch(`${url}/health`, {
@@ -1014,7 +1035,7 @@ describe("CORS edge cases", () => {
 
 	test("array origin matches request origin", async () => {
 		const p = tmpDbPath();
-		const s = startServer({
+		const s = await startServer({
 			port: 0,
 			dbPath: p,
 			cors: ["https://a.com", "https://b.com"],
@@ -1037,7 +1058,7 @@ describe("CORS edge cases", () => {
 
 	test("array origin with non-matching origin returns no CORS headers", async () => {
 		const p = tmpDbPath();
-		const s = startServer({
+		const s = await startServer({
 			port: 0,
 			dbPath: p,
 			cors: ["https://a.com"],
@@ -1057,7 +1078,7 @@ describe("CORS edge cases", () => {
 describe("SSE streaming edge cases", () => {
 	test("stream with level filter only delivers matching logs", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
+		const s = await startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
 		const url = `http://localhost:${s.server.port}`;
 
 		const streamRes = await fetch(`${url}/stream?level=error`);
@@ -1099,7 +1120,7 @@ describe("SSE streaming edge cases", () => {
 
 	test("maxClients exceeded returns error event", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p });
+		const s = await startServer({ port: 0, dbPath: p });
 		const url = `http://localhost:${s.server.port}`;
 
 		// Fill up to maxClients by adding fake clients
@@ -1156,7 +1177,7 @@ describe("SSE streaming edge cases", () => {
 
 	test("multiple clients each get their own cursor", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
+		const s = await startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
 		const url = `http://localhost:${s.server.port}`;
 
 		// Ingest before connecting - these should NOT appear in streams
@@ -1215,9 +1236,9 @@ describe("/prune edge cases", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -1251,10 +1272,13 @@ describe("Auth edge cases", () => {
 	let server: ServerInstance;
 	let baseUrl: string;
 	let dbPath: string;
+	const adminKey = "edge-admin-key";
+	const readKey = "edge-read-key";
+	const ingestKey = "edge-ingest-key";
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath, auth: "admin:secret" });
+		server = await startServer({ port: 0, dbPath, adminKey, readKey, ingestKey });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -1309,25 +1333,24 @@ describe("Auth edge cases", () => {
 		expect(res.status).toBe(401);
 	});
 
-	test("Bearer token is rejected (only Basic accepted)", async () => {
-		const res = await fetch(`${baseUrl}/health`, {
-			headers: { Authorization: "Bearer some-token" },
+	test("Basic auth scheme is rejected", async () => {
+		const res = await fetch(`${baseUrl}/logs`, {
+			headers: { Authorization: `Basic ${btoa("user:pass")}` },
 		});
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(401);
 	});
 
-	test("malformed base64 in Authorization is rejected", async () => {
-		const res = await fetch(`${baseUrl}/health`, {
-			headers: { Authorization: "Basic !!!not-base64!!!" },
+	test("invalid token is rejected", async () => {
+		const res = await fetch(`${baseUrl}/logs`, {
+			headers: { Authorization: "Bearer wrong-token" },
 		});
-		expect(res.status).toBe(403);
+		expect(res.status).toBe(401);
 	});
 
 	test("empty Authorization header is rejected", async () => {
-		const res = await fetch(`${baseUrl}/health`, {
+		const res = await fetch(`${baseUrl}/logs`, {
 			headers: { Authorization: "" },
 		});
-		// Empty string header may be treated as no header by some clients
 		const status = res.status;
 		expect(status === 401 || status === 403).toBe(true);
 	});
@@ -1335,7 +1358,7 @@ describe("Auth edge cases", () => {
 	test("valid auth allows /ingest and data is stored", async () => {
 		const headers = {
 			"Content-Type": "application/json",
-			Authorization: `Basic ${btoa("admin:secret")}`,
+			Authorization: `Bearer ${adminKey}`,
 		};
 		const ingestRes = await fetch(`${baseUrl}/ingest`, {
 			method: "POST",
@@ -1349,6 +1372,51 @@ describe("Auth edge cases", () => {
 		const json = (await logsRes.json()) as { rows: unknown[] };
 		expect(json.rows.length).toBe(1);
 	});
+
+	test("ingest key cannot access read routes", async () => {
+		const res = await fetch(`${baseUrl}/logs`, {
+			headers: { Authorization: `Bearer ${ingestKey}` },
+		});
+		expect(res.status).toBe(403);
+	});
+
+	test("read key cannot access admin routes", async () => {
+		const res = await fetch(`${baseUrl}/prune`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${readKey}` },
+			body: JSON.stringify({ before: Date.now() }),
+		});
+		expect(res.status).toBe(403);
+	});
+
+	test("read key can ingest (hierarchy)", async () => {
+		const res = await fetch(`${baseUrl}/ingest`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json", Authorization: `Bearer ${readKey}` },
+			body: JSON.stringify({ level: "info", message: "read-key-ingest" }),
+		});
+		expect(res.status).toBe(201);
+	});
+
+	test("admin key can access all routes", async () => {
+		const headers = { Authorization: `Bearer ${adminKey}` };
+		const logsRes = await fetch(`${baseUrl}/logs`, { headers });
+		expect(logsRes.status).toBe(200);
+
+		const ingestRes = await fetch(`${baseUrl}/ingest`, {
+			method: "POST",
+			headers: { ...headers, "Content-Type": "application/json" },
+			body: JSON.stringify({ level: "info", message: "admin-all-access" }),
+		});
+		expect(ingestRes.status).toBe(201);
+
+		const pruneRes = await fetch(`${baseUrl}/prune`, {
+			method: "POST",
+			headers: { ...headers, "Content-Type": "application/json" },
+			body: JSON.stringify({ before: 0 }),
+		});
+		expect(pruneRes.status).toBe(200);
+	});
 });
 
 describe("HTTP method enforcement", () => {
@@ -1356,9 +1424,9 @@ describe("HTTP method enforcement", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -1409,86 +1477,93 @@ describe("HTTP method enforcement", () => {
 
 describe("SQL injection advanced bypass attempts", () => {
 	let db: RelogDatabase;
+	let duckdb: DuckDBReader;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
 		db = new RelogDatabase(dbPath);
+		duckdb = new DuckDBReader(dbPath);
+		await duckdb.init();
 		db.insert([{ level: "info", message: "test" }]);
 	});
 
 	afterAll(() => {
+		duckdb.close();
 		db.close();
 		cleanupDb(dbPath);
 	});
 
 	test("case variations of blocked keywords are caught", () => {
-		expect(() => db.query("dElEtE FROM logs")).toThrow("blocked keyword");
-		expect(() => db.query("DrOp TABLE logs")).toThrow("blocked keyword");
-		expect(() => db.query("iNsErT INTO logs VALUES (1)")).toThrow("blocked keyword");
-		expect(() => db.query("UpDaTe logs SET message = 'x'")).toThrow("blocked keyword");
+		expect(() => duckdb.query("dElEtE FROM logs")).toThrow("blocked keyword");
+		expect(() => duckdb.query("DrOp TABLE logs")).toThrow("blocked keyword");
+		expect(() => duckdb.query("iNsErT INTO logs VALUES (1)")).toThrow("blocked keyword");
+		expect(() => duckdb.query("UpDaTe logs SET message = 'x'")).toThrow("blocked keyword");
 	});
 
-	test("UNION SELECT is allowed (read-only)", () => {
-		const result = db.query("SELECT id FROM logs UNION SELECT id FROM logs LIMIT 5");
+	test("UNION SELECT is allowed (read-only)", async () => {
+		const result = await duckdb.query("SELECT id FROM logs UNION SELECT id FROM logs LIMIT 5");
 		expect(result.count).toBeGreaterThan(0);
 	});
 
-	test("subquery is allowed (read-only)", () => {
-		const result = db.query("SELECT * FROM logs WHERE id IN (SELECT id FROM logs) LIMIT 5");
+	test("subquery is allowed (read-only)", async () => {
+		const result = await duckdb.query(
+			"SELECT * FROM logs WHERE id IN (SELECT id FROM logs) LIMIT 5",
+		);
 		expect(result.count).toBeGreaterThan(0);
 	});
 
-	test("WITH CTE is rejected (not SELECT/EXPLAIN/PRAGMA)", () => {
-		expect(() => db.query("WITH x AS (SELECT * FROM logs) SELECT * FROM x")).toThrow("Only SELECT");
+	test("WITH CTE is allowed (read-only)", async () => {
+		const result = await duckdb.query("WITH x AS (SELECT * FROM logs) SELECT * FROM x");
+		expect(result.count).toBeGreaterThan(0);
 	});
 
 	test("whitespace-only SQL is rejected", () => {
-		expect(() => db.query("   ")).toThrow();
+		expect(() => duckdb.query("   ")).toThrow();
 	});
 
 	test("empty string SQL is rejected", () => {
-		expect(() => db.query("")).toThrow();
+		expect(() => duckdb.query("")).toThrow();
 	});
 
-	test("query referencing non-existent table returns error", () => {
-		expect(() => db.query("SELECT * FROM nonexistent")).toThrow();
+	test("query referencing non-existent table returns error", async () => {
+		await expect(duckdb.query("SELECT * FROM nonexistent")).rejects.toThrow();
 	});
 
-	test("newlines and tabs in SQL are handled", () => {
-		const result = db.query("SELECT\n\t*\n\tFROM\n\tlogs\n\tLIMIT 1");
+	test("newlines and tabs in SQL are handled", async () => {
+		const result = await duckdb.query("SELECT\n\t*\n\tFROM\n\tlogs\n\tLIMIT 1");
 		expect(result.count).toBe(1);
 	});
 
 	test("blocked keyword after newline is still caught", () => {
-		expect(() => db.query("SELECT 1;\nDROP TABLE logs")).toThrow("Multiple statements");
+		expect(() => duckdb.query("SELECT 1;\nDROP TABLE logs")).toThrow("Multiple statements");
 	});
 
-	test("PRAGMA with write effect is rejected", () => {
-		expect(() => db.query("PRAGMA wal_autocheckpoint")).toThrow("read-only PRAGMAs");
-		expect(() => db.query("PRAGMA optimize")).toThrow("read-only PRAGMAs");
-		expect(() => db.query("PRAGMA integrity_check")).toThrow("read-only PRAGMAs");
+	test("PRAGMAs are rejected", () => {
+		expect(() => duckdb.query("PRAGMA wal_autocheckpoint")).toThrow();
+		expect(() => duckdb.query("PRAGMA optimize")).toThrow();
+		expect(() => duckdb.query("PRAGMA table_info(logs)")).toThrow();
 	});
 
 	test("REPLACE keyword is blocked", () => {
 		expect(() =>
-			db.query(
+			duckdb.query(
 				"REPLACE INTO logs VALUES (1, 'a', 'b', 'c', NULL, NULL, NULL, NULL, NULL, NULL, 0)",
 			),
 		).toThrow("blocked keyword");
 	});
 
 	test("TRUNCATE keyword is blocked", () => {
-		expect(() => db.query("TRUNCATE TABLE logs")).toThrow("blocked keyword");
+		expect(() => duckdb.query("TRUNCATE TABLE logs")).toThrow("blocked keyword");
 	});
 
 	test("ALTER keyword is blocked", () => {
-		expect(() => db.query("ALTER TABLE logs ADD COLUMN x TEXT")).toThrow("blocked keyword");
+		expect(() => duckdb.query("ALTER TABLE logs ADD COLUMN x TEXT")).toThrow("blocked keyword");
 	});
 
 	test("GRANT and REVOKE are blocked", () => {
-		expect(() => db.query("GRANT ALL ON logs TO user")).toThrow("blocked keyword");
-		expect(() => db.query("REVOKE ALL ON logs FROM user")).toThrow("blocked keyword");
+		expect(() => duckdb.query("GRANT ALL ON logs TO user")).toThrow("blocked keyword");
+		expect(() => duckdb.query("REVOKE ALL ON logs FROM user")).toThrow("blocked keyword");
 	});
 });
 
@@ -1497,9 +1572,9 @@ describe("Ingest edge cases", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -1607,9 +1682,9 @@ describe("Concurrent operations", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -1666,7 +1741,7 @@ describe("Concurrent operations", () => {
 describe("CORS OPTIONS preflight edge cases", () => {
 	test("OPTIONS without cors config returns 404", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p });
+		const s = await startServer({ port: 0, dbPath: p });
 		const url = `http://localhost:${s.server.port}`;
 
 		const res = await fetch(`${url}/health`, { method: "OPTIONS" });
@@ -1678,7 +1753,7 @@ describe("CORS OPTIONS preflight edge cases", () => {
 
 	test("OPTIONS with array cors and matching origin returns 204", async () => {
 		const p = tmpDbPath();
-		const s = startServer({
+		const s = await startServer({
 			port: 0,
 			dbPath: p,
 			cors: ["https://app.example.com"],
@@ -1699,7 +1774,7 @@ describe("CORS OPTIONS preflight edge cases", () => {
 
 	test("cors: true does not set Vary header (wildcard origin)", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p, cors: true });
+		const s = await startServer({ port: 0, dbPath: p, cors: true });
 		const url = `http://localhost:${s.server.port}`;
 
 		const res = await fetch(`${url}/health`);
@@ -1712,9 +1787,9 @@ describe("CORS OPTIONS preflight edge cases", () => {
 });
 
 describe("StreamManager lifecycle", () => {
-	test("shutdown is idempotent", () => {
+	test("shutdown is idempotent", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p });
+		const s = await startServer({ port: 0, dbPath: p });
 		s.streamManager.shutdown();
 		s.streamManager.shutdown(); // second call should not throw
 		s.server.stop();
@@ -1722,9 +1797,9 @@ describe("StreamManager lifecycle", () => {
 		cleanupDb(p);
 	});
 
-	test("notify after shutdown is a no-op", () => {
+	test("notify after shutdown is a no-op", async () => {
 		const p = tmpDbPath();
-		const s = startServer({ port: 0, dbPath: p });
+		const s = await startServer({ port: 0, dbPath: p });
 		s.streamManager.shutdown();
 		s.streamManager.notify(); // should not throw
 		s.server.stop();
@@ -1800,9 +1875,9 @@ describe("Query error handling via HTTP", () => {
 	let baseUrl: string;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 
@@ -1855,11 +1930,14 @@ describe("Query error handling via HTTP", () => {
 describe("Project and branch fields", () => {
 	describe("Database layer", () => {
 		let db: RelogDatabase;
+		let duckdb: DuckDBReader;
 		let dbPath: string;
 
-		beforeAll(() => {
+		beforeAll(async () => {
 			dbPath = tmpDbPath();
 			db = new RelogDatabase(dbPath);
+			duckdb = new DuckDBReader(dbPath);
+			await duckdb.init();
 			db.insert([
 				{ level: "info", message: "proj-a-main", project: "proj-a", branch: "main" },
 				{ level: "info", message: "proj-a-dev", project: "proj-a", branch: "dev" },
@@ -1869,42 +1947,47 @@ describe("Project and branch fields", () => {
 		});
 
 		afterAll(() => {
+			duckdb.close();
 			db.close();
 			cleanupDb(dbPath);
 		});
 
-		test("insert stores project and branch", () => {
-			const result = db.query("SELECT project, branch FROM logs WHERE message = 'proj-a-main'");
+		test("insert stores project and branch", async () => {
+			const result = await duckdb.query(
+				"SELECT project, branch FROM logs WHERE message = 'proj-a-main'",
+			);
 			expect(result.count).toBe(1);
 			expect(result.rows[0]!.project).toBe("proj-a");
 			expect(result.rows[0]!.branch).toBe("main");
 		});
 
-		test("insert stores null project/branch when not provided", () => {
-			const result = db.query("SELECT project, branch FROM logs WHERE message = 'no-proj'");
+		test("insert stores null project/branch when not provided", async () => {
+			const result = await duckdb.query(
+				"SELECT project, branch FROM logs WHERE message = 'no-proj'",
+			);
 			expect(result.count).toBe(1);
 			expect(result.rows[0]!.project).toBeNull();
 			expect(result.rows[0]!.branch).toBeNull();
 		});
 
-		test("searchLogs filters by project", () => {
-			const result = db.searchLogs({ project: "proj-a" });
+		test("searchLogs filters by project", async () => {
+			const result = await duckdb.searchLogs({ project: "proj-a" });
 			expect(result.total).toBe(2);
 			for (const row of result.rows) {
 				expect(row.project).toBe("proj-a");
 			}
 		});
 
-		test("searchLogs filters by branch", () => {
-			const result = db.searchLogs({ branch: "main" });
+		test("searchLogs filters by branch", async () => {
+			const result = await duckdb.searchLogs({ branch: "main" });
 			expect(result.total).toBe(2);
 			for (const row of result.rows) {
 				expect(row.branch).toBe("main");
 			}
 		});
 
-		test("searchLogs filters by project + branch combined", () => {
-			const result = db.searchLogs({ project: "proj-a", branch: "dev" });
+		test("searchLogs filters by project + branch combined", async () => {
+			const result = await duckdb.searchLogs({ project: "proj-a", branch: "dev" });
 			expect(result.total).toBe(1);
 			expect(result.rows[0]!.message).toBe("proj-a-dev");
 		});
@@ -1921,8 +2004,8 @@ describe("Project and branch fields", () => {
 			expect(logs[0]!.message).toBe("proj-a-dev");
 		});
 
-		test("stats includes project breakdown", () => {
-			const stats = db.stats();
+		test("stats includes project breakdown", async () => {
+			const stats = await duckdb.stats();
 			expect(stats.projects["proj-a"]).toBe(2);
 			expect(stats.projects["proj-b"]).toBe(1);
 		});
@@ -1935,7 +2018,7 @@ describe("Project and branch fields", () => {
 
 		beforeAll(async () => {
 			dbPath = tmpDbPath();
-			server = startServer({ port: 0, dbPath });
+			server = await startServer({ port: 0, dbPath });
 			baseUrl = `http://localhost:${server.server.port}`;
 
 			await fetch(`${baseUrl}/ingest`, {
@@ -2030,7 +2113,7 @@ describe("Project and branch fields", () => {
 	describe("SSE stream filtering", () => {
 		test("stream filters by project", async () => {
 			const p = tmpDbPath();
-			const s = startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
+			const s = await startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
 			const url = `http://localhost:${s.server.port}`;
 
 			const streamRes = await fetch(`${url}/stream?project=target-proj`);
@@ -2072,7 +2155,7 @@ describe("Project and branch fields", () => {
 
 		test("stream rejects invalid level", async () => {
 			const p = tmpDbPath();
-			const s = startServer({ port: 0, dbPath: p });
+			const s = await startServer({ port: 0, dbPath: p });
 			const url = `http://localhost:${s.server.port}`;
 
 			const res = await fetch(`${url}/stream?level=banana`);
@@ -2088,11 +2171,14 @@ describe("Project and branch fields", () => {
 
 describe("LIMIT with parameterized queries", () => {
 	let db: RelogDatabase;
+	let duckdb: DuckDBReader;
 	let dbPath: string;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		dbPath = tmpDbPath();
 		db = new RelogDatabase(dbPath);
+		duckdb = new DuckDBReader(dbPath);
+		await duckdb.init();
 		db.insert([
 			{ level: "info", message: "limit-param-1" },
 			{ level: "info", message: "limit-param-2" },
@@ -2101,17 +2187,18 @@ describe("LIMIT with parameterized queries", () => {
 	});
 
 	afterAll(() => {
+		duckdb.close();
 		db.close();
 		cleanupDb(dbPath);
 	});
 
-	test("LIMIT ? with param does not get double LIMIT", () => {
-		const result = db.query("SELECT * FROM logs LIMIT ?", [2]);
+	test("LIMIT ? with param does not get double LIMIT", async () => {
+		const result = await duckdb.query("SELECT * FROM logs LIMIT ?", [2]);
 		expect(result.count).toBe(2);
 	});
 
-	test("LIMIT inside string literal does not bypass auto-LIMIT", () => {
-		const result = db.query("SELECT * FROM logs WHERE message LIKE '%LIMIT%'", [], 1);
+	test("LIMIT inside string literal does not bypass auto-LIMIT", async () => {
+		const result = await duckdb.query("SELECT * FROM logs WHERE message LIKE '%LIMIT%'", [], 1);
 		// Should get auto-LIMIT applied since 'LIMIT' is only inside a string
 		expect(result.count).toBeLessThanOrEqual(1);
 	});

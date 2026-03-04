@@ -12,6 +12,7 @@
 		"url": "git+https://github.com/TimMikeladze/relog.git"
 	},
 	"bin": {
+		"relog": "./dist/cli.js",
 		"relog.dev": "./dist/cli.js"
 	},
 	"files": [
@@ -45,6 +46,12 @@
 				"default": "./dist/next.js"
 			}
 		},
+		"./browser": {
+			"import": {
+				"types": "./dist/browser.d.ts",
+				"default": "./dist/browser.js"
+			}
+		},
 		"./package.json": "./package.json"
 	},
 	"scripts": {
@@ -61,7 +68,10 @@
 	},
 	"dependencies": {
 		"@drizzle-team/brocli": "^0.10.2",
+		"@duckdb/node-api": "^1.4.4-r.3",
 		"@modelcontextprotocol/sdk": "^1.27.1",
+		"cronbake": "^0.4.0",
+		"hyparquet-writer": "^0.13.0",
 		"picocolors": "^1.1.1",
 		"zod": "^4.3.6"
 	},

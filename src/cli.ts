@@ -1,18 +1,20 @@
 #!/usr/bin/env bun
 import { run } from "@drizzle-team/brocli";
+import { archiveCommand } from "./cli/archive.ts";
+import { archiverServiceCommand } from "./cli/archiver-service.ts";
 import { exportCommand } from "./cli/export.ts";
 import { mcpCommand } from "./cli/mcp.ts";
 import { pruneCommand } from "./cli/prune.ts";
 import { queryCommand } from "./cli/query.ts";
 import { searchCommand } from "./cli/search.ts";
 import { sendCommand } from "./cli/send.ts";
-import { serveCommand } from "./cli/serve.ts";
+import { startCommand } from "./cli/serve.ts";
 import { statsCommand } from "./cli/stats.ts";
 import { tailCommand } from "./cli/tail.ts";
 
 run(
 	[
-		serveCommand,
+		startCommand,
 		sendCommand,
 		tailCommand,
 		queryCommand,
@@ -20,6 +22,8 @@ run(
 		statsCommand,
 		pruneCommand,
 		exportCommand,
+		archiveCommand,
+		archiverServiceCommand,
 		mcpCommand,
 	],
 	{

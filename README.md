@@ -11,8 +11,9 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Distributed tracing** — first-class `trace_id` and `span_id` support
 - **Project & branch tracking** — auto-detected from git, filterable across all endpoints
 - **Child loggers** — inherit service, meta, and trace context from parent loggers
-- **Basic auth** — optional timing-safe authentication on all endpoints
-- **Next.js integration** — drop-in console capture, request logging, and error tracking
+- **Role-based API keys** — three roles (ingest, read, admin) with hierarchical Bearer token auth
+- **Browser logging** — client-side logger with batched proxy delivery, error capture, and session tracking
+- **Next.js integration** — drop-in console capture, request logging, error tracking, and browser proxy
 - **MCP server** — AI agents (Claude Code, Cursor, etc.) can query logs via Model Context Protocol
 - **Export** — JSON, CSV, and NDJSON export formats
 
@@ -20,7 +21,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 
 ```
 ┌─────────────────────┐         ┌──────────────────────────────────┐
-│   Your Application  │         │       relog.dev server             │
+│   Your Application  │         │       relog.dev startr             │
 │                     │         │                                  │
 │  ┌───────────────┐  │  HTTP   │  ┌────────┐    ┌─────────────┐  │
 │  │ relog.dev client│──┼────────┼─▶│ /ingest │───▶│             │  │
@@ -32,10 +33,21 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 └─────────────────────┘         │  │ /health │                     │
                                 │  │ /prune  │                     │
 ┌─────────────────────┐         │  └────────┘                      │
-│   relog.dev CLI      │  HTTP   │                                  │
-│                     │────────▶│  Basic auth (optional)           │
-│  tail | search      │         │  CORS (optional)                 │
-│  query | export     │         └──────────────────────────────────┘
+│   Browser           │         │                                  │
+│  ┌───────────────┐  │  fetch  │  Role-based API keys (optional)  │
+│  │ relog.dev/     │  │ beacon  │  CORS (optional)                 │
+│  │  browser      │──┼────┐    └──────────────────────────────────┘
+│  └───────────────┘  │    │
+│   - batching        │    │    ┌──────────────────────────────────┐
+│   - sendBeacon      │    └───▶│   Your Server (proxy)            │
+│   - error capture   │  POST   │   /api/relog ──▶ relog /ingest   │
+└─────────────────────┘         └──────────────────────────────────┘
+
+┌─────────────────────┐
+│   relog.dev CLI      │  HTTP
+│                     │────────▶  relog.dev startr
+│  tail | search      │
+│  query | export     │
 │  stats | prune      │
 │  mcp                │         ┌──────────────────────────────────┐
 └─────────────────────┘         │     AI Agents (Claude, etc.)     │
@@ -58,7 +70,8 @@ The `relog.dev` package includes the server, CLI, and client SDK. Import from th
 import { startServer } from "relog.dev"; // server
 import { createLogger } from "relog.dev/client"; // client SDK
 import { createMcpServer } from "relog.dev/mcp"; // MCP server
-import { withRelog } from "relog.dev/next"; // Next.js integration
+import { createRelog } from "relog.dev/next"; // Next.js integration
+import { log } from "relog.dev/browser"; // Browser client
 ```
 
 ## Quick Start
@@ -67,7 +80,7 @@ Try it in 60 seconds — copy-paste this entire block into your terminal:
 
 ```bash
 # terminal 1: start the server
-bunx relog.dev serve &
+bunx relog.dev start &
 sleep 1
 
 # send some logs
@@ -102,8 +115,8 @@ kill %1 && rm -f relog.db relog.db-wal relog.db-shm logs.json
 Start the server:
 
 ```bash
-bunx relog.dev serve
-# relog.dev server listening on http://localhost:3485
+bunx relog.dev start
+# relog.dev startr listening on http://localhost:3485
 ```
 
 Send logs from your app:
@@ -140,7 +153,7 @@ bunx relog.dev tail
 | `url`           | `string`                 | —                | Server URL. Omit for console-only logging                     |
 | `service`       | `string`                 | —                | Service name attached to every log                            |
 | `level`         | `LogLevel`               | `"info"`         | Minimum level (`trace` `debug` `info` `warn` `error` `fatal`) |
-| `auth`          | `string`                 | `RELOG_AUTH` env | Basic auth credentials (`user:pass`)                          |
+| `auth`          | `string`                 | `RELOG_AUTH` env | API key sent as Bearer token                                  |
 | `console`       | `boolean`                | `true` in dev    | Print to stdout (`false` when `NODE_ENV=production`)          |
 | `project`       | `string`                 | auto (git)       | Project name. Also reads `RELOG_PROJECT` env                  |
 | `branch`        | `string`                 | auto (git)       | Git branch. Also reads `RELOG_BRANCH` env                     |
@@ -206,22 +219,26 @@ await log.destroy(); // flush + stop the transport
 
 ## CLI
 
-All commands accept `--url` (default `http://localhost:3485`) and `--auth` for basic auth (also reads `RELOG_AUTH` env).
+All commands accept `--url` (default `http://localhost:3485`) and `--auth` for Bearer token authentication (also reads `RELOG_AUTH` env).
 
-### `relog.dev serve`
+### `relog.dev start`
 
 Start the log server.
 
 ```bash
-relog.dev serve --port 3485 --db relog.db --auth admin:secret --cors true
+relog.dev start --port 3485 --db relog.db --admin-key mykey --cors true
 ```
 
-| Option   | Default    | Description                          |
-| -------- | ---------- | ------------------------------------ |
-| `--port` | `3485`     | Port to listen on                    |
-| `--db`   | `relog.db` | SQLite database file path            |
-| `--auth` | —          | Basic auth credentials (`user:pass`) |
-| `--cors` | `false`    | Enable CORS headers                  |
+| Option         | Default    | Description                                      |
+| -------------- | ---------- | ------------------------------------------------ |
+| `--port`       | `3485`     | Port to listen on                                |
+| `--db`         | `relog.db` | SQLite database file path                        |
+| `--ingest-key` | —          | API key for ingest role (`RELOG_INGEST_KEY` env) |
+| `--read-key`   | —          | API key for read role (`RELOG_READ_KEY` env)     |
+| `--admin-key`  | —          | API key for admin role (`RELOG_ADMIN_KEY` env)   |
+| `--cors`       | `false`    | Enable CORS headers                              |
+
+**Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
 ### `relog.dev send`
 
@@ -340,7 +357,7 @@ relog.dev prune --before 2025-01-01T00:00:00Z --yes
 Start an MCP server for AI agent integration (see [MCP Server](#mcp-server) below).
 
 ```bash
-relog.dev mcp --url http://localhost:3485 --auth user:pass
+relog.dev mcp --url http://localhost:3485 --auth my-read-key
 ```
 
 ## MCP Server
@@ -369,7 +386,7 @@ With auth:
 	"mcpServers": {
 		"relog.dev": {
 			"command": "npx",
-			"args": ["relog.dev", "mcp", "--url", "http://localhost:3485", "--auth", "user:pass"]
+			"args": ["relog.dev", "mcp", "--url", "http://localhost:3485", "--auth", "my-read-key"]
 		}
 	}
 }
@@ -392,7 +409,7 @@ import { createMcpServer } from "relog.dev/mcp";
 
 const server = createMcpServer({
 	url: "http://localhost:3485",
-	auth: "user:pass",
+	auth: "my-read-key",
 });
 ```
 
@@ -415,9 +432,9 @@ relog.dev provides a drop-in integration for Next.js that captures console outpu
 **`instrumentation.ts`** (project root):
 
 ```typescript
-import { withRelog } from "relog.dev/next";
+import { createRelog } from "relog.dev/next";
 
-const relog = withRelog({
+const relog = createRelog({
 	url: "http://localhost:3485",
 	service: "my-app",
 });
@@ -470,9 +487,9 @@ export default relogMiddleware(myMiddleware);
 
 | Option           | Type       | Default                                    | Description                             |
 | ---------------- | ---------- | ------------------------------------------ | --------------------------------------- |
-| `url`            | `string`   | `RELOG_URL` env or `http://localhost:3485` | relog.dev server URL                    |
+| `url`            | `string`   | `RELOG_URL` env or `http://localhost:3485` | relog.dev startr URL                    |
 | `service`        | `string`   | `"next"`                                   | Service name                            |
-| `auth`           | `string`   | `RELOG_AUTH` env                           | Basic auth credentials                  |
+| `auth`           | `string`   | `RELOG_AUTH` env                           | API key (sent as Bearer token)          |
 | `level`          | `LogLevel` | `"info"`                                   | Minimum log level                       |
 | `captureConsole` | `boolean`  | `true`                                     | Patch console methods to capture output |
 | `traceHeader`    | `string`   | `"x-trace-id"`                             | Response header name for trace IDs      |
@@ -486,6 +503,107 @@ export default relogMiddleware(myMiddleware);
 - **Error tracking**: `onRequestError` is a Next.js instrumentation hook that catches unhandled errors from server components, server actions, and route handlers, logging them with full route context.
 - **Edge runtime**: The middleware detects Edge runtime (`NEXT_RUNTIME === "edge"`) and sends logs directly via `fetch` instead of using the full Logger/Transport stack, avoiding Node.js API dependencies.
 
+## Browser Logging
+
+relog.dev provides a browser-safe logger that sends logs through a proxy endpoint on your own server. This keeps the relog server URL and API keys hidden from the client and avoids CORS issues.
+
+### Zero-Config Usage
+
+```typescript
+import { log } from "relog.dev/browser";
+
+log.info("page loaded");
+log.error("checkout failed", { orderId: "abc" });
+```
+
+The singleton auto-initializes on first use. Logs are batched and sent to `/api/relog` on the same origin.
+
+### Configured Usage
+
+```typescript
+import { init } from "relog.dev/browser";
+
+const log = init({
+	endpoint: "/api/logs",
+	project: "my-app",
+	service: "web",
+	captureConsole: true,
+});
+```
+
+### Browser Proxy (Next.js)
+
+The browser logger sends logs to a proxy on your server. For Next.js App Router, create the proxy route with a single line:
+
+**`app/api/relog/route.ts`**:
+
+```typescript
+import { createBrowserProxy } from "relog.dev/next";
+
+export const POST = createBrowserProxy();
+```
+
+The proxy reads `RELOG_URL` and `RELOG_AUTH` from environment variables and forwards logs to the relog server. You can customize it:
+
+```typescript
+export const POST = createBrowserProxy({
+	url: "http://relog:3485",
+	auth: "my-ingest-key",
+	service: "web-client",
+	maxBatchSize: 50,
+});
+```
+
+For non-Next.js servers, implement a POST endpoint that accepts a JSON array of log entries and forwards them to your relog server's `/ingest` endpoint.
+
+### Auto-Enrichment
+
+Every browser log is automatically enriched with:
+
+| Field             | Source                | Description                                |
+| ----------------- | --------------------- | ------------------------------------------ |
+| `host`            | `location.hostname`   | Current hostname                           |
+| `meta.url`        | `location.href`       | Full page URL                              |
+| `meta.user_agent` | `navigator.userAgent` | Browser user agent                         |
+| `meta.session_id` | `sessionStorage`      | Random ID persisted per tab session        |
+| `meta.source`     | `"browser"`           | Identifies logs as coming from the browser |
+
+### Error Capture
+
+By default, `captureErrors: true` hooks `window.onerror` and `unhandledrejection` to automatically log uncaught errors and promise rejections.
+
+### Configuration
+
+| Option           | Type       | Default        | Description                                     |
+| ---------------- | ---------- | -------------- | ----------------------------------------------- |
+| `endpoint`       | `string`   | `"/api/relog"` | Proxy endpoint path on the same origin          |
+| `level`          | `LogLevel` | `"info"`       | Minimum log level                               |
+| `service`        | `string`   | —              | Service name                                    |
+| `project`        | `string`   | —              | Project name                                    |
+| `meta`           | `object`   | —              | Default metadata merged into every log          |
+| `batchSize`      | `number`   | `25`           | Logs per HTTP batch                             |
+| `flushInterval`  | `number`   | `3000`         | Auto-flush interval (ms)                        |
+| `captureErrors`  | `boolean`  | `true`         | Capture `window.onerror` + `unhandledrejection` |
+| `captureConsole` | `boolean`  | `false`        | Patch console methods to forward to relog       |
+
+### Transport Behavior
+
+- Logs are batched with `setInterval` and sent via `fetch` with `keepalive: true`
+- On page hide (`visibilitychange` + `pagehide`), remaining logs flush via `navigator.sendBeacon`
+- `sendBeacon` payloads are chunked at 60KB to stay under browser limits
+- Failed fetches get a single retry before being dropped
+
+### Child Loggers
+
+```typescript
+import { log } from "relog.dev/browser";
+
+const pageLog = log.child({ page: "/checkout" });
+pageLog.info("step completed", { step: 2 });
+```
+
+Child loggers share the parent's transport and inherit all bound metadata.
+
 ## HTTP API
 
 | Method | Path            | Description                               |
@@ -498,7 +616,7 @@ export default relogMiddleware(myMiddleware);
 | `POST` | `/prune`        | Delete logs before timestamp              |
 | `GET`  | `/health`       | Server health                             |
 
-All endpoints support Basic auth via `Authorization` header when `--auth` is configured.
+All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, and `admin` for `/prune`, `/archive`.
 
 ### `POST /ingest`
 
@@ -633,7 +751,9 @@ import { startServer } from "relog.dev";
 const { server, db, streamManager, shutdown } = startServer({
 	port: 3485,
 	dbPath: "relog.db",
-	auth: "admin:secret",
+	ingestKey: "key-for-apps",
+	readKey: "key-for-agents",
+	adminKey: "key-for-admin",
 	cors: true,
 });
 
@@ -647,7 +767,9 @@ shutdown();
 | ------------------ | ------------------------------- | --------- | ---------------------------------------- |
 | `port`             | `number`                        | —         | Port to listen on                        |
 | `dbPath`           | `string`                        | —         | SQLite database file path                |
-| `auth`             | `string`                        | —         | Basic auth credentials (`user:pass`)     |
+| `ingestKey`        | `string`                        | —         | API key for ingest role                  |
+| `readKey`          | `string`                        | —         | API key for read role (includes ingest)  |
+| `adminKey`         | `string`                        | —         | API key for admin role (includes all)    |
 | `cors`             | `boolean \| string \| string[]` | —         | CORS origin(s) or `true` for `*`         |
 | `maxBodySize`      | `number`                        | `5242880` | Max request body size in bytes (5 MB)    |
 | `maxBatchSize`     | `number`                        | `1000`    | Max log entries per ingest request       |
@@ -655,14 +777,17 @@ shutdown();
 
 ## Environment Variables
 
-| Variable                    | Description                                                              |
-| --------------------------- | ------------------------------------------------------------------------ |
-| `RELOG_URL`                 | Default relog.dev server URL for the Next.js integration                 |
-| `RELOG_AUTH`                | Default basic auth credentials (`user:pass`) for client, CLI, and server |
-| `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                                     |
-| `RELOG_PROJECT`             | Override auto-detected project name                                      |
-| `RELOG_BRANCH`              | Override auto-detected git branch                                        |
-| `NODE_ENV`                  | When set to `production`, console output is disabled by default          |
+| Variable                    | Description                                                      |
+| --------------------------- | ---------------------------------------------------------------- |
+| `RELOG_URL`                 | Default relog.dev startr URL for the Next.js integration         |
+| `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands |
+| `RELOG_INGEST_KEY`          | API key for ingest role (server `--ingest-key`)                  |
+| `RELOG_READ_KEY`            | API key for read role (server `--read-key`)                      |
+| `RELOG_ADMIN_KEY`           | API key for admin role (server `--admin-key`)                    |
+| `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                             |
+| `RELOG_PROJECT`             | Override auto-detected project name                              |
+| `RELOG_BRANCH`              | Override auto-detected git branch                                |
+| `NODE_ENV`                  | When set to `production`, console output is disabled by default  |
 
 ## Testing Locally
 
@@ -675,8 +800,8 @@ bun src/cli.ts serve
 # or after building
 bun ./dist/cli.js serve
 
-# with auth
-bun src/cli.ts serve --auth admin:secret
+# with auth (role-based API keys)
+bun src/cli.ts serve --admin-key mykey
 ```
 
 ### 2. Send logs
@@ -700,7 +825,7 @@ curl -X POST http://localhost:3485/ingest \
 
 ### 3. Use the CLI commands
 
-All CLI commands connect to the server over HTTP. Pass `--auth admin:secret` if auth is enabled.
+All CLI commands connect to the server over HTTP. Pass `--auth <api-key>` if auth is enabled.
 
 ```bash
 # search logs
@@ -760,7 +885,7 @@ curl -X POST http://localhost:3485/prune \
 With auth enabled, add the header to curl requests:
 
 ```bash
-curl -H "Authorization: Basic $(echo -n admin:secret | base64)" http://localhost:3485/health
+curl -H "Authorization: Bearer my-admin-key" http://localhost:3485/health
 ```
 
 ## Development

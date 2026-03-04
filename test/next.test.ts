@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { _resetSingleton, log, relogMiddleware, restoreConsole, withRelog } from "../src/next.ts";
+import { _resetSingleton, log, relogProxy, restoreConsole, createRelog } from "../src/next.ts";
 import type { LogRecord } from "../src/types.ts";
 
 afterEach(() => {
 	_resetSingleton();
 });
 
-describe("withRelog", () => {
+describe("createRelog", () => {
 	test("register() creates singleton and patches console", async () => {
 		const origLog = console.log;
-		const relog = withRelog({ url: "http://localhost:1", captureConsole: true });
+		const relog = createRelog({ url: "http://localhost:1", captureConsole: true });
 		await relog.register();
 
 		// console.log should be patched (different reference)
@@ -17,7 +17,7 @@ describe("withRelog", () => {
 	});
 
 	test("register() is idempotent (singleton guard)", async () => {
-		const relog = withRelog({ url: "http://localhost:1" });
+		const relog = createRelog({ url: "http://localhost:1" });
 		await relog.register();
 		const first = console.log;
 		await relog.register();
@@ -27,7 +27,7 @@ describe("withRelog", () => {
 
 	test("captureConsole: false skips console patching", async () => {
 		const origLog = console.log;
-		const relog = withRelog({ url: "http://localhost:1", captureConsole: false });
+		const relog = createRelog({ url: "http://localhost:1", captureConsole: false });
 		await relog.register();
 
 		expect(console.log).toBe(origLog);
@@ -35,7 +35,7 @@ describe("withRelog", () => {
 
 	test("restoreConsole undoes patching", async () => {
 		const origLog = console.log;
-		const relog = withRelog({ url: "http://localhost:1" });
+		const relog = createRelog({ url: "http://localhost:1" });
 		await relog.register();
 		expect(console.log).not.toBe(origLog);
 
@@ -58,7 +58,7 @@ describe("console patching", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -89,7 +89,7 @@ describe("console patching", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -122,7 +122,7 @@ describe("onRequestError", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,
@@ -159,7 +159,7 @@ describe("onRequestError", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,
@@ -183,7 +183,7 @@ describe("onRequestError", () => {
 	});
 
 	test("no-op before register() is called", () => {
-		const relog = withRelog({ url: "http://localhost:1", captureConsole: false });
+		const relog = createRelog({ url: "http://localhost:1", captureConsole: false });
 		// Should not throw
 		relog.onRequestError(
 			new Error("noop"),
@@ -193,9 +193,9 @@ describe("onRequestError", () => {
 	});
 });
 
-describe("relogMiddleware", () => {
+describe("relogProxy", () => {
 	test("returns undefined without user middleware (lets Next.js continue)", async () => {
-		const middleware = relogMiddleware();
+		const middleware = relogProxy();
 		const request = new Request("http://localhost/api/test", { method: "GET" });
 		const response = await middleware(request);
 
@@ -209,7 +209,7 @@ describe("relogMiddleware", () => {
 				headers: { "Content-Type": "application/json" },
 			});
 
-		const middleware = relogMiddleware(userMiddleware);
+		const middleware = relogProxy(userMiddleware);
 		const request = new Request("http://localhost/api/test", { method: "POST" });
 		const response = await middleware(request);
 
@@ -230,7 +230,7 @@ describe("relogMiddleware", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,
@@ -239,14 +239,14 @@ describe("relogMiddleware", () => {
 		await relog.register();
 
 		const userMiddleware = () => new Response(null, { status: 200 });
-		const middleware = relogMiddleware(userMiddleware);
+		const middleware = relogProxy(userMiddleware);
 		const request = new Request("http://localhost/dashboard", { method: "GET" });
 		await middleware(request);
 
 		await log.flush();
 		await new Promise((r) => setTimeout(r, 200));
 
-		const record = received.flat().find((r) => r.meta?.source === "middleware");
+		const record = received.flat().find((r) => r.meta?.source === "proxy");
 		expect(record).toBeDefined();
 		expect(record!.message).toContain("GET");
 		expect(record!.message).toContain("/dashboard");
@@ -257,7 +257,7 @@ describe("relogMiddleware", () => {
 	});
 
 	test("uses custom traceHeader from config", async () => {
-		const relog = withRelog({
+		const relog = createRelog({
 			url: "http://localhost:1",
 			captureConsole: false,
 			traceHeader: "x-request-id",
@@ -265,7 +265,7 @@ describe("relogMiddleware", () => {
 		await relog.register();
 
 		const userMiddleware = () => new Response(null, { status: 200 });
-		const middleware = relogMiddleware(userMiddleware);
+		const middleware = relogProxy(userMiddleware);
 		const request = new Request("http://localhost/test", { method: "GET" });
 		const response = await middleware(request);
 
@@ -287,7 +287,7 @@ describe("console patching edge cases", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -316,7 +316,7 @@ describe("console patching edge cases", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -361,7 +361,7 @@ describe("log proxy", () => {
 			},
 		});
 
-		const relog = withRelog({
+		const relog = createRelog({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,

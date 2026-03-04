@@ -549,7 +549,7 @@ describe("Logger behavior", () => {
 });
 
 describe("Transport auth and edge cases", () => {
-	test("auth header is sent as Basic base64", async () => {
+	test("auth header is sent as Bearer token", async () => {
 		let receivedAuth = "";
 		const server = Bun.serve({
 			port: 0,
@@ -561,7 +561,7 @@ describe("Transport auth and edge cases", () => {
 
 		const transport = new Transport({
 			url: `http://localhost:${server.port}`,
-			auth: "admin:secret",
+			auth: "my-api-key",
 			batchSize: 1,
 			flushInterval: 60000,
 		});
@@ -574,7 +574,7 @@ describe("Transport auth and edge cases", () => {
 
 		await new Promise((r) => setTimeout(r, 500));
 
-		expect(receivedAuth).toBe(`Basic ${Buffer.from("admin:secret").toString("base64")}`);
+		expect(receivedAuth).toBe("Bearer my-api-key");
 
 		transport.destroy();
 		server.stop();
@@ -586,7 +586,11 @@ describe("Transport auth and edge cases", () => {
 			port: 0,
 			fetch() {
 				attempts++;
-				if (attempts < 3) return new Response("Too Many Requests", { status: 429 });
+				if (attempts < 3)
+					return new Response("Too Many Requests", {
+						status: 429,
+						headers: { "Retry-After": "1" },
+					});
 				return Response.json({ ok: true });
 			},
 		});
@@ -605,14 +609,14 @@ describe("Transport auth and edge cases", () => {
 			message: "test-429",
 		});
 
-		await new Promise((r) => setTimeout(r, 4000));
+		await new Promise((r) => setTimeout(r, 6000));
 
 		expect(attempts).toBe(3);
 		expect(errors.length).toBe(0); // Should have succeeded on 3rd attempt
 
 		transport.destroy();
 		server.stop();
-	}, 10000);
+	}, 15000);
 
 	test("network error (connection refused) retries", async () => {
 		const errors: Error[] = [];
@@ -1039,8 +1043,8 @@ describe("CLI shared utilities", () => {
 
 	describe("resolveAuthHeader", () => {
 		test("returns Authorization header when auth provided", () => {
-			const headers = resolveAuthHeader("user:pass");
-			expect(headers.Authorization).toBe(`Basic ${Buffer.from("user:pass").toString("base64")}`);
+			const headers = resolveAuthHeader("my-api-key");
+			expect(headers.Authorization).toBe("Bearer my-api-key");
 		});
 
 		test("returns empty object when no auth", () => {

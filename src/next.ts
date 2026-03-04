@@ -1,6 +1,7 @@
 import type { Logger } from "./logger.ts";
 import type { Transport } from "./transport.ts";
-import type { LogLevel, LogRecord } from "./types.ts";
+import type { IngestPayload, LogLevel, LogRecord } from "./types.ts";
+import { VALID_LEVELS } from "./types.ts";
 
 export interface RelogNextConfig {
 	url?: string;
@@ -96,7 +97,7 @@ function generateTraceId(): string {
 		.join("");
 }
 
-export function withRelog(config: RelogNextConfig = {}) {
+export function createRelog(config: RelogNextConfig = {}) {
 	const resolved = resolveConfig(config);
 
 	async function register() {
@@ -186,9 +187,7 @@ export function withRelog(config: RelogNextConfig = {}) {
 	};
 }
 
-export function relogMiddleware(
-	userMiddleware?: (request: Request) => Response | Promise<Response>,
-) {
+export function relogProxy(userProxy?: (request: Request) => Response | Promise<Response>) {
 	return async (request: Request): Promise<Response | undefined> => {
 		const start = Date.now();
 		const traceId = generateTraceId();
@@ -197,8 +196,8 @@ export function relogMiddleware(
 		const isEdge = typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge";
 
 		let response: Response | undefined;
-		if (userMiddleware) {
-			response = await userMiddleware(request);
+		if (userProxy) {
+			response = await userProxy(request);
 
 			// Add trace header to user middleware response
 			const headers = new Headers(response.headers);
@@ -209,7 +208,7 @@ export function relogMiddleware(
 				headers,
 			});
 		}
-		// When no user middleware, return undefined so Next.js continues
+		// When no user proxy, return undefined so Next.js continues
 		// routing normally. We can't create a NextResponse.next() without
 		// depending on next/server.
 
@@ -222,7 +221,7 @@ export function relogMiddleware(
 			message: `${request.method} ${url.pathname} ${status} ${duration}ms`,
 			service,
 			meta: {
-				source: "middleware",
+				source: "proxy",
 				method: request.method,
 				path: url.pathname,
 				status,
@@ -240,15 +239,23 @@ export function relogMiddleware(
 			};
 			const auth = process.env.RELOG_AUTH;
 			if (auth) {
-				edgeHeaders["Authorization"] = `Basic ${btoa(auth)}`;
+				edgeHeaders["Authorization"] = `Bearer ${auth}`;
 			}
-			fetch(`${edgeUrl}/ingest`, {
+			const promise = fetch(`${edgeUrl}/ingest`, {
 				method: "POST",
 				headers: edgeHeaders,
 				body: JSON.stringify([record]),
 			}).catch(() => {
 				// Silently drop in edge — no console to avoid noise
 			});
+			// Use waitUntil if available (Vercel Edge, Cloudflare Workers)
+			// to prevent the runtime from killing the fetch before it completes
+			const ctx = (globalThis as Record<string, unknown>).__waitUntil as
+				| ((p: Promise<unknown>) => void)
+				| undefined;
+			if (ctx) {
+				ctx(promise);
+			}
 		} else if (singleton) {
 			singleton.info(record.message, record.meta);
 		}
@@ -261,7 +268,7 @@ function warnIfNoSingleton(): void {
 	if (!singleton && !logProxyWarned) {
 		logProxyWarned = true;
 		originalConsole.warn(
-			"[relog.dev] log.* called before register(). Logs will be dropped until withRelog().register() is called.",
+			"[relog.dev] log.* called before register(). Logs will be dropped until createRelog().register() is called.",
 		);
 	}
 }
@@ -297,6 +304,85 @@ export const log: Pick<Logger, "trace" | "debug" | "info" | "warn" | "error" | "
 			await singleton?.flush();
 		},
 	};
+
+// ── Browser proxy ──────────────────────────────────────────────────
+
+export interface BrowserProxyOptions {
+	/** Relog server URL (default: process.env.RELOG_URL ?? "http://localhost:3485") */
+	url?: string;
+	/** Auth string (default: process.env.RELOG_AUTH) */
+	auth?: string;
+	/** Override service name on all proxied entries */
+	service?: string;
+	/** Max entries per request to prevent abuse (default: 100) */
+	maxBatchSize?: number;
+}
+
+export function createBrowserProxy(options: BrowserProxyOptions = {}) {
+	const url = options.url ?? process.env.RELOG_URL ?? "http://localhost:3485";
+	const auth = options.auth ?? process.env.RELOG_AUTH;
+	const service = options.service;
+	const maxBatchSize = options.maxBatchSize ?? 100;
+
+	return async (request: Request): Promise<Response> => {
+		let body: unknown;
+		try {
+			body = await request.json();
+		} catch {
+			return Response.json({ error: "Invalid JSON" }, { status: 400 });
+		}
+
+		if (!Array.isArray(body)) {
+			return Response.json({ error: "Body must be an array" }, { status: 400 });
+		}
+
+		const entries = body.slice(0, maxBatchSize) as IngestPayload[];
+
+		// Validate each entry minimally
+		for (const entry of entries) {
+			if (!entry.level || !VALID_LEVELS.has(entry.level)) {
+				return Response.json({ error: "Each entry must have a valid level" }, { status: 400 });
+			}
+			if (typeof entry.message !== "string") {
+				return Response.json({ error: "Each entry must have a string message" }, { status: 400 });
+			}
+		}
+
+		// Optionally override service
+		if (service) {
+			for (const entry of entries) {
+				entry.service = service;
+			}
+		}
+
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+		};
+		if (auth) {
+			headers["Authorization"] = `Bearer ${auth}`;
+		}
+
+		try {
+			const res = await fetch(`${url}/ingest`, {
+				method: "POST",
+				headers,
+				body: JSON.stringify(entries),
+			});
+
+			if (!res.ok) {
+				const text = await res.text().catch(() => "Unknown error");
+				return Response.json({ error: text }, { status: res.status });
+			}
+
+			return Response.json({ ingested: entries.length });
+		} catch (err) {
+			return Response.json(
+				{ error: err instanceof Error ? err.message : "Proxy fetch failed" },
+				{ status: 502 },
+			);
+		}
+	};
+}
 
 /** Reset singleton — exposed for testing only. */
 export function _resetSingleton(): void {

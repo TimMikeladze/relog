@@ -7,7 +7,7 @@ export const statsCommand: Command = command({
 	desc: "Show log statistics",
 	options: {
 		url: string().desc("Server URL").default("http://localhost:3485"),
-		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
+		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
 		const healthRes = await fetch(`${opts.url}/health`, {

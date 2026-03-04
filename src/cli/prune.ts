@@ -8,7 +8,7 @@ export const pruneCommand: Command = command({
 		url: string().desc("Server URL").default("http://localhost:3485"),
 		before: string().desc("Delete logs before this ISO timestamp"),
 		keepDays: number("keep-days").desc("Keep logs from the last N days"),
-		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
+		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 		yes: boolean().desc("Skip confirmation prompt").default(false),
 	},
 	handler: async (opts) => {

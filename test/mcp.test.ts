@@ -29,7 +29,7 @@ describe("MCP Server", () => {
 
 	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = startServer({ port: 0, dbPath });
+		server = await startServer({ port: 0, dbPath });
 		baseUrl = `http://localhost:${server.server.port}`;
 		mcp = createMcpServer({ url: baseUrl });
 
@@ -190,7 +190,8 @@ describe("MCP Server", () => {
 
 	test("MCP server with auth passes auth header", async () => {
 		const authDbPath = tmpDbPath();
-		const authServer = startServer({ port: 0, dbPath: authDbPath, auth: "admin:secret" });
+		const adminKey = "test-admin-key";
+		const authServer = await startServer({ port: 0, dbPath: authDbPath, adminKey });
 		const authUrl = `http://localhost:${authServer.server.port}`;
 
 		// Ingest with auth
@@ -198,7 +199,7 @@ describe("MCP Server", () => {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				Authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}`,
+				Authorization: `Bearer ${adminKey}`,
 			},
 			body: JSON.stringify({ level: "info", message: "auth-mcp-test" }),
 		});
@@ -206,7 +207,7 @@ describe("MCP Server", () => {
 		// Query with auth (simulating what MCP fetchJson does)
 		const res = await fetch(`${authUrl}/logs?limit=10`, {
 			headers: {
-				Authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}`,
+				Authorization: `Bearer ${adminKey}`,
 			},
 		});
 		expect(res.status).toBe(200);

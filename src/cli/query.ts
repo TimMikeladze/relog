@@ -8,7 +8,7 @@ export const queryCommand: Command = command({
 		url: string().desc("Server URL").default("http://localhost:3485"),
 		sql: string().desc("SQL query to execute").required(),
 		format: string().desc("Output format: json, table, csv").default("table"),
-		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
+		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
 		const response = await fetch(`${opts.url}/query`, {

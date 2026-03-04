@@ -11,12 +11,12 @@ function registerShutdownHandlers(): void {
 
 	const flushAll = () => Promise.allSettled([...activeTransports].map((t) => t.flush()));
 
+	// Flush pending logs on shutdown signals. We do NOT call process.exit() —
+	// the host application is responsible for exit. This avoids conflicts when
+	// the transport runs alongside other shutdown logic (e.g. closing databases).
 	const shutdownFlush = () => {
-		// Keep event loop alive until flush completes
 		const keepAlive = setInterval(() => {}, 1000);
-		flushAll().finally(() => {
-			clearInterval(keepAlive);
-		});
+		flushAll().finally(() => clearInterval(keepAlive));
 	};
 	process.on("SIGINT", shutdownFlush);
 	process.on("SIGTERM", shutdownFlush);
@@ -103,9 +103,7 @@ export class Transport {
 			"Content-Type": "application/json",
 		};
 		if (this.auth) {
-			const encoded =
-				typeof Buffer !== "undefined" ? Buffer.from(this.auth).toString("base64") : btoa(this.auth);
-			headers["Authorization"] = `Basic ${encoded}`;
+			headers["Authorization"] = `Bearer ${this.auth}`;
 		}
 
 		let lastError: Error | undefined;
@@ -122,7 +120,20 @@ export class Transport {
 
 				if (response.ok) return;
 
-				if (response.status < 500 && response.status !== 429) {
+				if (response.status === 429) {
+					const retryAfter = response.headers.get("Retry-After");
+					const waitMs = retryAfter ? Number.parseInt(retryAfter, 10) * 1000 : 10_000;
+					lastError = new Error("Rate limited (429)");
+					if (attempt < 2 && !this.destroyed) {
+						await new Promise<void>((r) => {
+							const t = setTimeout(r, waitMs);
+							if (typeof t === "object" && "unref" in t) t.unref();
+						});
+					}
+					continue;
+				}
+
+				if (response.status < 500) {
 					lastError = new Error(`Ingest rejected: ${response.status}`);
 					break;
 				}
