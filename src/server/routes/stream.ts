@@ -1,4 +1,5 @@
 import type { RelogDatabase } from "../../db/database.ts";
+import { VALID_LEVELS } from "../../types.ts";
 import type { LogLevel, StreamFilters } from "../../types.ts";
 
 type StreamClient = {
@@ -83,11 +84,6 @@ export class StreamManager {
 				);
 				if (logs.length === 0) continue;
 
-				for (const log of logs) {
-					if (log.id && log.id > client.lastPollId)
-						client.lastPollId = log.id;
-				}
-
 				let clientFailed = false;
 				for (const log of logs) {
 					if (clientFailed) break;
@@ -97,6 +93,9 @@ export class StreamManager {
 								`data: ${JSON.stringify(log)}\n\n`,
 							),
 						);
+						if (log.id && log.id > client.lastPollId) {
+							client.lastPollId = log.id;
+						}
 					} catch {
 						clientFailed = true;
 						failed.push(client);
@@ -122,11 +121,20 @@ export function handleStream(
 	const filters: StreamFilters = {};
 
 	const level = url.searchParams.get("level");
-	if (level) filters.level = level as LogLevel;
+	if (level) {
+		if (!VALID_LEVELS.has(level)) {
+			return Response.json({ error: `Invalid level '${level}'` }, { status: 400 });
+		}
+		filters.level = level as LogLevel;
+	}
 	const service = url.searchParams.get("service");
 	if (service) filters.service = service;
 	const traceId = url.searchParams.get("trace_id");
 	if (traceId) filters.trace_id = traceId;
+	const project = url.searchParams.get("project");
+	if (project) filters.project = project;
+	const branch = url.searchParams.get("branch");
+	if (branch) filters.branch = branch;
 
 	let client: StreamClient;
 	const encoder = new TextEncoder();

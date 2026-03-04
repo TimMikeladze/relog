@@ -15,11 +15,15 @@ export function formatLogRecord(record: LogRecord): string {
 	const colorFn = LEVEL_COLORS[record.level];
 	const levelStr = colorFn(record.level.toUpperCase().padEnd(5));
 	const svc = record.service ? `[${pc.blue(record.service)}] ` : "";
+	const proj =
+		record.project || record.branch
+			? `[${pc.magenta([record.project, record.branch].filter(Boolean).join("@"))}] `
+			: "";
 	const meta =
 		record.meta && Object.keys(record.meta).length > 0
 			? ` ${pc.dim(JSON.stringify(record.meta))}`
 			: "";
-	return `${pc.dim(time)} ${levelStr} ${svc}${record.message}${meta}`;
+	return `${pc.dim(time)} ${levelStr} ${proj}${svc}${record.message}${meta}`;
 }
 
 export function printLogRecord(record: LogRecord): void {

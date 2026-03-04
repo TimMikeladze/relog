@@ -1,6 +1,6 @@
 import { type Command, command, string } from "@drizzle-team/brocli";
 import pc from "picocolors";
-import { resolveAuth } from "./shared.ts";
+import { authHeaders, resolveAuthHeader } from "./shared.ts";
 
 export const statsCommand: Command = command({
 	name: "stats",
@@ -10,11 +10,9 @@ export const statsCommand: Command = command({
 		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
-		const headers: Record<string, string> = {};
-		const auth = resolveAuth(opts.auth);
-		if (auth) headers["Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
-
-		const healthRes = await fetch(`${opts.url}/health`, { headers });
+		const healthRes = await fetch(`${opts.url}/health`, {
+			headers: resolveAuthHeader(opts.auth),
+		});
 		if (!healthRes.ok) {
 			console.error(`Failed: ${healthRes.status}`);
 			process.exit(1);
@@ -29,7 +27,7 @@ export const statsCommand: Command = command({
 
 		const statsRes = await fetch(`${opts.url}/query`, {
 			method: "POST",
-			headers: { ...headers, "Content-Type": "application/json" },
+			headers: authHeaders(opts.auth),
 			body: JSON.stringify({
 				sql: "SELECT level, COUNT(*) as count FROM logs GROUP BY level",
 			}),

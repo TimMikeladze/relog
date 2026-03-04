@@ -6,6 +6,15 @@ export type LogLevel =
 	| "error"
 	| "fatal";
 
+export const VALID_LEVELS = new Set<string>([
+	"trace",
+	"debug",
+	"info",
+	"warn",
+	"error",
+	"fatal",
+]);
+
 export const LOG_LEVELS: Record<LogLevel, number> = {
 	trace: 10,
 	debug: 20,
@@ -26,6 +35,8 @@ export interface LogRecord {
 	pid?: number;
 	trace_id?: string;
 	span_id?: string;
+	project?: string;
+	branch?: string;
 	created_at?: number;
 }
 
@@ -43,6 +54,8 @@ export interface LoggerOptions {
 	meta?: Record<string, unknown>;
 	traceId?: string;
 	spanId?: string;
+	project?: string;
+	branch?: string;
 	onError?: (error: Error, batch: LogRecord[]) => void;
 }
 
@@ -73,6 +86,8 @@ export interface StreamFilters {
 	level?: LogLevel;
 	service?: string;
 	trace_id?: string;
+	project?: string;
+	branch?: string;
 }
 
 export interface IngestPayload {
@@ -85,4 +100,6 @@ export interface IngestPayload {
 	pid?: number;
 	trace_id?: string;
 	span_id?: string;
+	project?: string;
+	branch?: string;
 }

@@ -2,7 +2,7 @@ import { type Command, command, string } from "@drizzle-team/brocli";
 import { printLogRecord } from "../console.ts";
 import type { LogRecord } from "../types.ts";
 import pc from "picocolors";
-import { resolveAuth } from "./shared.ts";
+import { buildParams, resolveAuthHeader } from "./shared.ts";
 
 export const tailCommand: Command = command({
 	name: "tail",
@@ -11,16 +11,17 @@ export const tailCommand: Command = command({
 		url: string().desc("Server URL").default("http://localhost:3485"),
 		level: string().desc("Filter by log level"),
 		service: string().desc("Filter by service name"),
+		project: string().desc("Filter by project"),
+		branch: string().desc("Filter by branch"),
 		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
-		const params = new URLSearchParams();
-		if (opts.level) params.set("level", opts.level);
-		if (opts.service) params.set("service", opts.service);
-
-		const headers: Record<string, string> = {};
-		const auth = resolveAuth(opts.auth);
-		if (auth) headers["Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
+		const params = buildParams({
+			level: opts.level,
+			service: opts.service,
+			project: opts.project,
+			branch: opts.branch,
+		});
 
 		const qs = params.toString();
 		const url = `${opts.url}/stream${qs ? `?${qs}` : ""}`;
@@ -30,7 +31,9 @@ export const tailCommand: Command = command({
 
 		while (retries < maxRetries) {
 			try {
-				const response = await fetch(url, { headers });
+				const response = await fetch(url, {
+					headers: resolveAuthHeader(opts.auth),
+				});
 				if (!response.ok) {
 					console.error(`Failed to connect: ${response.status}`);
 					process.exit(1);
@@ -54,14 +57,14 @@ export const tailCommand: Command = command({
 					const lines = buffer.split("\n");
 					buffer = lines.pop() ?? "";
 
-					for (const line of lines) {
+					for (let i = 0; i < lines.length; i++) {
+						const line = lines[i]!;
 						if (line.startsWith("event: error")) {
-							const nextData = lines.find((l) =>
-								l.startsWith("data: "),
-							);
-							console.error(
-								nextData?.slice(6) ?? "Stream error",
-							);
+							const nextLine = lines[i + 1];
+							const msg = nextLine?.startsWith("data: ")
+								? nextLine.slice(6)
+								: "Stream error";
+							console.error(msg);
 							process.exit(1);
 						}
 						if (!line.startsWith("data: ")) continue;

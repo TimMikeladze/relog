@@ -2,15 +2,29 @@ export function resolveAuth(explicit?: string): string | undefined {
 	return explicit ?? process.env.RELOG_AUTH;
 }
 
-export function authHeaders(auth?: string): Record<string, string> {
-	const headers: Record<string, string> = {
-		"Content-Type": "application/json",
-	};
+export function resolveAuthHeader(auth?: string): Record<string, string> {
 	const resolved = resolveAuth(auth);
 	if (resolved) {
-		headers["Authorization"] = `Basic ${Buffer.from(resolved).toString("base64")}`;
+		return { Authorization: `Basic ${Buffer.from(resolved).toString("base64")}` };
 	}
-	return headers;
+	return {};
+}
+
+export function authHeaders(auth?: string): Record<string, string> {
+	return {
+		"Content-Type": "application/json",
+		...resolveAuthHeader(auth),
+	};
+}
+
+export function buildParams(
+	values: Record<string, string | number | undefined>,
+): URLSearchParams {
+	const params = new URLSearchParams();
+	for (const [key, val] of Object.entries(values)) {
+		if (val !== undefined) params.set(key, String(val));
+	}
+	return params;
 }
 
 export function escapeCsv(value: unknown): string {

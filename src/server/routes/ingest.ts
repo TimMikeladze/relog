@@ -1,8 +1,6 @@
 import type { RelogDatabase } from "../../db/database.ts";
-import { LOG_LEVELS } from "../../types.ts";
+import { VALID_LEVELS } from "../../types.ts";
 import type { IngestPayload } from "../../types.ts";
-
-const VALID_LEVELS = new Set<string>(Object.keys(LOG_LEVELS));
 
 export async function handleIngest(
 	request: Request,
@@ -85,6 +83,18 @@ export async function handleIngest(
 		if (entry.span_id !== undefined && typeof entry.span_id !== "string") {
 			return Response.json(
 				{ error: "Invalid log entry: 'span_id' must be a string" },
+				{ status: 400 },
+			);
+		}
+		if (entry.project !== undefined && typeof entry.project !== "string") {
+			return Response.json(
+				{ error: "Invalid log entry: 'project' must be a string" },
+				{ status: 400 },
+			);
+		}
+		if (entry.branch !== undefined && typeof entry.branch !== "string") {
+			return Response.json(
+				{ error: "Invalid log entry: 'branch' must be a string" },
 				{ status: 400 },
 			);
 		}

@@ -1,7 +1,7 @@
 import { type Command, command, number, string } from "@drizzle-team/brocli";
 import { printLogRecord } from "../console.ts";
 import type { LogRecord } from "../types.ts";
-import { resolveAuth } from "./shared.ts";
+import { buildParams, resolveAuthHeader } from "./shared.ts";
 
 export const searchCommand: Command = command({
 	name: "search",
@@ -13,24 +13,26 @@ export const searchCommand: Command = command({
 		level: string().desc("Filter by log level"),
 		service: string().desc("Filter by service name"),
 		grep: string().desc("Search message text"),
+		project: string().desc("Filter by project"),
+		branch: string().desc("Filter by branch"),
 		limit: number().desc("Max results to return").default(100),
 		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
-		const params = new URLSearchParams();
-		if (opts.level) params.set("level", opts.level);
-		if (opts.service) params.set("service", opts.service);
-		if (opts.grep) params.set("grep", opts.grep);
-		if (opts.from) params.set("from", opts.from);
-		if (opts.to) params.set("to", opts.to);
-		params.set("limit", String(opts.limit));
+		const params = buildParams({
+			level: opts.level,
+			service: opts.service,
+			grep: opts.grep,
+			project: opts.project,
+			branch: opts.branch,
+			from: opts.from,
+			to: opts.to,
+			limit: opts.limit,
+		});
 
-		const headers: Record<string, string> = {};
-		const auth = resolveAuth(opts.auth);
-		if (auth) headers["Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
-
-		const qs = params.toString();
-		const response = await fetch(`${opts.url}/logs?${qs}`, { headers });
+		const response = await fetch(`${opts.url}/logs?${params}`, {
+			headers: resolveAuthHeader(opts.auth),
+		});
 
 		if (!response.ok) {
 			console.error(`Search failed: ${response.status}`);

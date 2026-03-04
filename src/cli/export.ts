@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { type Command, command, number, string } from "@drizzle-team/brocli";
-import { escapeCsv, resolveAuth } from "./shared.ts";
+import { buildParams, escapeCsv, resolveAuthHeader } from "./shared.ts";
 
 export const exportCommand: Command = command({
 	name: "export",
@@ -11,21 +11,23 @@ export const exportCommand: Command = command({
 		output: string("output").desc("Output file path").required(),
 		from: string().desc("Start time (ISO 8601)"),
 		to: string().desc("End time (ISO 8601)"),
+		project: string().desc("Filter by project"),
+		branch: string().desc("Filter by branch"),
 		limit: number().desc("Max logs to export").default(10000),
 		auth: string().desc("Basic auth (user:pass). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
-		const params = new URLSearchParams();
-		if (opts.from) params.set("from", opts.from);
-		if (opts.to) params.set("to", opts.to);
-		params.set("limit", String(opts.limit));
+		const params = buildParams({
+			from: opts.from,
+			to: opts.to,
+			project: opts.project,
+			branch: opts.branch,
+			limit: opts.limit,
+		});
 
-		const headers: Record<string, string> = {};
-		const auth = resolveAuth(opts.auth);
-		if (auth) headers["Authorization"] = `Basic ${Buffer.from(auth).toString("base64")}`;
-
-		const qs = params.toString();
-		const response = await fetch(`${opts.url}/logs?${qs}`, { headers });
+		const response = await fetch(`${opts.url}/logs?${params}`, {
+			headers: resolveAuthHeader(opts.auth),
+		});
 
 		if (!response.ok) {
 			console.error(`Export failed: ${response.status}`);

@@ -1839,3 +1839,263 @@ describe("Query error handling via HTTP", () => {
 		expect(res.status).toBe(400);
 	});
 });
+
+describe("Project and branch fields", () => {
+	describe("Database layer", () => {
+		let db: RelogDatabase;
+		let dbPath: string;
+
+		beforeAll(() => {
+			dbPath = tmpDbPath();
+			db = new RelogDatabase(dbPath);
+			db.insert([
+				{ level: "info", message: "proj-a-main", project: "proj-a", branch: "main" },
+				{ level: "info", message: "proj-a-dev", project: "proj-a", branch: "dev" },
+				{ level: "warn", message: "proj-b-main", project: "proj-b", branch: "main" },
+				{ level: "info", message: "no-proj", service: "api" },
+			]);
+		});
+
+		afterAll(() => {
+			db.close();
+			cleanupDb(dbPath);
+		});
+
+		test("insert stores project and branch", () => {
+			const result = db.query("SELECT project, branch FROM logs WHERE message = 'proj-a-main'");
+			expect(result.count).toBe(1);
+			expect(result.rows[0]!.project).toBe("proj-a");
+			expect(result.rows[0]!.branch).toBe("main");
+		});
+
+		test("insert stores null project/branch when not provided", () => {
+			const result = db.query("SELECT project, branch FROM logs WHERE message = 'no-proj'");
+			expect(result.count).toBe(1);
+			expect(result.rows[0]!.project).toBeNull();
+			expect(result.rows[0]!.branch).toBeNull();
+		});
+
+		test("searchLogs filters by project", () => {
+			const result = db.searchLogs({ project: "proj-a" });
+			expect(result.total).toBe(2);
+			for (const row of result.rows) {
+				expect(row.project).toBe("proj-a");
+			}
+		});
+
+		test("searchLogs filters by branch", () => {
+			const result = db.searchLogs({ branch: "main" });
+			expect(result.total).toBe(2);
+			for (const row of result.rows) {
+				expect(row.branch).toBe("main");
+			}
+		});
+
+		test("searchLogs filters by project + branch combined", () => {
+			const result = db.searchLogs({ project: "proj-a", branch: "dev" });
+			expect(result.total).toBe(1);
+			expect(result.rows[0]!.message).toBe("proj-a-dev");
+		});
+
+		test("getLogsSince filters by project", () => {
+			const logs = db.getLogsSince(0, { project: "proj-b" });
+			expect(logs.length).toBe(1);
+			expect(logs[0]!.message).toBe("proj-b-main");
+		});
+
+		test("getLogsSince filters by branch", () => {
+			const logs = db.getLogsSince(0, { branch: "dev" });
+			expect(logs.length).toBe(1);
+			expect(logs[0]!.message).toBe("proj-a-dev");
+		});
+
+		test("stats includes project breakdown", () => {
+			const stats = db.stats();
+			expect(stats.projects["proj-a"]).toBe(2);
+			expect(stats.projects["proj-b"]).toBe(1);
+		});
+	});
+
+	describe("HTTP endpoints", () => {
+		let server: ServerInstance;
+		let baseUrl: string;
+		let dbPath: string;
+
+		beforeAll(async () => {
+			dbPath = tmpDbPath();
+			server = startServer({ port: 0, dbPath });
+			baseUrl = `http://localhost:${server.server.port}`;
+
+			await fetch(`${baseUrl}/ingest`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify([
+					{ level: "info", message: "http-proj-a", project: "app", branch: "main" },
+					{ level: "error", message: "http-proj-b", project: "app", branch: "feat" },
+					{ level: "info", message: "http-no-proj" },
+				]),
+			});
+		});
+
+		afterAll(() => {
+			server.shutdown();
+			cleanupDb(dbPath);
+		});
+
+		test("POST /ingest accepts project and branch", async () => {
+			const res = await fetch(`${baseUrl}/ingest`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ level: "info", message: "proj-test", project: "my-proj", branch: "my-branch" }),
+			});
+			expect(res.status).toBe(201);
+
+			const logsRes = await fetch(`${baseUrl}/logs?grep=proj-test`);
+			const json = (await logsRes.json()) as { rows: LogEntry[] };
+			expect(json.rows[0]!.project).toBe("my-proj");
+			expect(json.rows[0]!.branch).toBe("my-branch");
+		});
+
+		test("POST /ingest rejects non-string project", async () => {
+			const res = await fetch(`${baseUrl}/ingest`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ level: "info", message: "test", project: 123 }),
+			});
+			expect(res.status).toBe(400);
+			const json = (await res.json()) as { error: string };
+			expect(json.error).toContain("project");
+		});
+
+		test("POST /ingest rejects non-string branch", async () => {
+			const res = await fetch(`${baseUrl}/ingest`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ level: "info", message: "test", branch: true }),
+			});
+			expect(res.status).toBe(400);
+			const json = (await res.json()) as { error: string };
+			expect(json.error).toContain("branch");
+		});
+
+		test("GET /logs filters by project", async () => {
+			const res = await fetch(`${baseUrl}/logs?project=app`);
+			expect(res.status).toBe(200);
+			const json = (await res.json()) as { rows: LogEntry[] };
+			expect(json.rows.length).toBeGreaterThanOrEqual(2);
+			for (const row of json.rows) {
+				expect(row.project).toBe("app");
+			}
+		});
+
+		test("GET /logs filters by branch", async () => {
+			const res = await fetch(`${baseUrl}/logs?branch=feat`);
+			expect(res.status).toBe(200);
+			const json = (await res.json()) as { rows: LogEntry[] };
+			expect(json.rows.length).toBeGreaterThanOrEqual(1);
+			for (const row of json.rows) {
+				expect(row.branch).toBe("feat");
+			}
+		});
+
+		test("GET /logs filters by project + branch", async () => {
+			const res = await fetch(`${baseUrl}/logs?project=app&branch=main`);
+			expect(res.status).toBe(200);
+			const json = (await res.json()) as { rows: LogEntry[] };
+			expect(json.rows.length).toBeGreaterThanOrEqual(1);
+			for (const row of json.rows) {
+				expect(row.project).toBe("app");
+				expect(row.branch).toBe("main");
+			}
+		});
+	});
+
+	describe("SSE stream filtering", () => {
+		test("stream filters by project", async () => {
+			const p = tmpDbPath();
+			const s = startServer({ port: 0, dbPath: p, streamDebounceMs: 10 });
+			const url = `http://localhost:${s.server.port}`;
+
+			const streamRes = await fetch(`${url}/stream?project=target-proj`);
+			const reader = streamRes.body!.getReader();
+			const decoder = new TextDecoder();
+
+			const { value: initial } = await reader.read();
+			expect(decoder.decode(initial)).toContain(": connected");
+
+			await fetch(`${url}/ingest`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify([
+					{ level: "info", message: "wrong-proj", project: "other" },
+					{ level: "info", message: "right-proj", project: "target-proj" },
+				]),
+			});
+
+			let received = "";
+			const timeout = Date.now() + 3000;
+			while (Date.now() < timeout) {
+				const { value, done } = await Promise.race([
+					reader.read(),
+					new Promise<{ value: undefined; done: true }>((r) =>
+						setTimeout(() => r({ value: undefined, done: true }), 2000),
+					),
+				]);
+				if (done && !value) break;
+				if (value) received += decoder.decode(value);
+				if (received.includes("right-proj")) break;
+			}
+
+			expect(received).toContain("right-proj");
+			expect(received).not.toContain("wrong-proj");
+			await reader.cancel();
+			s.shutdown();
+			cleanupDb(p);
+		});
+
+		test("stream rejects invalid level", async () => {
+			const p = tmpDbPath();
+			const s = startServer({ port: 0, dbPath: p });
+			const url = `http://localhost:${s.server.port}`;
+
+			const res = await fetch(`${url}/stream?level=banana`);
+			expect(res.status).toBe(400);
+			const json = (await res.json()) as { error: string };
+			expect(json.error).toContain("level");
+
+			s.shutdown();
+			cleanupDb(p);
+		});
+	});
+});
+
+describe("LIMIT with parameterized queries", () => {
+	let db: RelogDatabase;
+	let dbPath: string;
+
+	beforeAll(() => {
+		dbPath = tmpDbPath();
+		db = new RelogDatabase(dbPath);
+		db.insert([
+			{ level: "info", message: "limit-param-1" },
+			{ level: "info", message: "limit-param-2" },
+			{ level: "info", message: "limit-param-3" },
+		]);
+	});
+
+	afterAll(() => {
+		db.close();
+		cleanupDb(dbPath);
+	});
+
+	test("LIMIT ? with param does not get double LIMIT", () => {
+		const result = db.query("SELECT * FROM logs LIMIT ?", [2]);
+		expect(result.count).toBe(2);
+	});
+
+	test("LIMIT inside string literal does not bypass auto-LIMIT", () => {
+		const result = db.query("SELECT * FROM logs WHERE message LIKE '%LIMIT%'", [], 1);
+		// Should get auto-LIMIT applied since 'LIMIT' is only inside a string
+		expect(result.count).toBeLessThanOrEqual(1);
+	});
+});

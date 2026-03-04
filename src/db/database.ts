@@ -113,6 +113,8 @@ function hasSemicolonOutsideQuotes(sql: string): boolean {
 export interface SearchOptions {
 	level?: string;
 	service?: string;
+	project?: string;
+	branch?: string;
 	grep?: string;
 	from?: number;
 	to?: number;
@@ -146,6 +148,9 @@ export class RelogDatabase {
 		this.db.exec("PRAGMA synchronous = NORMAL");
 		this.db.exec("PRAGMA busy_timeout = 5000");
 		this.db.exec(CREATE_LOGS_TABLE);
+		// Migrate: add project/branch columns for existing DBs
+		try { this.db.exec("ALTER TABLE logs ADD COLUMN project TEXT"); } catch {}
+		try { this.db.exec("ALTER TABLE logs ADD COLUMN branch TEXT"); } catch {}
 		for (const idx of CREATE_INDEXES) {
 			this.db.exec(idx);
 		}
@@ -159,8 +164,8 @@ export class RelogDatabase {
 
 	insert(entries: IngestPayload[]): void {
 		const stmt = this.db.prepare(`
-      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
 		const now = Date.now();
@@ -195,6 +200,8 @@ export class RelogDatabase {
 					entry.pid ?? null,
 					entry.trace_id ?? null,
 					entry.span_id ?? null,
+					entry.project ?? null,
+					entry.branch ?? null,
 					createdAt,
 				);
 			}
@@ -242,7 +249,7 @@ export class RelogDatabase {
 			}
 		}
 
-		if (trimmed.startsWith("SELECT") && !/\bLIMIT\s+\d/i.test(stripped)) {
+		if (trimmed.startsWith("SELECT") && !/\bLIMIT\s+(\d+|\?)/i.test(blanked)) {
 			return `${stripped} LIMIT ${maxRows}`;
 		}
 
@@ -317,6 +324,14 @@ export class RelogDatabase {
 			conditions.push("trace_id = ?");
 			params.push(filters.trace_id);
 		}
+		if (filters.project) {
+			conditions.push("project = ?");
+			params.push(filters.project);
+		}
+		if (filters.branch) {
+			conditions.push("branch = ?");
+			params.push(filters.branch);
+		}
 
 		params.push(limit);
 		const sql = `SELECT * FROM logs WHERE ${conditions.join(" AND ")} ORDER BY id ASC LIMIT ?`;
@@ -335,6 +350,14 @@ export class RelogDatabase {
 		if (opts.service) {
 			conditions.push("service = ?");
 			params.push(opts.service);
+		}
+		if (opts.project) {
+			conditions.push("project = ?");
+			params.push(opts.project);
+		}
+		if (opts.branch) {
+			conditions.push("branch = ?");
+			params.push(opts.branch);
 		}
 		if (opts.grep) {
 			conditions.push("message LIKE ? ESCAPE '\\'");
@@ -381,6 +404,7 @@ export class RelogDatabase {
 		db_size_bytes: number;
 		levels: Record<string, number>;
 		services: Record<string, number>;
+		projects: Record<string, number>;
 	} {
 		const levelRows = this.readonlyDb
 			.prepare("SELECT level, COUNT(*) as count FROM logs GROUP BY level")
@@ -390,6 +414,11 @@ export class RelogDatabase {
 				"SELECT service, COUNT(*) as count FROM logs WHERE service IS NOT NULL GROUP BY service",
 			)
 			.all() as { service: string; count: number }[];
+		const projectRows = this.readonlyDb
+			.prepare(
+				"SELECT project, COUNT(*) as count FROM logs WHERE project IS NOT NULL GROUP BY project",
+			)
+			.all() as { project: string; count: number }[];
 
 		const levels: Record<string, number> = {};
 		let totalCount = 0;
@@ -399,12 +428,15 @@ export class RelogDatabase {
 		}
 		const services: Record<string, number> = {};
 		for (const row of serviceRows) services[row.service] = row.count;
+		const projects: Record<string, number> = {};
+		for (const row of projectRows) projects[row.project] = row.count;
 
 		return {
 			log_count: totalCount,
 			db_size_bytes: this.getDbSize(),
 			levels,
 			services,
+			projects,
 		};
 	}
 

@@ -12,12 +12,15 @@ function registerShutdownHandlers(): void {
 	const flushAll = () =>
 		Promise.allSettled([...activeTransports].map((t) => t.flush()));
 
-	process.once("SIGINT", () => {
-		void flushAll().then(() => process.exit(0));
-	});
-	process.once("SIGTERM", () => {
-		void flushAll().then(() => process.exit(0));
-	});
+	const shutdownFlush = () => {
+		// Keep event loop alive until flush completes
+		const keepAlive = setInterval(() => {}, 1000);
+		flushAll().finally(() => {
+			clearInterval(keepAlive);
+		});
+	};
+	process.on("SIGINT", shutdownFlush);
+	process.on("SIGTERM", shutdownFlush);
 }
 
 export class Transport {
@@ -103,7 +106,11 @@ export class Transport {
 			"Content-Type": "application/json",
 		};
 		if (this.auth) {
-			headers["Authorization"] = `Basic ${Buffer.from(this.auth).toString("base64")}`;
+			const encoded =
+				typeof Buffer !== "undefined"
+					? Buffer.from(this.auth).toString("base64")
+					: btoa(this.auth);
+			headers["Authorization"] = `Basic ${encoded}`;
 		}
 
 		let lastError: Error | undefined;

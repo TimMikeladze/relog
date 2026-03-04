@@ -76,6 +76,9 @@ export async function handleQueryStream(
 				encoder.encode(`${JSON.stringify(value)}\n`),
 			);
 		},
+		cancel() {
+			iterator.return?.();
+		},
 	});
 
 	return new Response(stream, {

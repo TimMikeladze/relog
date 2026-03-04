@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { run } from "@drizzle-team/brocli";
 import { exportCommand } from "./cli/export.ts";
+import { mcpCommand } from "./cli/mcp.ts";
 import { pruneCommand } from "./cli/prune.ts";
 import { queryCommand } from "./cli/query.ts";
 import { searchCommand } from "./cli/search.ts";
@@ -17,6 +18,7 @@ run(
 		statsCommand,
 		pruneCommand,
 		exportCommand,
+		mcpCommand,
 	],
 	{
 		name: "relog",

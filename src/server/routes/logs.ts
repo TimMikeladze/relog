@@ -1,7 +1,5 @@
 import type { RelogDatabase, SearchOptions } from "../../db/database.ts";
-import { LOG_LEVELS } from "../../types.ts";
-
-const VALID_LEVELS = new Set<string>(Object.keys(LOG_LEVELS));
+import { VALID_LEVELS } from "../../types.ts";
 
 export function handleLogs(
 	request: Request,
@@ -22,6 +20,10 @@ export function handleLogs(
 	}
 	const service = url.searchParams.get("service");
 	if (service) opts.service = service;
+	const project = url.searchParams.get("project");
+	if (project) opts.project = project;
+	const branch = url.searchParams.get("branch");
+	if (branch) opts.branch = branch;
 	const grep = url.searchParams.get("grep");
 	if (grep) opts.grep = grep;
 

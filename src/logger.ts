@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { printLogRecord } from "./console.ts";
+import { inferGitBranch, inferGitProject } from "./git.ts";
 import { Transport } from "./transport.ts";
 import type { LogLevel, LogRecord, LoggerOptions } from "./types.ts";
 import { LOG_LEVELS } from "./types.ts";
@@ -15,8 +16,7 @@ function resolveLevel(explicit?: LogLevel): LogLevel {
 }
 
 function resolveAuth(explicit?: string): string | undefined {
-	if (explicit) return explicit;
-	return process.env.RELOG_AUTH;
+	return explicit ?? process.env.RELOG_AUTH;
 }
 
 function serializeError(err: Error): Record<string, unknown> {
@@ -35,6 +35,8 @@ export class Logger {
 	private boundMeta: Record<string, unknown>;
 	private traceId: string | undefined;
 	private spanId: string | undefined;
+	private project: string | undefined;
+	private branch: string | undefined;
 	private host: string;
 	private pid: number;
 	private isChild: boolean;
@@ -45,6 +47,8 @@ export class Logger {
 		this.boundMeta = options.meta ?? {};
 		this.traceId = options.traceId;
 		this.spanId = options.spanId;
+		this.project = options.project ?? inferGitProject();
+		this.branch = options.branch ?? inferGitBranch();
 		this.host = HOSTNAME;
 		this.pid = PID;
 		this.isChild = !!parentTransport;
@@ -72,9 +76,11 @@ export class Logger {
 		meta: Record<string, unknown> & {
 			traceId?: string;
 			spanId?: string;
+			project?: string;
+			branch?: string;
 		},
 	): Logger {
-		const { traceId, spanId, ...rest } = meta;
+		const { traceId, spanId, project, branch, ...rest } = meta;
 		const childLogger = new Logger(
 			{
 				service: this.service,
@@ -83,6 +89,8 @@ export class Logger {
 				meta: { ...this.boundMeta, ...rest },
 				traceId: traceId ?? this.traceId,
 				spanId: spanId ?? this.spanId,
+				project: project ?? this.project,
+				branch: branch ?? this.branch,
 			},
 			this.transport ?? undefined,
 		);
@@ -126,6 +134,8 @@ export class Logger {
 			pid: this.pid,
 			trace_id: this.traceId,
 			span_id: this.spanId,
+			project: this.project,
+			branch: this.branch,
 		};
 
 		if (this.consoleEnabled) {

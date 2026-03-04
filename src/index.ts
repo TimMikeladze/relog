@@ -12,4 +12,4 @@ export type {
 	ServerConfig,
 	StreamFilters,
 } from "./types.ts";
-export { LOG_LEVELS } from "./types.ts";
+export { LOG_LEVELS, VALID_LEVELS } from "./types.ts";

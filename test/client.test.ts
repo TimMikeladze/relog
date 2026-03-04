@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { formatLogRecord } from "../src/console.ts";
 import { createLogger, Logger } from "../src/logger.ts";
 import { Transport } from "../src/transport.ts";
+import { resolveAuth, resolveAuthHeader, authHeaders, buildParams, escapeCsv } from "../src/cli/shared.ts";
 import type { LogRecord } from "../src/types.ts";
 
 describe("Logger", () => {
@@ -946,5 +947,270 @@ describe("Console Formatter", () => {
 		};
 		const output = formatLogRecord(record);
 		expect(output).not.toContain("{}");
+	});
+
+	test("formatLogRecord shows project only", () => {
+		const record: LogRecord = {
+			timestamp: "2024-01-15T14:32:05.123Z",
+			level: "info",
+			message: "proj log",
+			project: "my-app",
+		};
+		const output = formatLogRecord(record);
+		expect(output).toContain("my-app");
+	});
+
+	test("formatLogRecord shows branch only", () => {
+		const record: LogRecord = {
+			timestamp: "2024-01-15T14:32:05.123Z",
+			level: "info",
+			message: "branch log",
+			branch: "feat-x",
+		};
+		const output = formatLogRecord(record);
+		expect(output).toContain("feat-x");
+	});
+
+	test("formatLogRecord shows project@branch", () => {
+		const record: LogRecord = {
+			timestamp: "2024-01-15T14:32:05.123Z",
+			level: "info",
+			message: "both log",
+			project: "my-app",
+			branch: "main",
+		};
+		const output = formatLogRecord(record);
+		expect(output).toContain("my-app@main");
+	});
+
+	test("formatLogRecord without project or branch has no bracket prefix", () => {
+		const record: LogRecord = {
+			timestamp: "2024-01-15T14:32:05.123Z",
+			level: "info",
+			message: "no proj",
+		};
+		const output = formatLogRecord(record);
+		expect(output).not.toContain("[");
+		expect(output).not.toContain("@");
+	});
+
+	test("formatLogRecord with all log levels produces output", () => {
+		for (const level of ["trace", "debug", "info", "warn", "error", "fatal"] as const) {
+			const record: LogRecord = {
+				timestamp: "2024-01-15T14:32:05.123Z",
+				level,
+				message: `${level} test`,
+			};
+			const output = formatLogRecord(record);
+			expect(output).toContain(`${level} test`);
+			expect(output).toContain(level.toUpperCase());
+		}
+	});
+});
+
+describe("CLI shared utilities", () => {
+	describe("resolveAuth", () => {
+		test("returns explicit value when provided", () => {
+			expect(resolveAuth("user:pass")).toBe("user:pass");
+		});
+
+		test("returns undefined when no explicit and no env", () => {
+			const orig = process.env.RELOG_AUTH;
+			delete process.env.RELOG_AUTH;
+			expect(resolveAuth()).toBeUndefined();
+			if (orig) process.env.RELOG_AUTH = orig;
+		});
+
+		test("explicit takes precedence over env", () => {
+			const orig = process.env.RELOG_AUTH;
+			process.env.RELOG_AUTH = "env:pass";
+			expect(resolveAuth("explicit:pass")).toBe("explicit:pass");
+			if (orig) process.env.RELOG_AUTH = orig;
+			else delete process.env.RELOG_AUTH;
+		});
+	});
+
+	describe("resolveAuthHeader", () => {
+		test("returns Authorization header when auth provided", () => {
+			const headers = resolveAuthHeader("user:pass");
+			expect(headers.Authorization).toBe(`Basic ${Buffer.from("user:pass").toString("base64")}`);
+		});
+
+		test("returns empty object when no auth", () => {
+			const orig = process.env.RELOG_AUTH;
+			delete process.env.RELOG_AUTH;
+			const headers = resolveAuthHeader();
+			expect(Object.keys(headers).length).toBe(0);
+			if (orig) process.env.RELOG_AUTH = orig;
+		});
+
+		test("does not include Content-Type", () => {
+			const headers = resolveAuthHeader("user:pass");
+			expect(headers["Content-Type"]).toBeUndefined();
+		});
+	});
+
+	describe("authHeaders", () => {
+		test("includes Content-Type and Authorization", () => {
+			const headers = authHeaders("user:pass");
+			expect(headers["Content-Type"]).toBe("application/json");
+			expect(headers.Authorization).toBeDefined();
+		});
+
+		test("includes Content-Type even without auth", () => {
+			const orig = process.env.RELOG_AUTH;
+			delete process.env.RELOG_AUTH;
+			const headers = authHeaders();
+			expect(headers["Content-Type"]).toBe("application/json");
+			expect(headers.Authorization).toBeUndefined();
+			if (orig) process.env.RELOG_AUTH = orig;
+		});
+	});
+
+	describe("buildParams", () => {
+		test("builds URLSearchParams from values", () => {
+			const params = buildParams({ level: "error", service: "api", limit: 50 });
+			expect(params.get("level")).toBe("error");
+			expect(params.get("service")).toBe("api");
+			expect(params.get("limit")).toBe("50");
+		});
+
+		test("skips undefined values", () => {
+			const params = buildParams({ level: "info", service: undefined });
+			expect(params.get("level")).toBe("info");
+			expect(params.has("service")).toBe(false);
+		});
+
+		test("returns empty params for all undefined", () => {
+			const params = buildParams({ a: undefined, b: undefined });
+			expect(params.toString()).toBe("");
+		});
+	});
+
+	describe("escapeCsv", () => {
+		test("returns plain string unchanged", () => {
+			expect(escapeCsv("hello")).toBe("hello");
+		});
+
+		test("wraps comma-containing strings in quotes", () => {
+			expect(escapeCsv("hello,world")).toBe('"hello,world"');
+		});
+
+		test("escapes internal double quotes", () => {
+			expect(escapeCsv('say "hi"')).toBe('"say ""hi"""');
+		});
+
+		test("wraps newline-containing strings in quotes", () => {
+			expect(escapeCsv("line1\nline2")).toBe('"line1\nline2"');
+		});
+
+		test("handles null and undefined", () => {
+			expect(escapeCsv(null)).toBe("");
+			expect(escapeCsv(undefined)).toBe("");
+		});
+
+		test("converts numbers to string", () => {
+			expect(escapeCsv(42)).toBe("42");
+		});
+	});
+});
+
+describe("Logger project and branch", () => {
+	test("logger sends project and branch to server", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			project: "test-proj",
+			branch: "test-branch",
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		log.info("proj-branch-test");
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.project).toBe("test-proj");
+		expect(record.branch).toBe("test-branch");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("child logger inherits project and branch", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			project: "parent-proj",
+			branch: "parent-branch",
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const child = log.child({ requestId: "req-1" });
+		child.info("child-proj-test");
+		await child.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.project).toBe("parent-proj");
+		expect(record.branch).toBe("parent-branch");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("child logger can override project and branch", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			project: "parent-proj",
+			branch: "parent-branch",
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const child = log.child({ project: "child-proj", branch: "child-branch" });
+		child.info("child-override-test");
+		await child.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.project).toBe("child-proj");
+		expect(record.branch).toBe("child-branch");
+
+		await log.destroy();
+		server.stop();
 	});
 });
