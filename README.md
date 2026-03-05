@@ -220,10 +220,7 @@ The emitted record contains everything: `message` is the event name, `meta` hold
 **Chainable API:**
 
 ```typescript
-logger.event("checkout")
-	.set("user_id", "usr_123")
-	.set("cart_items", 3)
-	.end();
+logger.event("checkout").set("user_id", "usr_123").set("cart_items", 3).end();
 ```
 
 **Bulk set:**
