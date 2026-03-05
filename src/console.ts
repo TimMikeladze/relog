@@ -19,11 +19,15 @@ export function formatLogRecord(record: LogRecord): string {
 		record.project || record.branch
 			? `[${pc.magenta([record.project, record.branch].filter(Boolean).join("@"))}] `
 			: "";
+	const duration =
+		record.meta && typeof record.meta.duration_ms === "number"
+			? ` ${pc.dim(`(${record.meta.duration_ms}ms)`)}`
+			: "";
 	const meta =
 		record.meta && Object.keys(record.meta).length > 0
 			? ` ${pc.dim(JSON.stringify(record.meta))}`
 			: "";
-	return `${pc.dim(time)} ${levelStr} ${proj}${svc}${record.message}${meta}`;
+	return `${pc.dim(time)} ${levelStr} ${proj}${svc}${record.message}${duration}${meta}`;
 }
 
 export function printLogRecord(record: LogRecord): void {

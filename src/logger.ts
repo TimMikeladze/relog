@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { printLogRecord } from "./console.ts";
+import { EventBuilder } from "./event.ts";
 import { inferGitBranch, inferGitProject } from "./git.ts";
 import { Transport } from "./transport.ts";
 import type { LogLevel, LogRecord, LoggerOptions } from "./types.ts";
@@ -168,6 +169,14 @@ export class Logger {
 
 	fatal(message: string | Error, meta?: Record<string, unknown>): void {
 		this.log("fatal", message, meta);
+	}
+
+	event(name: string, meta?: Record<string, unknown>): EventBuilder {
+		return new EventBuilder(
+			name,
+			(level, message, m) => this.log(level, message, m),
+			{ ...this.boundMeta, ...meta },
+		);
 	}
 
 	async flush(): Promise<void> {

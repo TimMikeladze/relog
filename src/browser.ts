@@ -1,3 +1,4 @@
+import { EventBuilder } from "./event.ts";
 import type { IngestPayload, LogLevel } from "./types.ts";
 import { LOG_LEVELS } from "./types.ts";
 
@@ -288,6 +289,14 @@ export class BrowserLogger {
 		this.log("fatal", message, meta);
 	}
 
+	event(name: string, meta?: Record<string, unknown>): EventBuilder {
+		return new EventBuilder(
+			name,
+			(level, message, m) => this.log(level, message, m),
+			{ ...this.boundMeta, ...meta },
+		);
+	}
+
 	flush(): void {
 		this.transport.flush();
 	}
@@ -397,7 +406,7 @@ function getSingleton(): BrowserLogger {
 
 export const log: Pick<
 	BrowserLogger,
-	"trace" | "debug" | "info" | "warn" | "error" | "fatal" | "flush" | "destroy" | "child"
+	"trace" | "debug" | "info" | "warn" | "error" | "fatal" | "flush" | "destroy" | "child" | "event"
 > = {
 	trace(message, meta?) {
 		getSingleton().trace(message, meta);
@@ -426,5 +435,8 @@ export const log: Pick<
 	},
 	child(meta) {
 		return getSingleton().child(meta);
+	},
+	event(name, meta?) {
+		return getSingleton().event(name, meta);
 	},
 };
