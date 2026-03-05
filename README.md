@@ -6,6 +6,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 
 - **Zero-dependency server** — single SQLite file, WAL mode, no Redis or external databases
 - **Batching client SDK** — automatic batching, retries with exponential backoff, buffer overflow protection
+- **Wide events** — build one event per request with all context, emit at the end with auto-duration and level escalation
 - **Real-time streaming** — SSE-based log tailing with server-side filtering
 - **Read-only SQL queries** — run arbitrary SELECT/EXPLAIN/PRAGMA against the log database
 - **Distributed tracing** — first-class `trace_id` and `span_id` support
@@ -188,6 +189,77 @@ When `project` or `branch` aren't explicitly set, relog.dev infers them from git
 - **branch**: Current branch via `git rev-parse --abbrev-ref HEAD`
 
 Override with env vars `RELOG_PROJECT` and `RELOG_BRANCH`, or pass them directly in logger options. Values are cached once per process.
+
+### Wide Events
+
+Instead of scattering log lines throughout a request, build one comprehensive event per unit of work and emit it at the end. This is the [wide event pattern](https://loggingsucks.com/) — optimized for querying, not writing.
+
+```typescript
+const ev = logger.event("http_request");
+ev.set("method", req.method);
+ev.set("path", req.url);
+
+const user = await authenticate(req);
+ev.set("user_id", user.id);
+ev.set("org_id", user.orgId);
+
+try {
+	const result = await handleRequest(req);
+	ev.set("status", 200);
+	ev.set("response_size", result.length);
+} catch (err) {
+	ev.set("status", 500);
+	ev.error(err); // records error details + auto-escalates level to "error"
+}
+
+ev.end(); // emits a single log record with all context + duration_ms
+```
+
+The emitted record contains everything: `message` is the event name, `meta` holds all accumulated key-value pairs plus `duration_ms` and `event: true`, and the `level` is auto-escalated based on recorded errors/warnings.
+
+**Chainable API:**
+
+```typescript
+logger.event("checkout")
+	.set("user_id", "usr_123")
+	.set("cart_items", 3)
+	.end();
+```
+
+**Bulk set:**
+
+```typescript
+ev.set({ method: "POST", path: "/api/pay", user_id: "usr_1" });
+```
+
+**Auto-cleanup with `using` (TC39 Explicit Resource Management):**
+
+```typescript
+{
+	using ev = logger.event("db_query");
+	ev.set("table", "users");
+	ev.set("query", "SELECT ...");
+	// auto-emits on scope exit via Symbol.dispose
+}
+```
+
+**Level escalation:** The event starts at `info`. Calling `.warn()` escalates to `warn`, `.error()` escalates to `error`. The level never downgrades — `error` always wins over `warn`.
+
+**Inherits context:** Events created from child loggers automatically include all inherited metadata, service, project, branch, and trace IDs.
+
+```typescript
+const reqLog = log.child({ requestId: "abc-123", traceId: "t-1" });
+const ev = reqLog.event("process_payment");
+// ev already has requestId, service, project, branch, trace_id
+ev.set("amount", 99.99);
+ev.end();
+```
+
+**Console output for wide events shows duration inline:**
+
+```
+14:32:05.123 INFO  [my-app@main] [api] http_request (142.5ms) {"method":"POST","path":"/checkout","status":200}
+```
 
 ### Error Logging
 
@@ -592,6 +664,20 @@ By default, `captureErrors: true` hooks `window.onerror` and `unhandledrejection
 - On page hide (`visibilitychange` + `pagehide`), remaining logs flush via `navigator.sendBeacon`
 - `sendBeacon` payloads are chunked at 60KB to stay under browser limits
 - Failed fetches get a single retry before being dropped
+
+### Wide Events (Browser)
+
+The browser logger also supports wide events:
+
+```typescript
+import { log } from "relog.dev/browser";
+
+const ev = log.event("page_interaction");
+ev.set("page", "/checkout");
+ev.set("action", "purchase");
+ev.set("items", 3);
+ev.end(); // emits one event with duration_ms
+```
 
 ### Child Loggers
 
