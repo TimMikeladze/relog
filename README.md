@@ -31,7 +31,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 │  │  (Logger)     │  │  POST   │  └────────┘    │   SQLite    │  │
 │  └───────────────┘  │         │  ┌────────┐    │   (WAL)     │  │
 │   - batching        │         │  │ /logs   │◀───│             │  │
-│   - retries         │         │  │ /query  │    │  relog.db   │  │
+│   - retries         │         │  │ /query  │    │  ~/.relog/   │  │
 │   - auto-flush      │         │  │ /stream │    └─────────────┘  │
 └─────────────────────┘         │  │ /health │                     │
                                 │  │ /prune  │                     │
@@ -110,7 +110,7 @@ bunx relog.dev export --output logs.json
 cat logs.json
 
 # clean up
-kill %1 && rm -f relog.db relog.db-wal relog.db-shm logs.json
+kill %1 && rm -rf ~/.relog logs.json
 ```
 
 ### Using the SDK
@@ -341,18 +341,18 @@ All commands accept `--url` (default `http://localhost:3485`) and `--auth` for B
 Start the log server.
 
 ```bash
-relog.dev start --port 3485 --db relog.db --admin-key mykey --cors true
+relog.dev start --port 3485 --admin-key mykey --cors true
 ```
 
-| Option                | Default    | Description                                                                          |
-| --------------------- | ---------- | ------------------------------------------------------------------------------------ |
-| `--port`              | `3485`     | Port to listen on                                                                    |
-| `--db`                | `relog.db` | SQLite database file path                                                            |
-| `--ingest-key`        | —          | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars |
-| `--read-key`          | —          | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars     |
-| `--admin-key`         | —          | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
-| `--key-prefix-length` | `6`        | Number of API key characters stored per log for auditing (0 to disable)              |
-| `--cors`              | `false`    | Enable CORS headers                                                                  |
+| Option                | Default             | Description                                                                          |
+| --------------------- | ------------------- | ------------------------------------------------------------------------------------ |
+| `--port`              | `3485`              | Port to listen on                                                                    |
+| `--db`                | `~/.relog/relog.db` | SQLite database file path                                                            |
+| `--ingest-key`        | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars |
+| `--read-key`          | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars     |
+| `--admin-key`         | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
+| `--key-prefix-length` | `6`                 | Number of API key characters stored per log for auditing (0 to disable)              |
+| `--cors`              | `false`             | Enable CORS headers                                                                  |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
@@ -911,7 +911,7 @@ import { startServer } from "relog.dev";
 
 const { server, db, streamManager, shutdown } = startServer({
 	port: 3485,
-	dbPath: "relog.db",
+	dbPath: "~/.relog/relog.db",
 	ingestKeys: ["key-for-apps"],
 	readKeys: ["key-for-agents"],
 	adminKeys: ["key-for-admin"],

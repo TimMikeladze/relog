@@ -2,6 +2,7 @@ import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { CREATE_INDEXES, CREATE_LOGS_TABLE } from "./schema.ts";
 import type { IngestPayload, LogEntry, StreamFilters } from "../types.ts";
 import { parseMeta } from "./util.ts";
+import { getDefaultDbPath } from "../paths.ts";
 
 export { QueryValidationError } from "./validate.ts";
 
@@ -24,7 +25,7 @@ export class RelogDatabase {
 	private db: Database;
 	private readonlyDb: Database;
 
-	constructor(path: string = "relog.db") {
+	constructor(path: string = getDefaultDbPath()) {
 		this.db = new Database(path, { create: true });
 		this.db.exec("PRAGMA journal_mode = WAL");
 		this.db.exec("PRAGMA synchronous = NORMAL");

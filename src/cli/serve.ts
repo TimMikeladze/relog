@@ -1,5 +1,6 @@
 import { type Command, command, number, string } from "@drizzle-team/brocli";
 import { startServer } from "../server/server.ts";
+import { getDefaultDbPath } from "../paths.ts";
 import type { ArchiveConfig, AutoPruneConfig } from "../types.ts";
 
 function parseSize(s: string): number {
@@ -20,7 +21,7 @@ export const startCommand: Command = command({
 	desc: "Start the relog.dev server",
 	options: {
 		port: number().desc("Port to listen on").default(3485),
-		db: string().desc("SQLite database path").default("relog.db"),
+		db: string().desc("SQLite database path").default(getDefaultDbPath()),
 		ingestKey: string("ingest-key").desc(
 			"API key(s) for ingest role, comma-separated. Also reads RELOG_INGEST_KEY* env vars",
 		),

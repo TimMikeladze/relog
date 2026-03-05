@@ -22,5 +22,5 @@
 		"noPropertyAccessFromIndexSignature": false
 	},
 
-	"exclude": ["node_modules", "dist", "docs"]
+	"exclude": ["node_modules", "dist", "docs", "app"]
 }
