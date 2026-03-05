@@ -530,7 +530,7 @@ describe("HTTP Server", () => {
 		const authResult = await startServer({
 			port: 0,
 			dbPath: authDbPath,
-			adminKey: "test-admin-key",
+			adminKeys: ["test-admin-key"],
 		});
 		const authUrl = `http://localhost:${authResult.server.port}`;
 
@@ -1278,7 +1278,13 @@ describe("Auth edge cases", () => {
 
 	beforeAll(async () => {
 		dbPath = tmpDbPath();
-		server = await startServer({ port: 0, dbPath, adminKey, readKey, ingestKey });
+		server = await startServer({
+			port: 0,
+			dbPath,
+			adminKeys: [adminKey],
+			readKeys: [readKey],
+			ingestKeys: [ingestKey],
+		});
 		baseUrl = `http://localhost:${server.server.port}`;
 	});
 

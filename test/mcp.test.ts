@@ -191,7 +191,7 @@ describe("MCP Server", () => {
 	test("MCP server with auth passes auth header", async () => {
 		const authDbPath = tmpDbPath();
 		const adminKey = "test-admin-key";
-		const authServer = await startServer({ port: 0, dbPath: authDbPath, adminKey });
+		const authServer = await startServer({ port: 0, dbPath: authDbPath, adminKeys: [adminKey] });
 		const authUrl = `http://localhost:${authServer.server.port}`;
 
 		// Ingest with auth

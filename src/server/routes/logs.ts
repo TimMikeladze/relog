@@ -19,6 +19,10 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 	if (project) opts.project = project;
 	const branch = url.searchParams.get("branch");
 	if (branch) opts.branch = branch;
+	const version = url.searchParams.get("version");
+	if (version) opts.version = version;
+	const deploymentId = url.searchParams.get("deployment_id");
+	if (deploymentId) opts.deployment_id = deploymentId;
 	const grep = url.searchParams.get("grep");
 	if (grep) opts.grep = grep;
 

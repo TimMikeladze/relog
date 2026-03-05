@@ -6,6 +6,7 @@ export async function handleIngest(
 	request: Request,
 	db: RelogDatabase,
 	maxBatchSize: number = 1000,
+	keyPrefix?: string,
 ): Promise<Response> {
 	let body: unknown;
 	try {
@@ -93,8 +94,20 @@ export async function handleIngest(
 				{ status: 400 },
 			);
 		}
+		if (entry.version !== undefined && typeof entry.version !== "string") {
+			return Response.json(
+				{ error: "Invalid log entry: 'version' must be a string" },
+				{ status: 400 },
+			);
+		}
+		if (entry.deployment_id !== undefined && typeof entry.deployment_id !== "string") {
+			return Response.json(
+				{ error: "Invalid log entry: 'deployment_id' must be a string" },
+				{ status: 400 },
+			);
+		}
 	}
 
-	db.insert(entries as IngestPayload[]);
+	db.insert(entries as IngestPayload[], keyPrefix);
 	return Response.json({ ingested: entries.length }, { status: 201 });
 }

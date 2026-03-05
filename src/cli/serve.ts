@@ -22,14 +22,17 @@ export const startCommand: Command = command({
 		port: number().desc("Port to listen on").default(3485),
 		db: string().desc("SQLite database path").default("relog.db"),
 		ingestKey: string("ingest-key").desc(
-			"API key for ingest role. Also reads RELOG_INGEST_KEY env",
+			"API key(s) for ingest role, comma-separated. Also reads RELOG_INGEST_KEY* env vars",
 		),
 		readKey: string("read-key").desc(
-			"API key for read role (includes ingest). Also reads RELOG_READ_KEY env",
+			"API key(s) for read role (includes ingest), comma-separated. Also reads RELOG_READ_KEY* env vars",
 		),
 		adminKey: string("admin-key").desc(
-			"API key for admin role (includes all). Also reads RELOG_ADMIN_KEY env",
+			"API key(s) for admin role (includes all), comma-separated. Also reads RELOG_ADMIN_KEY* env vars",
 		),
+		keyPrefixLength: number("key-prefix-length")
+			.desc("Number of key characters stored per log for auditing (0 to disable)")
+			.default(6),
 		cors: string().desc("Enable CORS headers").default("false"),
 		maxDbSize: string("max-db-size").desc("Auto-prune when DB exceeds this size (e.g. 500mb, 1gb)"),
 		maxAgeDays: number("max-age-days").desc("Auto-prune logs older than N days"),
@@ -44,9 +47,33 @@ export const startCommand: Command = command({
 		s3Region: string("s3-region").desc("S3 region").default("us-east-1"),
 	},
 	handler: async (opts) => {
-		const ingestKey = opts.ingestKey ?? process.env.RELOG_INGEST_KEY;
-		const readKey = opts.readKey ?? process.env.RELOG_READ_KEY;
-		const adminKey = opts.adminKey ?? process.env.RELOG_ADMIN_KEY;
+		function parseKeys(raw: string | undefined): string[] {
+			if (!raw) return [];
+			return raw
+				.split(",")
+				.map((k) => k.trim())
+				.filter(Boolean);
+		}
+
+		function collectEnvKeys(prefix: string): string[] {
+			const keys: string[] = [];
+			for (const [name, value] of Object.entries(process.env)) {
+				if (name.startsWith(prefix) && value) {
+					keys.push(...parseKeys(value));
+				}
+			}
+			return keys;
+		}
+
+		function resolveKeys(cliValue: string | undefined, envPrefix: string): string[] | undefined {
+			const keys = [...parseKeys(cliValue), ...collectEnvKeys(envPrefix)];
+			const unique = [...new Set(keys)];
+			return unique.length ? unique : undefined;
+		}
+
+		const ingestKeys = resolveKeys(opts.ingestKey, "RELOG_INGEST_KEY");
+		const readKeys = resolveKeys(opts.readKey, "RELOG_READ_KEY");
+		const adminKeys = resolveKeys(opts.adminKey, "RELOG_ADMIN_KEY");
 
 		let autoPrune: AutoPruneConfig | undefined;
 		if (opts.maxDbSize || opts.maxAgeDays) {
@@ -72,9 +99,10 @@ export const startCommand: Command = command({
 		const { server, shutdown } = await startServer({
 			port: opts.port,
 			dbPath: opts.db,
-			ingestKey,
-			readKey,
-			adminKey,
+			ingestKeys,
+			readKeys,
+			adminKeys,
+			keyPrefixLength: opts.keyPrefixLength,
 			cors: opts.cors === "true",
 			autoPrune,
 			archive,
@@ -82,7 +110,7 @@ export const startCommand: Command = command({
 
 		console.log(`relog.dev server listening on http://localhost:${server.port}`);
 		console.log(`  database: ${opts.db}`);
-		const hasAuth = ingestKey || readKey || adminKey;
+		const hasAuth = ingestKeys || readKeys || adminKeys;
 		if (hasAuth) console.log("  auth: enabled (role-based API keys)");
 		if (opts.cors === "true") console.log("  cors: enabled");
 		if (autoPrune) {

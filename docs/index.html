@@ -4,46 +4,50 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-		<title>relog.dev — Structured Logging for the Agent Era</title>
+		<title>relog.dev — Structured Logging for the Agentic Era</title>
 		<meta
 			name="description"
-			content="Open-source, self-hosted log management for Bun. SQLite-backed server with real-time streaming, distributed tracing, CLI tools, Next.js integration, and an MCP server so AI agents like Claude Code and Cursor can search and query your logs."
+			content="Free, self-hosted log server for Bun and TypeScript. SQLite-backed with SQL queries, real-time streaming, MCP for AI agents, and Next.js integration."
 		/>
 
 		<link rel="canonical" href="https://relog.dev" />
+		<meta name="theme-color" content="#09090b" />
 
 		<!-- Open Graph -->
 		<meta property="og:type" content="website" />
 		<meta property="og:url" content="https://relog.dev" />
-		<meta property="og:title" content="relog.dev — Structured Logging for the Agent Era" />
+		<meta property="og:locale" content="en_US" />
+		<meta property="og:title" content="relog.dev — Structured Logging for the Agentic Era" />
 		<meta
 			property="og:description"
-			content="Open-source log server for Bun. SQLite-backed, real-time streaming, distributed tracing, CLI, Next.js integration, and MCP server for AI coding agents."
+			content="Free, self-hosted log server for Bun. Ship structured logs, query with SQL, stream in real-time, and let AI agents analyze everything via MCP."
 		/>
 		<meta property="og:site_name" content="relog.dev" />
 		<meta property="og:image" content="https://relog.dev/og.png" />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
 		<meta property="og:image:type" content="image/png" />
+		<meta property="og:image:alt" content="relog.dev — structured logging for the agentic era" />
 
 		<!-- Twitter -->
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:site" content="@linesofcode" />
 		<meta name="twitter:creator" content="@linesofcode" />
-		<meta name="twitter:title" content="relog.dev — Structured Logging for the Agent Era" />
+		<meta name="twitter:title" content="relog.dev — Structured Logging for the Agentic Era" />
 		<meta
 			name="twitter:description"
-			content="Open-source log server for Bun. SQLite-backed, real-time streaming, distributed tracing, CLI, Next.js integration, and MCP server for AI coding agents."
+			content="Free, self-hosted log server for Bun. Ship structured logs, query with SQL, stream in real-time, and let AI agents analyze everything via MCP."
 		/>
 		<meta name="twitter:image" content="https://relog.dev/og.png" />
+		<meta name="twitter:image:alt" content="relog.dev — structured logging for the agentic era" />
 
 		<!-- SEO -->
 		<meta
 			name="keywords"
-			content="bun logging, bun logger, structured logging typescript, self-hosted log server, MCP server logging, model context protocol, AI agent logging, SQLite log management, real-time log streaming, Next.js logging, distributed tracing, log aggregation open source, typescript logger, json logging, log tail CLI, observability, Claude Code MCP, Cursor MCP, API key authentication, browser logging, role-based access control"
+			content="bun logger, bun logging, typescript logger, structured logging, self-hosted logging, MCP server, AI agent logging, model context protocol, SQLite logger, real-time log streaming, Next.js logging, distributed tracing, open source observability, log aggregation, Datadog alternative, Logtail alternative, wide events, tail sampling"
 		/>
 		<meta name="author" content="Tim Mikeladze" />
-		<meta name="robots" content="index, follow" />
+		<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
 		<link rel="icon" type="image/svg+xml" href="/vite.svg" />
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -58,8 +62,8 @@
 				"@context": "https://schema.org",
 				"@type": "SoftwareApplication",
 				"name": "relog.dev",
-				"alternateName": ["relog", "relog.dev logging", "bun logger"],
-				"description": "Open-source, self-hosted structured logging for Bun. SQLite-backed log server with real-time streaming, distributed tracing, CLI tools, Next.js integration, and MCP server for AI agent log analysis.",
+				"alternateName": ["relog", "bun logger", "typescript logger", "self-hosted logging"],
+				"description": "Free, self-hosted structured logging for Bun and TypeScript. SQLite-backed log server with SQL queries, real-time streaming, distributed tracing, wide events, tail sampling, Next.js integration, S3 archival, and MCP server for AI agent log analysis.",
 				"url": "https://relog.dev",
 				"applicationCategory": "DeveloperApplication",
 				"applicationSubCategory": "Logging & Observability",
@@ -84,24 +88,26 @@
 				"programmingLanguage": ["TypeScript", "JavaScript"],
 				"runtimePlatform": "Bun",
 				"featureList": [
-					"Structured JSON logging",
+					"Structured JSON logging with TypeScript SDK",
 					"SQLite-backed log storage with WAL mode",
 					"Real-time log streaming via SSE",
+					"Wide events with auto HTTP context capture",
+					"Tail sampling — keep errors and slow requests, sample the rest",
 					"Distributed tracing with trace_id and span_id",
-					"MCP server for AI agent integration",
-					"Next.js console capture and request logging",
+					"MCP server for AI agent integration (Claude Code, Cursor)",
+					"Drop-in Next.js console capture and request logging",
 					"CLI for tail, search, query, export, and prune",
-					"Read-only SQL queries against log database",
-					"Automatic batching with retry and backoff",
+					"Read-only SQL queries against log database via DuckDB",
+					"Automatic batching with retry and exponential backoff",
 					"Project and branch tracking with git auto-detection",
-					"Role-based API key authentication",
-					"Browser logging with proxy delivery",
-					"S3 and Parquet log archival with DuckDB querying"
+					"Role-based API key authentication with multiple keys per role",
+					"Browser logging with session tracking and proxy delivery",
+					"S3 and Parquet log archival with unified hot and cold queries"
 				]
 			}
 		</script>
 
-		<!-- JSON-LD: FAQPage -->
+		<!-- JSON-LD: FAQPage — must match visible FAQ in App.tsx -->
 		<script type="application/ld+json">
 			{
 				"@context": "https://schema.org",
@@ -109,26 +115,10 @@
 				"mainEntity": [
 					{
 						"@type": "Question",
-						"name": "What is the best logging library for Bun?",
+						"name": "Why not Datadog, Logtail, or Axiom?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "relog.dev is a structured logging library built specifically for Bun. It includes a self-hosted SQLite-backed log server, a TypeScript client SDK with automatic batching and retries, real-time log streaming, CLI tools, and an MCP server so AI agents can query your logs. Install with: bun add relog.dev"
-						}
-					},
-					{
-						"@type": "Question",
-						"name": "How do I add structured logging to a Bun application?",
-						"acceptedAnswer": {
-							"@type": "Answer",
-							"text": "Install relog.dev with 'bun add relog.dev', start the log server with 'bunx relog.dev start', then use the client SDK: import { createLogger } from 'relog.dev/client' and call log.info(), log.warn(), log.error() with structured metadata. Logs are stored in SQLite and queryable via CLI, HTTP API, or SQL."
-						}
-					},
-					{
-						"@type": "Question",
-						"name": "What is an MCP server for logging?",
-						"acceptedAnswer": {
-							"@type": "Answer",
-							"text": "An MCP (Model Context Protocol) server for logging lets AI coding agents like Claude Code, Cursor, and others search, query, and analyze your application logs through natural tool use. relog.dev includes a built-in MCP server that exposes tools for searching logs, running SQL queries, getting stats, tailing recent logs, and retrieving log context."
+							"text": "relog.dev is free, self-hosted, and MIT licensed. No per-GB ingestion fees, no third-party data sharing. Your logs stay on your infrastructure."
 						}
 					},
 					{
@@ -136,31 +126,39 @@
 						"name": "How does relog.dev store logs?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "relog.dev stores all logs in a single SQLite file with WAL (Write-Ahead Logging) mode enabled for high write throughput. No Redis, PostgreSQL, or external databases are required. The schema is indexed for fast filtering by level, service, project, branch, trace ID, and timestamp."
+							"text": "All logs are stored in a single SQLite file with WAL mode enabled for high write throughput. The schema is indexed by level, service, project, branch, trace ID, and timestamp. No Redis, PostgreSQL, or external databases required."
 						}
 					},
 					{
 						"@type": "Question",
-						"name": "How do I add logging to a Next.js application?",
+						"name": "What does the MCP server do?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "relog.dev provides a drop-in Next.js integration. Add two files: instrumentation.ts to capture console output and track errors, and middleware.ts to log HTTP requests with trace IDs. All console.log, console.warn, and console.error calls on the server are automatically captured and forwarded to the relog.dev startr."
+							"text": "The built-in MCP (Model Context Protocol) server lets AI coding agents like Claude Code, Cursor, and any MCP client search, query, and analyze your application logs through natural tool use — including full-text search, SQL queries, stats, tailing, and trace context."
 						}
 					},
 					{
 						"@type": "Question",
-						"name": "Is relog.dev a free alternative to Datadog or Logtail?",
+						"name": "How does archival work?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "Yes. relog.dev is open-source (MIT licensed) and completely free. It provides self-hosted log management with structured logging, real-time streaming, SQL queries, distributed tracing, and export — without sending your data to a third-party service or paying per-GB ingestion fees."
+							"text": "Archive old logs to S3 as Parquet files with a single CLI command. DuckDB transparently queries both hot logs in SQLite and cold logs in S3, so search and SQL work across your entire history without loading everything into memory. Works with AWS S3, Cloudflare R2, MinIO, and Backblaze B2."
 						}
 					},
 					{
 						"@type": "Question",
-						"name": "Does relog.dev support distributed tracing?",
+						"name": "What are wide events?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "Yes. relog.dev has first-class support for distributed tracing with trace_id and span_id fields. Use child loggers to propagate trace context across services. The MCP server and CLI can filter and search logs by trace ID to follow requests across your entire system."
+							"text": "Instead of scattering log lines through a request, build one event with all context and emit it at the end. Use .request(req) and .response(res) to auto-extract HTTP context. You get a single record with every key-value pair plus automatic duration tracking and level escalation."
+						}
+					},
+					{
+						"@type": "Question",
+						"name": "How does tail sampling work?",
+						"acceptedAnswer": {
+							"@type": "Answer",
+							"text": "Set a sampleRate (0–1) on the logger. The sampling decision happens after the event completes, so errors, slow requests, and .keep()-marked events are always kept. Only normal, fast events are sampled. Sampled events include the sample_rate in metadata so you can extrapolate totals in queries."
 						}
 					},
 					{
@@ -168,10 +166,21 @@
 						"name": "Does relog.dev support authentication?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "Yes. relog.dev supports role-based API key authentication with three hierarchical roles: ingest (write-only), read (search, query, stream), and admin (full access). Pass --ingest-key, --read-key, and --admin-key when starting the server. Clients authenticate with Bearer tokens via the Authorization header."
+							"text": "Yes. Three hierarchical roles — ingest (write-only), read (search, query, stream), and admin (full access) — with Bearer token auth on all endpoints. Supports multiple API keys per role for multi-app environments."
 						}
 					}
 				]
+			}
+		</script>
+
+		<!-- JSON-LD: WebSite -->
+		<script type="application/ld+json">
+			{
+				"@context": "https://schema.org",
+				"@type": "WebSite",
+				"name": "relog.dev",
+				"url": "https://relog.dev",
+				"description": "Free, self-hosted structured logging for Bun and TypeScript"
 			}
 		</script>
 
@@ -180,8 +189,8 @@
 			{
 				"@context": "https://schema.org",
 				"@type": "HowTo",
-				"name": "How to set up structured logging for a Bun application",
-				"description": "Install relog.dev and start collecting structured logs from your Bun application in under 60 seconds.",
+				"name": "How to add structured logging to a Bun or TypeScript app",
+				"description": "Install relog.dev and start collecting structured logs with SQL queries, real-time streaming, and AI agent integration in under 60 seconds.",
 				"step": [
 					{
 						"@type": "HowToStep",

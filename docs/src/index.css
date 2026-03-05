@@ -32,12 +32,25 @@ body {
 	background: rgba(129, 140, 248, 0.25);
 }
 
+.dot-pattern {
+	background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+	background-size: 24px 24px;
+}
+
 .hero-glow {
 	background: radial-gradient(
 		ellipse 60% 40% at 50% 0%,
-		rgba(129, 140, 248, 0.06) 0%,
+		rgba(129, 140, 248, 0.08) 0%,
 		transparent 70%
 	);
+}
+
+.tabs-scroll {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+.tabs-scroll::-webkit-scrollbar {
+	display: none;
 }
 
 .gradient-agent {

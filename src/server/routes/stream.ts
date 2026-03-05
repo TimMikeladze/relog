@@ -123,6 +123,10 @@ export function handleStream(
 	if (project) filters.project = project;
 	const branch = url.searchParams.get("branch");
 	if (branch) filters.branch = branch;
+	const version = url.searchParams.get("version");
+	if (version) filters.version = version;
+	const deploymentId = url.searchParams.get("deployment_id");
+	if (deploymentId) filters.deployment_id = deploymentId;
 
 	let client: StreamClient;
 	const encoder = new TextEncoder();

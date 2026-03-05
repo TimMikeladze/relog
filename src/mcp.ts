@@ -36,12 +36,14 @@ export function createMcpServer(opts: McpOptions): McpServer {
 
 	server.tool(
 		"search_logs",
-		"Search and filter logs. Supports level, service, project, branch, text search, and time ranges.",
+		"Search and filter logs. Supports level, service, project, branch, version, deployment_id, text search, and time ranges.",
 		{
 			level: z.string().optional().describe("Log level: trace, debug, info, warn, error, fatal"),
 			service: z.string().optional().describe("Filter by service name"),
 			project: z.string().optional().describe("Filter by project name"),
 			branch: z.string().optional().describe("Filter by git branch"),
+			version: z.string().optional().describe("Filter by app version"),
+			deployment_id: z.string().optional().describe("Filter by deployment ID"),
 			grep: z.string().optional().describe("Search text in log messages"),
 			from: z
 				.string()
@@ -59,7 +61,7 @@ export function createMcpServer(opts: McpOptions): McpServer {
 
 	server.tool(
 		"query_logs",
-		"Run a read-only SQL query against the logs table. The table has columns: id, timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, created_at.",
+		"Run a read-only SQL query against the logs table. The table has columns: id, timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, created_at.",
 		{
 			sql: z.string().describe("SQL query (SELECT only). A LIMIT is auto-added if missing."),
 		},
@@ -109,6 +111,8 @@ export function createMcpServer(opts: McpOptions): McpServer {
 			service: z.string().optional().describe("Filter by service"),
 			project: z.string().optional().describe("Filter by project"),
 			branch: z.string().optional().describe("Filter by branch"),
+			version: z.string().optional().describe("Filter by version"),
+			deployment_id: z.string().optional().describe("Filter by deployment ID"),
 		},
 		async (args) => {
 			const params = buildParams(args);

@@ -164,6 +164,14 @@ export class DuckDBReader {
 			conditions.push("branch = ?");
 			params.push(opts.branch);
 		}
+		if (opts.version) {
+			conditions.push("version = ?");
+			params.push(opts.version);
+		}
+		if (opts.deployment_id) {
+			conditions.push("deployment_id = ?");
+			params.push(opts.deployment_id);
+		}
 		if (opts.grep) {
 			conditions.push("message LIKE ? ESCAPE '\\'");
 			params.push(`%${escapeLike(opts.grep)}%`);
@@ -222,6 +230,7 @@ export class DuckDBReader {
 		levels: Record<string, number>;
 		services: Record<string, number>;
 		projects: Record<string, number>;
+		versions: Record<string, number>;
 	}> {
 		const conn = await this.connect();
 		try {
@@ -234,12 +243,16 @@ export class DuckDBReader {
 				UNION ALL
 				SELECT
 					'project' as dim, project as key, COUNT(*) as count FROM logs WHERE project IS NOT NULL GROUP BY project
+				UNION ALL
+				SELECT
+					'version' as dim, version as key, COUNT(*) as count FROM logs WHERE version IS NOT NULL GROUP BY version
 			`);
 			const rows = reader.getRowObjects() as { dim: string; key: string; count: number }[];
 
 			const levels: Record<string, number> = {};
 			const services: Record<string, number> = {};
 			const projects: Record<string, number> = {};
+			const versions: Record<string, number> = {};
 			let totalCount = 0;
 
 			for (const row of rows) {
@@ -249,12 +262,14 @@ export class DuckDBReader {
 					totalCount += count;
 				} else if (row.dim === "service") {
 					services[row.key] = count;
-				} else {
+				} else if (row.dim === "project") {
 					projects[row.key] = count;
+				} else {
+					versions[row.key] = count;
 				}
 			}
 
-			return { log_count: totalCount, levels, services, projects };
+			return { log_count: totalCount, levels, services, projects, versions };
 		} finally {
 			conn.closeSync();
 		}

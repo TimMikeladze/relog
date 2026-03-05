@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS logs (
   span_id TEXT,
   project TEXT,
   branch TEXT,
+  version TEXT,
+  deployment_id TEXT,
+  key_prefix TEXT,
   created_at INTEGER NOT NULL
 )`;
 
@@ -25,4 +28,6 @@ export const CREATE_INDEXES: string[] = [
 	"CREATE INDEX IF NOT EXISTS idx_logs_project ON logs (project)",
 	"CREATE INDEX IF NOT EXISTS idx_logs_branch ON logs (branch)",
 	"CREATE INDEX IF NOT EXISTS idx_logs_project_branch_created_at ON logs (project, branch, created_at)",
+	"CREATE INDEX IF NOT EXISTS idx_logs_version ON logs (version)",
+	"CREATE INDEX IF NOT EXISTS idx_logs_deployment_id ON logs (deployment_id)",
 ];

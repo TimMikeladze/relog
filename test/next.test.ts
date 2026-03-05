@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { _resetSingleton, log, relogProxy, restoreConsole, createRelog } from "../src/next.ts";
+import { _resetSingleton, log, relogProxy, restoreConsole, createLogger } from "../src/next.ts";
 import type { LogRecord } from "../src/types.ts";
 
 afterEach(() => {
 	_resetSingleton();
 });
 
-describe("createRelog", () => {
+describe("createLogger", () => {
 	test("register() creates singleton and patches console", async () => {
 		const origLog = console.log;
-		const relog = createRelog({ url: "http://localhost:1", captureConsole: true });
+		const relog = createLogger({ url: "http://localhost:1", captureConsole: true });
 		await relog.register();
 
 		// console.log should be patched (different reference)
@@ -17,7 +17,7 @@ describe("createRelog", () => {
 	});
 
 	test("register() is idempotent (singleton guard)", async () => {
-		const relog = createRelog({ url: "http://localhost:1" });
+		const relog = createLogger({ url: "http://localhost:1" });
 		await relog.register();
 		const first = console.log;
 		await relog.register();
@@ -27,7 +27,7 @@ describe("createRelog", () => {
 
 	test("captureConsole: false skips console patching", async () => {
 		const origLog = console.log;
-		const relog = createRelog({ url: "http://localhost:1", captureConsole: false });
+		const relog = createLogger({ url: "http://localhost:1", captureConsole: false });
 		await relog.register();
 
 		expect(console.log).toBe(origLog);
@@ -35,7 +35,7 @@ describe("createRelog", () => {
 
 	test("restoreConsole undoes patching", async () => {
 		const origLog = console.log;
-		const relog = createRelog({ url: "http://localhost:1" });
+		const relog = createLogger({ url: "http://localhost:1" });
 		await relog.register();
 		expect(console.log).not.toBe(origLog);
 
@@ -58,7 +58,7 @@ describe("console patching", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -89,7 +89,7 @@ describe("console patching", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -122,7 +122,7 @@ describe("onRequestError", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,
@@ -159,7 +159,7 @@ describe("onRequestError", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,
@@ -183,7 +183,7 @@ describe("onRequestError", () => {
 	});
 
 	test("no-op before register() is called", () => {
-		const relog = createRelog({ url: "http://localhost:1", captureConsole: false });
+		const relog = createLogger({ url: "http://localhost:1", captureConsole: false });
 		// Should not throw
 		relog.onRequestError(
 			new Error("noop"),
@@ -230,7 +230,7 @@ describe("relogProxy", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,
@@ -257,7 +257,7 @@ describe("relogProxy", () => {
 	});
 
 	test("uses custom traceHeader from config", async () => {
-		const relog = createRelog({
+		const relog = createLogger({
 			url: "http://localhost:1",
 			captureConsole: false,
 			traceHeader: "x-request-id",
@@ -287,7 +287,7 @@ describe("console patching edge cases", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -316,7 +316,7 @@ describe("console patching edge cases", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			batchSize: 999,
 			flushInterval: 60000,
@@ -361,7 +361,7 @@ describe("log proxy", () => {
 			},
 		});
 
-		const relog = createRelog({
+		const relog = createLogger({
 			url: `http://localhost:${server.port}`,
 			captureConsole: false,
 			batchSize: 999,

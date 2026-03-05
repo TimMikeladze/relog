@@ -10,6 +10,8 @@ export interface SearchOptions {
 	service?: string;
 	project?: string;
 	branch?: string;
+	version?: string;
+	deployment_id?: string;
 	grep?: string;
 	from?: number;
 	to?: number;
@@ -28,12 +30,21 @@ export class RelogDatabase {
 		this.db.exec("PRAGMA synchronous = NORMAL");
 		this.db.exec("PRAGMA busy_timeout = 5000");
 		this.db.exec(CREATE_LOGS_TABLE);
-		// Migrate: add project/branch columns for existing DBs
+		// Migrate: add columns for existing DBs
 		try {
 			this.db.exec("ALTER TABLE logs ADD COLUMN project TEXT");
 		} catch {}
 		try {
 			this.db.exec("ALTER TABLE logs ADD COLUMN branch TEXT");
+		} catch {}
+		try {
+			this.db.exec("ALTER TABLE logs ADD COLUMN version TEXT");
+		} catch {}
+		try {
+			this.db.exec("ALTER TABLE logs ADD COLUMN deployment_id TEXT");
+		} catch {}
+		try {
+			this.db.exec("ALTER TABLE logs ADD COLUMN key_prefix TEXT");
 		} catch {}
 		for (const idx of CREATE_INDEXES) {
 			this.db.exec(idx);
@@ -46,10 +57,10 @@ export class RelogDatabase {
 		this.readonlyDb.exec("PRAGMA busy_timeout = 5000");
 	}
 
-	insert(entries: IngestPayload[]): void {
+	insert(entries: IngestPayload[], keyPrefix?: string): void {
 		const stmt = this.db.prepare(`
-      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
 		const now = Date.now();
@@ -84,6 +95,9 @@ export class RelogDatabase {
 					entry.span_id ?? null,
 					entry.project ?? null,
 					entry.branch ?? null,
+					entry.version ?? null,
+					entry.deployment_id ?? null,
+					keyPrefix ?? null,
 					createdAt,
 				);
 			}
@@ -134,6 +148,14 @@ export class RelogDatabase {
 		if (filters.branch) {
 			conditions.push("branch = ?");
 			params.push(filters.branch);
+		}
+		if (filters.version) {
+			conditions.push("version = ?");
+			params.push(filters.version);
+		}
+		if (filters.deployment_id) {
+			conditions.push("deployment_id = ?");
+			params.push(filters.deployment_id);
 		}
 
 		params.push(limit);

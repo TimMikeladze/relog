@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { formatLogRecord } from "../src/console.ts";
+import { EventBuilder } from "../src/event.ts";
 import { createLogger, Logger } from "../src/logger.ts";
 import { Transport } from "../src/transport.ts";
 import {
@@ -1223,5 +1224,340 @@ describe("Logger project and branch", () => {
 
 		await log.destroy();
 		server.stop();
+	});
+});
+
+describe("EventBuilder (wide events)", () => {
+	test("logger.event() returns an EventBuilder", () => {
+		const log = createLogger({ console: false });
+		const ev = log.event("test_event");
+		expect(ev).toBeInstanceOf(EventBuilder);
+	});
+
+	test("event emits a single log record with duration_ms and event=true", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const ev = log.event("http_request");
+		ev.set("method", "GET");
+		ev.set("path", "/api/users");
+		await new Promise((r) => setTimeout(r, 10));
+		ev.end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const records = received.flat();
+		expect(records.length).toBe(1);
+
+		const record = records[0]!;
+		expect(record.message).toBe("http_request");
+		expect(record.level).toBe("info");
+		expect(record.meta!.method).toBe("GET");
+		expect(record.meta!.path).toBe("/api/users");
+		expect(record.meta!.event).toBe(true);
+		expect(typeof record.meta!.duration_ms).toBe("number");
+		expect(record.meta!.duration_ms).toBeGreaterThanOrEqual(0);
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("event.set() supports bulk object assignment", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		log.event("bulk_test").set({ user_id: "usr_1", org_id: "org_1", plan: "pro" }).end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.meta!.user_id).toBe("usr_1");
+		expect(record.meta!.org_id).toBe("org_1");
+		expect(record.meta!.plan).toBe("pro");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("event.error() records error details and escalates level", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const ev = log.event("payment");
+		ev.set("amount", 99.99);
+		ev.error(new TypeError("Card declined"));
+		ev.end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.level).toBe("error");
+		expect(record.meta!.error).toBe("Card declined");
+		expect(record.meta!.error_name).toBe("TypeError");
+		expect(typeof record.meta!.error_stack).toBe("string");
+		expect(record.meta!.amount).toBe(99.99);
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("event.warn() escalates level to warn", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		log.event("slow_query").set("query", "SELECT * FROM users").warn("Query took too long").end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.level).toBe("warn");
+		expect(record.meta!.warning).toBe("Query took too long");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("level escalation: error beats warn, never downgrades", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const ev = log.event("escalation_test");
+		ev.warn("something iffy");
+		ev.error(new Error("something broke"));
+		ev.warn("another warning"); // should NOT downgrade from error
+		ev.end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		expect(received.flat()[0]!.level).toBe("error");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("double end() is a no-op", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const ev = log.event("idempotent");
+		ev.set("key", "val");
+		ev.end();
+		ev.end(); // second call should be ignored
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		expect(received.flat().length).toBe(1);
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("event inherits logger bound meta", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			meta: { env: "test", region: "us-east" },
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		log.event("inherit_test").set("extra", true).end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.meta!.env).toBe("test");
+		expect(record.meta!.region).toBe("us-east");
+		expect(record.meta!.extra).toBe(true);
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("child logger event inherits parent + child meta", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			meta: { env: "test" },
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		const child = log.child({ requestId: "req-1" });
+		child.event("child_event").set("action", "checkout").end();
+
+		await child.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.meta!.env).toBe("test");
+		expect(record.meta!.requestId).toBe("req-1");
+		expect(record.meta!.action).toBe("checkout");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("event() with initial meta merges with bound meta", async () => {
+		const received: LogRecord[][] = [];
+		const server = Bun.serve({
+			port: 0,
+			async fetch(req) {
+				const body = (await req.json()) as LogRecord[];
+				received.push(body);
+				return Response.json({ ok: true });
+			},
+		});
+
+		const log = createLogger({
+			url: `http://localhost:${server.port}`,
+			console: false,
+			meta: { env: "test" },
+			batchSize: 999,
+			flushInterval: 60000,
+		});
+
+		log.event("init_meta", { method: "POST" }).set("path", "/api").end();
+
+		await log.flush();
+		await new Promise((r) => setTimeout(r, 200));
+
+		const record = received.flat()[0]!;
+		expect(record.meta!.env).toBe("test");
+		expect(record.meta!.method).toBe("POST");
+		expect(record.meta!.path).toBe("/api");
+
+		await log.destroy();
+		server.stop();
+	});
+
+	test("chaining: set returns this for fluent API", () => {
+		const log = createLogger({ console: false });
+		const ev = log.event("chain_test");
+		const result = ev.set("a", 1).set("b", 2).set({ c: 3 });
+		expect(result).toBe(ev);
+	});
+
+	test("formatLogRecord shows duration for wide events", () => {
+		const record: LogRecord = {
+			timestamp: "2024-01-15T14:32:05.123Z",
+			level: "info",
+			message: "http_request",
+			meta: { method: "GET", path: "/api", duration_ms: 142.5, event: true },
+		};
+		const output = formatLogRecord(record);
+		expect(output).toContain("http_request");
+		expect(output).toContain("142.5ms");
 	});
 });

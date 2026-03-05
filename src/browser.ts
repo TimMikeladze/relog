@@ -1,3 +1,4 @@
+import { EventBuilder } from "./event.ts";
 import type { IngestPayload, LogLevel } from "./types.ts";
 import { LOG_LEVELS } from "./types.ts";
 
@@ -19,6 +20,8 @@ export interface BrowserLoggerOptions {
 	level?: LogLevel;
 	service?: string;
 	project?: string;
+	version?: string;
+	deploymentId?: string;
 	meta?: Record<string, unknown>;
 	/** Auto-capture window.onerror + unhandledrejection (default: true) */
 	captureErrors?: boolean;
@@ -193,6 +196,8 @@ export class BrowserLogger {
 	private level: LogLevel;
 	private service: string | undefined;
 	private project: string | undefined;
+	private version: string | undefined;
+	private deploymentId: string | undefined;
 	private boundMeta: Record<string, unknown>;
 	private errorCleanup: (() => void) | null = null;
 	private consoleCleanup: (() => void) | null = null;
@@ -206,6 +211,8 @@ export class BrowserLogger {
 		this.level = options.level ?? "info";
 		this.service = options.service;
 		this.project = options.project;
+		this.version = options.version;
+		this.deploymentId = options.deploymentId;
 		this.boundMeta = options.meta ?? {};
 
 		if (options.captureErrors ?? true) {
@@ -228,6 +235,8 @@ export class BrowserLogger {
 			message,
 			service: this.service,
 			project: this.project,
+			version: this.version,
+			deployment_id: this.deploymentId,
 			host: typeof location !== "undefined" ? location.hostname : undefined,
 			meta: {
 				...merged,
@@ -288,6 +297,13 @@ export class BrowserLogger {
 		this.log("fatal", message, meta);
 	}
 
+	event(name: string, meta?: Record<string, unknown>): EventBuilder {
+		return new EventBuilder(name, (level, message, m) => this.log(level, message, m), {
+			...this.boundMeta,
+			...meta,
+		});
+	}
+
 	flush(): void {
 		this.transport.flush();
 	}
@@ -303,6 +319,8 @@ export class BrowserLogger {
 			level: this.level,
 			service: this.service,
 			project: this.project,
+			version: this.version,
+			deploymentId: this.deploymentId,
 			meta: { ...this.boundMeta, ...meta },
 			captureErrors: false,
 			captureConsole: false,
@@ -380,7 +398,7 @@ export class BrowserLogger {
 
 let singleton: BrowserLogger | null = null;
 
-export function createRelog(options: BrowserLoggerOptions = {}): BrowserLogger {
+export function createLogger(options: BrowserLoggerOptions = {}): BrowserLogger {
 	if (singleton) {
 		singleton.destroy();
 	}
@@ -397,7 +415,7 @@ function getSingleton(): BrowserLogger {
 
 export const log: Pick<
 	BrowserLogger,
-	"trace" | "debug" | "info" | "warn" | "error" | "fatal" | "flush" | "destroy" | "child"
+	"trace" | "debug" | "info" | "warn" | "error" | "fatal" | "flush" | "destroy" | "child" | "event"
 > = {
 	trace(message, meta?) {
 		getSingleton().trace(message, meta);
@@ -426,5 +444,8 @@ export const log: Pick<
 	},
 	child(meta) {
 		return getSingleton().child(meta);
+	},
+	event(name, meta?) {
+		return getSingleton().event(name, meta);
 	},
 };

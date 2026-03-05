@@ -27,9 +27,9 @@ beforeAll(async () => {
 	instance = await startServer({
 		port: TEST_PORT,
 		dbPath: TEST_DB,
-		adminKey: ADMIN_KEY,
-		readKey: READ_KEY,
-		ingestKey: INGEST_KEY,
+		adminKeys: [ADMIN_KEY],
+		readKeys: [READ_KEY],
+		ingestKeys: [INGEST_KEY],
 		cors: true,
 		streamDebounceMs: 10,
 	});
