@@ -91,6 +91,11 @@ function Features() {
 			desc: "Run arbitrary SELECT statements directly against your logs",
 		},
 		{
+			color: "bg-cyan",
+			label: "Wide events",
+			desc: "Build one event per request with all context, emit at the end with auto-duration",
+		},
+		{
 			color: "bg-rose",
 			label: "Drop-in Next.js support",
 			desc: "Console capture, request tracing, error tracking, browser proxy",
@@ -149,6 +154,7 @@ function Examples() {
 
 	const tabs = [
 		{ label: "SDK", color: "bg-accent" },
+		{ label: "Wide Events", color: "bg-cyan" },
 		{ label: "Next.js", color: "bg-rose" },
 		{ label: "Browser", color: "bg-cyan" },
 		{ label: "Auth", color: "bg-amber" },
@@ -177,6 +183,40 @@ reqLog.info("request started", { method: "POST", path: "/users" });
 reqLog.error(new Error("validation failed"));
 
 await log.flush();`,
+		},
+		{
+			lang: "typescript",
+			code: `import { createLogger } from "relog.dev/client";
+
+const log = createLogger({
+  url: "http://localhost:3485",
+  service: "api",
+});
+
+// Build one event per request — emit everything at the end
+const ev = log.event("http_request");
+ev.set("method", req.method);
+ev.set("path", req.url);
+
+const user = await authenticate(req);
+ev.set("user_id", user.id);
+
+try {
+  const result = await handleRequest(req);
+  ev.set("status", 200);
+} catch (err) {
+  ev.set("status", 500);
+  ev.error(err); // auto-escalates level to "error"
+}
+
+ev.end(); // single log with all context + duration_ms
+
+// Or use TC39 Explicit Resource Management
+{
+  using ev = log.event("db_query");
+  ev.set("table", "users");
+  // auto-emits on scope exit via Symbol.dispose
+}`,
 		},
 		{
 			lang: "typescript",
@@ -360,6 +400,10 @@ function FAQ() {
 		{
 			q: "How does archival work?",
 			a: "Archive old logs to S3 as Parquet files with a single CLI command. DuckDB transparently queries both hot logs in SQLite and cold logs in S3, so search and SQL work across your entire history without loading everything into memory.",
+		},
+		{
+			q: "What are wide events?",
+			a: "Instead of scattering log lines through a request, build one event with all context and emit it at the end. You get a single record with every key-value pair plus automatic duration tracking and level escalation.",
 		},
 		{
 			q: "Does it support authentication?",
