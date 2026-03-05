@@ -172,11 +172,10 @@ export class Logger {
 	}
 
 	event(name: string, meta?: Record<string, unknown>): EventBuilder {
-		return new EventBuilder(
-			name,
-			(level, message, m) => this.log(level, message, m),
-			{ ...this.boundMeta, ...meta },
-		);
+		return new EventBuilder(name, (level, message, m) => this.log(level, message, m), {
+			...this.boundMeta,
+			...meta,
+		});
 	}
 
 	async flush(): Promise<void> {

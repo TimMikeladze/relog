@@ -1295,9 +1295,7 @@ describe("EventBuilder (wide events)", () => {
 			flushInterval: 60000,
 		});
 
-		log.event("bulk_test")
-			.set({ user_id: "usr_1", org_id: "org_1", plan: "pro" })
-			.end();
+		log.event("bulk_test").set({ user_id: "usr_1", org_id: "org_1", plan: "pro" }).end();
 
 		await log.flush();
 		await new Promise((r) => setTimeout(r, 200));
@@ -1366,10 +1364,7 @@ describe("EventBuilder (wide events)", () => {
 			flushInterval: 60000,
 		});
 
-		log.event("slow_query")
-			.set("query", "SELECT * FROM users")
-			.warn("Query took too long")
-			.end();
+		log.event("slow_query").set("query", "SELECT * FROM users").warn("Query took too long").end();
 
 		await log.flush();
 		await new Promise((r) => setTimeout(r, 200));
