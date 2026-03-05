@@ -31,12 +31,22 @@ export interface LogRecord {
 	span_id?: string;
 	project?: string;
 	branch?: string;
+	version?: string;
+	deployment_id?: string;
+	key_prefix?: string;
 	created_at?: number;
 }
 
 export type LogEntry = LogRecord;
 
-export interface LoggerOptions {
+export interface SamplingOptions {
+	/** Sample rate for non-critical events (0-1). Default: 1 (keep all). Only applies to EventBuilder. */
+	sampleRate?: number;
+	/** Events slower than this (ms) are always kept. Default: undefined (disabled). */
+	slowThresholdMs?: number;
+}
+
+export interface LoggerOptions extends SamplingOptions {
 	url?: string;
 	service?: string;
 	auth?: string;
@@ -50,6 +60,8 @@ export interface LoggerOptions {
 	spanId?: string;
 	project?: string;
 	branch?: string;
+	version?: string;
+	deploymentId?: string;
 	onError?: (error: Error, batch: LogRecord[]) => void;
 }
 
@@ -65,9 +77,10 @@ export interface AutoPruneConfig {
 export interface ServerConfig {
 	port: number;
 	dbPath: string;
-	ingestKey?: string;
-	readKey?: string;
-	adminKey?: string;
+	ingestKeys?: string[];
+	readKeys?: string[];
+	adminKeys?: string[];
+	keyPrefixLength?: number;
 	cors?: boolean | string | string[];
 	maxBodySize?: number;
 	maxBatchSize?: number;
@@ -102,6 +115,8 @@ export interface StreamFilters {
 	trace_id?: string;
 	project?: string;
 	branch?: string;
+	version?: string;
+	deployment_id?: string;
 }
 
 export interface ArchiveConfig {
@@ -138,4 +153,6 @@ export interface IngestPayload {
 	span_id?: string;
 	project?: string;
 	branch?: string;
+	version?: string;
+	deployment_id?: string;
 }

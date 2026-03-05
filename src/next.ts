@@ -12,6 +12,8 @@ export interface RelogNextConfig {
 	traceHeader?: string;
 	batchSize?: number;
 	flushInterval?: number;
+	version?: string;
+	deploymentId?: string;
 }
 
 let singleton: Logger | null = null;
@@ -39,6 +41,8 @@ function resolveConfig(config: RelogNextConfig) {
 		traceHeader: config.traceHeader ?? "x-trace-id",
 		batchSize: config.batchSize,
 		flushInterval: config.flushInterval,
+		version: config.version,
+		deploymentId: config.deploymentId,
 	} as const;
 }
 
@@ -97,7 +101,7 @@ function generateTraceId(): string {
 		.join("");
 }
 
-export function createRelog(config: RelogNextConfig = {}) {
+export function createLogger(config: RelogNextConfig = {}) {
 	const resolved = resolveConfig(config);
 
 	async function register() {
@@ -128,6 +132,8 @@ export function createRelog(config: RelogNextConfig = {}) {
 				service: resolved.service,
 				level: resolved.level,
 				console: false,
+				version: resolved.version,
+				deploymentId: resolved.deploymentId,
 			},
 			singletonTransport,
 		);
@@ -268,7 +274,7 @@ function warnIfNoSingleton(): void {
 	if (!singleton && !logProxyWarned) {
 		logProxyWarned = true;
 		originalConsole.warn(
-			"[relog.dev] log.* called before register(). Logs will be dropped until createRelog().register() is called.",
+			"[relog.dev] log.* called before register(). Logs will be dropped until createLogger().register() is called.",
 		);
 	}
 }

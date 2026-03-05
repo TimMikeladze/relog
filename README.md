@@ -7,12 +7,14 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Zero-dependency server** — single SQLite file, WAL mode, no Redis or external databases
 - **Batching client SDK** — automatic batching, retries with exponential backoff, buffer overflow protection
 - **Wide events** — build one event per request with all context, emit at the end with auto-duration and level escalation
+- **Tail sampling** — client-side sampling that always keeps errors and slow requests, drops the rest at a configurable rate
 - **Real-time streaming** — SSE-based log tailing with server-side filtering
 - **Read-only SQL queries** — run arbitrary SELECT/EXPLAIN/PRAGMA against the log database
 - **Distributed tracing** — first-class `trace_id` and `span_id` support
 - **Project & branch tracking** — auto-detected from git, filterable across all endpoints
+- **Deployment context** — first-class `version` and `deployment_id` fields for tracking releases
 - **Child loggers** — inherit service, meta, and trace context from parent loggers
-- **Role-based API keys** — three roles (ingest, read, admin) with hierarchical Bearer token auth
+- **Role-based API keys** — three roles (ingest, read, admin) with hierarchical Bearer token auth; supports multiple keys per role for multi-app environments
 - **Browser logging** — client-side logger with batched proxy delivery, error capture, and session tracking
 - **Next.js integration** — drop-in console capture, request logging, error tracking, and browser proxy
 - **MCP server** — AI agents (Claude Code, Cursor, etc.) can query logs via Model Context Protocol
@@ -71,7 +73,7 @@ The `relog.dev` package includes the server, CLI, and client SDK. Import from th
 import { startServer } from "relog.dev"; // server
 import { createLogger } from "relog.dev/client"; // client SDK
 import { createMcpServer } from "relog.dev/mcp"; // MCP server
-import { createRelog } from "relog.dev/next"; // Next.js integration
+import { createLogger } from "relog.dev/next"; // Next.js integration
 import { log } from "relog.dev/browser"; // Browser client
 ```
 
@@ -151,20 +153,24 @@ bunx relog.dev tail
 
 | Option          | Type                     | Default          | Description                                                   |
 | --------------- | ------------------------ | ---------------- | ------------------------------------------------------------- |
-| `url`           | `string`                 | —                | Server URL. Omit for console-only logging                     |
-| `service`       | `string`                 | —                | Service name attached to every log                            |
-| `level`         | `LogLevel`               | `"info"`         | Minimum level (`trace` `debug` `info` `warn` `error` `fatal`) |
-| `auth`          | `string`                 | `RELOG_AUTH` env | API key sent as Bearer token                                  |
-| `console`       | `boolean`                | `true` in dev    | Print to stdout (`false` when `NODE_ENV=production`)          |
-| `project`       | `string`                 | auto (git)       | Project name. Also reads `RELOG_PROJECT` env                  |
-| `branch`        | `string`                 | auto (git)       | Git branch. Also reads `RELOG_BRANCH` env                     |
-| `batchSize`     | `number`                 | `50`             | Logs per HTTP batch                                           |
-| `flushInterval` | `number`                 | `5000`           | Auto-flush interval (ms)                                      |
-| `maxBufferSize` | `number`                 | `10000`          | Max buffered logs before oldest are dropped                   |
-| `meta`          | `object`                 | —                | Default metadata merged into every log                        |
-| `traceId`       | `string`                 | —                | Trace ID attached to every log                                |
-| `spanId`        | `string`                 | —                | Span ID attached to every log                                 |
-| `onError`       | `(error, batch) => void` | —                | Custom error handler for failed sends                         |
+| `url`              | `string`                 | —                | Server URL. Omit for console-only logging                     |
+| `service`          | `string`                 | —                | Service name attached to every log                            |
+| `level`            | `LogLevel`               | `"info"`         | Minimum level (`trace` `debug` `info` `warn` `error` `fatal`) |
+| `auth`             | `string`                 | `RELOG_AUTH` env | API key sent as Bearer token                                  |
+| `console`          | `boolean`                | `true` in dev    | Print to stdout (`false` when `NODE_ENV=production`)          |
+| `project`          | `string`                 | auto (git)       | Project name. Also reads `RELOG_PROJECT` env                  |
+| `branch`           | `string`                 | auto (git)       | Git branch. Also reads `RELOG_BRANCH` env                     |
+| `version`          | `string`                 | —                | App version (e.g. `"1.2.3"`, git SHA)                        |
+| `deploymentId`     | `string`                 | —                | Deployment identifier                                        |
+| `sampleRate`       | `number`                 | `1`              | Sample rate for wide events (0–1). Errors and slow events are always kept |
+| `slowThresholdMs`  | `number`                 | —                | Events slower than this (ms) are always kept regardless of sample rate    |
+| `batchSize`        | `number`                 | `50`             | Logs per HTTP batch                                           |
+| `flushInterval`    | `number`                 | `5000`           | Auto-flush interval (ms)                                      |
+| `maxBufferSize`    | `number`                 | `10000`          | Max buffered logs before oldest are dropped                   |
+| `meta`             | `object`                 | —                | Default metadata merged into every log                        |
+| `traceId`          | `string`                 | —                | Trace ID attached to every log                                |
+| `spanId`           | `string`                 | —                | Span ID attached to every log                                 |
+| `onError`          | `(error, batch) => void` | —                | Custom error handler for failed sends                         |
 
 ### Child Loggers
 
@@ -196,8 +202,7 @@ Instead of scattering log lines throughout a request, build one comprehensive ev
 
 ```typescript
 const ev = logger.event("http_request");
-ev.set("method", req.method);
-ev.set("path", req.url);
+ev.request(req);                        // auto-extracts method, path, user-agent, trace ID from headers
 
 const user = await authenticate(req);
 ev.set("user_id", user.id);
@@ -205,17 +210,18 @@ ev.set("org_id", user.orgId);
 
 try {
 	const result = await handleRequest(req);
-	ev.set("status", 200);
+	ev.response(res);                    // auto-extracts status, escalates to error on 500+
 	ev.set("response_size", result.length);
 } catch (err) {
-	ev.set("status", 500);
-	ev.error(err); // records error details + auto-escalates level to "error"
+	ev.error(err);                       // records error details + auto-escalates level to "error"
 }
 
 ev.end(); // emits a single log record with all context + duration_ms
 ```
 
 The emitted record contains everything: `message` is the event name, `meta` holds all accumulated key-value pairs plus `duration_ms` and `event: true`, and the `level` is auto-escalated based on recorded errors/warnings.
+
+**`.request(req)` and `.response(res)`:** Auto-extract HTTP context from both Web API (`Request`/`Response`) and Node.js (`IncomingMessage`/`ServerResponse`) objects via duck-typing. Extracts `http_method`, `http_path`, `http_status`, `user_agent`, and trace IDs from headers. A response with status >= 500 auto-escalates the event level to `error`.
 
 **Chainable API:**
 
@@ -240,14 +246,14 @@ ev.set({ method: "POST", path: "/api/pay", user_id: "usr_1" });
 }
 ```
 
-**Level escalation:** The event starts at `info`. Calling `.warn()` escalates to `warn`, `.error()` escalates to `error`. The level never downgrades — `error` always wins over `warn`.
+**Level escalation:** The event starts at `info`. Calling `.warn()` escalates to `warn`, `.error()` escalates to `error`. A `.response()` with status >= 500 also escalates to `error`. The level never downgrades — `error` always wins over `warn`.
 
-**Inherits context:** Events created from child loggers automatically include all inherited metadata, service, project, branch, and trace IDs.
+**Inherits context:** Events created from child loggers automatically include all inherited metadata, service, project, branch, version, deployment ID, and trace IDs.
 
 ```typescript
 const reqLog = log.child({ requestId: "abc-123", traceId: "t-1" });
 const ev = reqLog.event("process_payment");
-// ev already has requestId, service, project, branch, trace_id
+// ev already has requestId, service, project, branch, version, trace_id
 ev.set("amount", 99.99);
 ev.end();
 ```
@@ -255,8 +261,48 @@ ev.end();
 **Console output for wide events shows duration inline:**
 
 ```
-14:32:05.123 INFO  [my-app@main] [api] http_request (142.5ms) {"method":"POST","path":"/checkout","status":200}
+14:32:05.123 INFO  [my-app@main v1.2.3] [api] http_request (142.5ms) {"method":"POST","path":"/checkout","status":200}
 ```
+
+### Tail Sampling
+
+Tail sampling makes the keep/drop decision *after* the event completes, so it has full context about what happened. This is the approach recommended by [loggingsucks.com](https://loggingsucks.com/) — always keep the important events, sample the rest.
+
+```typescript
+const log = createLogger({
+	url: "http://localhost:3485",
+	service: "api",
+	sampleRate: 0.05,       // keep 5% of normal events
+	slowThresholdMs: 500,   // always keep events slower than 500ms
+});
+
+// Errors are ALWAYS kept (level >= error)
+// Slow events are ALWAYS kept (duration_ms > slowThresholdMs)
+// Everything else: 5% chance of being kept
+
+const ev = log.event("http_request");
+ev.request(req);
+// ... handle request ...
+ev.response(res);
+ev.end(); // sampling decision happens here, at the end
+```
+
+**Force-keep with `.keep()`:** Mark specific events as must-keep regardless of sample rate — useful for VIP traffic, flagged sessions, or feature flag rollouts:
+
+```typescript
+const ev = log.event("http_request");
+ev.request(req);
+
+if (user.tier === "enterprise") {
+	ev.keep(); // always emitted, ignores sample rate
+}
+
+ev.end();
+```
+
+**Sampled events include `sample_rate` in metadata** so you can extrapolate totals in queries (e.g., 5 sampled events at 5% ≈ 100 actual events).
+
+Sampling only applies to wide events (`logger.event()`), not individual log calls (`logger.info()`, etc.). When `sampleRate` is omitted or set to `1`, all events are kept (default behavior).
 
 ### Error Logging
 
@@ -298,16 +344,35 @@ Start the log server.
 relog.dev start --port 3485 --db relog.db --admin-key mykey --cors true
 ```
 
-| Option         | Default    | Description                                      |
-| -------------- | ---------- | ------------------------------------------------ |
-| `--port`       | `3485`     | Port to listen on                                |
-| `--db`         | `relog.db` | SQLite database file path                        |
-| `--ingest-key` | —          | API key for ingest role (`RELOG_INGEST_KEY` env) |
-| `--read-key`   | —          | API key for read role (`RELOG_READ_KEY` env)     |
-| `--admin-key`  | —          | API key for admin role (`RELOG_ADMIN_KEY` env)   |
-| `--cors`       | `false`    | Enable CORS headers                              |
+| Option         | Default    | Description                                                          |
+| -------------- | ---------- | -------------------------------------------------------------------- |
+| `--port`       | `3485`     | Port to listen on                                                    |
+| `--db`         | `relog.db` | SQLite database file path                                            |
+| `--ingest-key` | —          | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars |
+| `--read-key`   | —          | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars     |
+| `--admin-key`  | —          | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
+| `--key-prefix-length` | `6` | Number of API key characters stored per log for auditing (0 to disable) |
+| `--cors`       | `false`    | Enable CORS headers                                                  |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
+
+**Multiple keys:** Each role supports multiple keys. You can comma-separate them in a single flag, or use individually named env vars — the server automatically picks up any env var matching the prefix:
+
+```bash
+# via CLI flags (comma-separated)
+relog.dev start \
+  --ingest-key "app1-key,app2-key,app3-key" \
+  --admin-key "ops-key,ci-key"
+
+# via env vars (auto-discovered by prefix)
+RELOG_INGEST_KEY_APP1=key1 \
+RELOG_INGEST_KEY_APP2=key2 \
+RELOG_ADMIN_KEY=ops-key \
+RELOG_ADMIN_KEY_CI=ci-key \
+relog.dev start
+```
+
+This lets you issue separate keys per app or team and revoke individual keys without affecting others. Ideal for Docker/k8s where each key can be injected as a separate secret.
 
 ### `relog.dev send`
 
@@ -465,7 +530,7 @@ With auth:
 
 | Tool              | Description                                                                     |
 | ----------------- | ------------------------------------------------------------------------------- |
-| `search_logs`     | Search and filter logs by level, service, project, branch, text, and time range |
+| `search_logs`     | Search and filter logs by level, service, project, branch, version, deployment_id, text, and time range |
 | `query_logs`      | Run read-only SQL against the logs table                                        |
 | `get_stats`       | Server health, log counts by level, service breakdown, and project breakdown    |
 | `tail_logs`       | Get the most recent logs                                                        |
@@ -501,9 +566,9 @@ relog.dev provides a drop-in integration for Next.js that captures console outpu
 **`instrumentation.ts`** (project root):
 
 ```typescript
-import { createRelog } from "relog.dev/next";
+import { createLogger } from "relog.dev/next";
 
-const relog = createRelog({
+const relog = createLogger({
 	url: "http://localhost:3485",
 	service: "my-app",
 });
@@ -562,6 +627,8 @@ export default relogMiddleware(myMiddleware);
 | `level`          | `LogLevel` | `"info"`                                   | Minimum log level                       |
 | `captureConsole` | `boolean`  | `true`                                     | Patch console methods to capture output |
 | `traceHeader`    | `string`   | `"x-trace-id"`                             | Response header name for trace IDs      |
+| `version`        | `string`   | —                                          | App version                             |
+| `deploymentId`   | `string`   | —                                          | Deployment identifier                   |
 | `batchSize`      | `number`   | `50`                                       | Logs per HTTP batch                     |
 | `flushInterval`  | `number`   | `5000`                                     | Auto-flush interval (ms)                |
 
@@ -590,9 +657,9 @@ The singleton auto-initializes on first use. Logs are batched and sent to `/api/
 ### Configured Usage
 
 ```typescript
-import { init } from "relog.dev/browser";
+import { createLogger } from "relog.dev/browser";
 
-const log = init({
+const log = createLogger({
 	endpoint: "/api/logs",
 	project: "my-app",
 	service: "web",
@@ -649,6 +716,8 @@ By default, `captureErrors: true` hooks `window.onerror` and `unhandledrejection
 | `level`          | `LogLevel` | `"info"`       | Minimum log level                               |
 | `service`        | `string`   | —              | Service name                                    |
 | `project`        | `string`   | —              | Project name                                    |
+| `version`        | `string`   | —              | App version                                     |
+| `deploymentId`   | `string`   | —              | Deployment identifier                           |
 | `meta`           | `object`   | —              | Default metadata merged into every log          |
 | `batchSize`      | `number`   | `25`           | Logs per HTTP batch                             |
 | `flushInterval`  | `number`   | `3000`         | Auto-flush interval (ms)                        |
@@ -729,8 +798,10 @@ curl -X POST http://localhost:3485/ingest \
 | `pid`       | no       | Process ID                                         |
 | `trace_id`  | no       | Trace ID for distributed tracing                   |
 | `span_id`   | no       | Span ID for distributed tracing                    |
-| `project`   | no       | Project name                                       |
-| `branch`    | no       | Git branch                                         |
+| `project`       | no       | Project name                                       |
+| `branch`        | no       | Git branch                                         |
+| `version`       | no       | App version                                        |
+| `deployment_id` | no       | Deployment identifier                              |
 
 ### `GET /logs`
 
@@ -744,9 +815,11 @@ curl "http://localhost:3485/logs?level=error&from=1h&service=api&project=my-app&
 | --------- | ----------------------------------------------------------- |
 | `level`   | Filter by log level                                         |
 | `service` | Filter by service name                                      |
-| `project` | Filter by project                                           |
-| `branch`  | Filter by branch                                            |
-| `grep`    | Text search in messages                                     |
+| `project`       | Filter by project                                           |
+| `branch`        | Filter by branch                                            |
+| `version`       | Filter by version                                           |
+| `deployment_id` | Filter by deployment ID                                     |
+| `grep`          | Text search in messages                                     |
 | `from`    | Start time — ISO 8601 or relative (`30s`, `5m`, `1h`, `7d`) |
 | `to`      | End time — ISO 8601 or relative                             |
 | `limit`   | Max results (default 100, max 10000)                        |
@@ -767,8 +840,10 @@ curl -N "http://localhost:3485/stream?level=error&project=my-app"
 | `level`    | Filter by log level    |
 | `service`  | Filter by service name |
 | `trace_id` | Filter by trace ID     |
-| `project`  | Filter by project      |
-| `branch`   | Filter by branch       |
+| `project`       | Filter by project         |
+| `branch`        | Filter by branch          |
+| `version`       | Filter by version         |
+| `deployment_id` | Filter by deployment ID   |
 
 ### `POST /query`
 
@@ -820,11 +895,14 @@ CREATE TABLE logs (
   span_id TEXT,
   project TEXT,
   branch TEXT,
+  version TEXT,
+  deployment_id TEXT,
+  key_prefix TEXT,
   created_at INTEGER NOT NULL
 );
 ```
 
-Indexed on: `created_at`, `level`, `service`, `trace_id`, `project`, `branch`, `(level, created_at)`, `(service, created_at)`, `(project, branch, created_at)`.
+Indexed on: `created_at`, `level`, `service`, `trace_id`, `project`, `branch`, `version`, `deployment_id`, `(level, created_at)`, `(service, created_at)`, `(project, branch, created_at)`.
 
 ## Programmatic Server
 
@@ -834,9 +912,9 @@ import { startServer } from "relog.dev";
 const { server, db, streamManager, shutdown } = startServer({
 	port: 3485,
 	dbPath: "relog.db",
-	ingestKey: "key-for-apps",
-	readKey: "key-for-agents",
-	adminKey: "key-for-admin",
+	ingestKeys: ["key-for-apps"],
+	readKeys: ["key-for-agents"],
+	adminKeys: ["key-for-admin"],
 	cors: true,
 });
 
@@ -850,9 +928,10 @@ shutdown();
 | ------------------ | ------------------------------- | --------- | ---------------------------------------- |
 | `port`             | `number`                        | —         | Port to listen on                        |
 | `dbPath`           | `string`                        | —         | SQLite database file path                |
-| `ingestKey`        | `string`                        | —         | API key for ingest role                  |
-| `readKey`          | `string`                        | —         | API key for read role (includes ingest)  |
-| `adminKey`         | `string`                        | —         | API key for admin role (includes all)    |
+| `ingestKeys`       | `string[]`                      | —         | API key(s) for ingest role               |
+| `readKeys`         | `string[]`                      | —         | API key(s) for read role (includes ingest) |
+| `adminKeys`        | `string[]`                      | —         | API key(s) for admin role (includes all) |
+| `keyPrefixLength`  | `number`                        | `6`       | Characters of API key stored per log (0 to disable) |
 | `cors`             | `boolean \| string \| string[]` | —         | CORS origin(s) or `true` for `*`         |
 | `maxBodySize`      | `number`                        | `5242880` | Max request body size in bytes (5 MB)    |
 | `maxBatchSize`     | `number`                        | `1000`    | Max log entries per ingest request       |
@@ -864,9 +943,9 @@ shutdown();
 | --------------------------- | ---------------------------------------------------------------- |
 | `RELOG_URL`                 | Default relog.dev startr URL for the Next.js integration         |
 | `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands |
-| `RELOG_INGEST_KEY`          | API key for ingest role (server `--ingest-key`)                  |
-| `RELOG_READ_KEY`            | API key for read role (server `--read-key`)                      |
-| `RELOG_ADMIN_KEY`           | API key for admin role (server `--admin-key`)                    |
+| `RELOG_INGEST_KEY*`         | API key(s) for ingest role — any env starting with `RELOG_INGEST_KEY` is collected |
+| `RELOG_READ_KEY*`           | API key(s) for read role — any env starting with `RELOG_READ_KEY` is collected     |
+| `RELOG_ADMIN_KEY*`          | API key(s) for admin role — any env starting with `RELOG_ADMIN_KEY` is collected   |
 | `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                             |
 | `RELOG_PROJECT`             | Override auto-detected project name                              |
 | `RELOG_BRANCH`              | Override auto-detected git branch                                |

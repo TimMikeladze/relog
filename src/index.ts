@@ -9,6 +9,7 @@ export type {
 	LogLevel,
 	LogRecord,
 	QueryResult,
+	SamplingOptions,
 	ServerConfig,
 	StreamFilters,
 } from "./types.ts";

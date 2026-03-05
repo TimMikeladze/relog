@@ -1,7 +1,7 @@
 import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
 import type { ServerConfig } from "../types.ts";
-import { type AuthKeys, checkRole } from "./middleware/auth.ts";
+import { type AuthKeys, type AuthResult, checkRole } from "./middleware/auth.ts";
 import { handleArchive } from "./routes/archive.ts";
 import { handleHealth } from "./routes/health.ts";
 import { handleIngest } from "./routes/ingest.ts";
@@ -101,9 +101,9 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	}
 
 	const keys: AuthKeys = {
-		ingestKey: config.ingestKey,
-		readKey: config.readKey,
-		adminKey: config.adminKey,
+		ingestKeys: config.ingestKeys,
+		readKeys: config.readKeys,
+		adminKeys: config.adminKeys,
 	};
 
 	const server = Bun.serve({
@@ -134,11 +134,12 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				}
 
 				let response: Response;
-				let authError: Response | null;
+				let auth: AuthResult;
+				const prefixLen = config.keyPrefixLength ?? 6;
 
 				if (method === "POST" && path === "/ingest") {
-					authError = checkRole(request, "ingest", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "ingest", keys, prefixLen);
+					if (auth.error) return auth.error;
 					if (!ingestLimiter.check()) {
 						response = Response.json(
 							{ error: "Too many requests" },
@@ -148,32 +149,32 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 							},
 						);
 					} else {
-						response = await handleIngest(request, db, maxBatchSize);
+						response = await handleIngest(request, db, maxBatchSize, auth.keyPrefix);
 						if (response.status === 201) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/query") {
-					authError = checkRole(request, "read", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "read", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = await handleQuery(request, duckdb);
 				} else if (method === "POST" && path === "/query/stream") {
-					authError = checkRole(request, "read", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "read", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = await handleQueryStream(request, duckdb);
 				} else if (method === "POST" && path === "/archive") {
-					authError = checkRole(request, "admin", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "admin", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = await handleArchive(request, db, config.archive, duckdb);
 				} else if (method === "POST" && path === "/prune") {
-					authError = checkRole(request, "admin", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "admin", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = await handlePrune(request, db);
 				} else if (method === "GET" && path === "/logs") {
-					authError = checkRole(request, "read", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "read", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = await handleLogs(request, duckdb);
 				} else if (method === "GET" && path === "/stream") {
-					authError = checkRole(request, "read", keys);
-					if (authError) return authError;
+					auth = checkRole(request, "read", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = handleStream(request, streamManager, db);
 				} else {
 					response = Response.json({ error: "Not found" }, { status: 404 });

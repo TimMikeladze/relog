@@ -20,6 +20,8 @@ export interface BrowserLoggerOptions {
 	level?: LogLevel;
 	service?: string;
 	project?: string;
+	version?: string;
+	deploymentId?: string;
 	meta?: Record<string, unknown>;
 	/** Auto-capture window.onerror + unhandledrejection (default: true) */
 	captureErrors?: boolean;
@@ -194,6 +196,8 @@ export class BrowserLogger {
 	private level: LogLevel;
 	private service: string | undefined;
 	private project: string | undefined;
+	private version: string | undefined;
+	private deploymentId: string | undefined;
 	private boundMeta: Record<string, unknown>;
 	private errorCleanup: (() => void) | null = null;
 	private consoleCleanup: (() => void) | null = null;
@@ -207,6 +211,8 @@ export class BrowserLogger {
 		this.level = options.level ?? "info";
 		this.service = options.service;
 		this.project = options.project;
+		this.version = options.version;
+		this.deploymentId = options.deploymentId;
 		this.boundMeta = options.meta ?? {};
 
 		if (options.captureErrors ?? true) {
@@ -229,6 +235,8 @@ export class BrowserLogger {
 			message,
 			service: this.service,
 			project: this.project,
+			version: this.version,
+			deployment_id: this.deploymentId,
 			host: typeof location !== "undefined" ? location.hostname : undefined,
 			meta: {
 				...merged,
@@ -311,6 +319,8 @@ export class BrowserLogger {
 			level: this.level,
 			service: this.service,
 			project: this.project,
+			version: this.version,
+			deploymentId: this.deploymentId,
 			meta: { ...this.boundMeta, ...meta },
 			captureErrors: false,
 			captureConsole: false,
@@ -388,7 +398,7 @@ export class BrowserLogger {
 
 let singleton: BrowserLogger | null = null;
 
-export function createRelog(options: BrowserLoggerOptions = {}): BrowserLogger {
+export function createLogger(options: BrowserLoggerOptions = {}): BrowserLogger {
 	if (singleton) {
 		singleton.destroy();
 	}

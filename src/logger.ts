@@ -38,9 +38,13 @@ export class Logger {
 	private spanId: string | undefined;
 	private project: string | undefined;
 	private branch: string | undefined;
+	private version: string | undefined;
+	private deploymentId: string | undefined;
 	private host: string;
 	private pid: number;
 	private isChild: boolean;
+	private sampleRate: number | undefined;
+	private slowThresholdMs: number | undefined;
 
 	constructor(options: LoggerOptions = {}, parentTransport?: Transport) {
 		this.service = options.service;
@@ -50,9 +54,13 @@ export class Logger {
 		this.spanId = options.spanId;
 		this.project = options.project ?? inferGitProject();
 		this.branch = options.branch ?? inferGitBranch();
+		this.version = options.version;
+		this.deploymentId = options.deploymentId;
 		this.host = HOSTNAME;
 		this.pid = PID;
 		this.isChild = !!parentTransport;
+		this.sampleRate = options.sampleRate;
+		this.slowThresholdMs = options.slowThresholdMs;
 
 		this.consoleEnabled = options.console ?? process.env.NODE_ENV !== "production";
 
@@ -78,9 +86,13 @@ export class Logger {
 			spanId?: string;
 			project?: string;
 			branch?: string;
+			version?: string;
+			deploymentId?: string;
+			sampleRate?: number;
+			slowThresholdMs?: number;
 		},
 	): Logger {
-		const { traceId, spanId, project, branch, ...rest } = meta;
+		const { traceId, spanId, project, branch, version, deploymentId, sampleRate, slowThresholdMs, ...rest } = meta;
 		const childLogger = new Logger(
 			{
 				service: this.service,
@@ -91,6 +103,10 @@ export class Logger {
 				spanId: spanId ?? this.spanId,
 				project: project ?? this.project,
 				branch: branch ?? this.branch,
+				version: version ?? this.version,
+				deploymentId: deploymentId ?? this.deploymentId,
+				sampleRate: sampleRate ?? this.sampleRate,
+				slowThresholdMs: slowThresholdMs ?? this.slowThresholdMs,
 			},
 			this.transport ?? undefined,
 		);
@@ -136,6 +152,8 @@ export class Logger {
 			span_id: this.spanId,
 			project: this.project,
 			branch: this.branch,
+			version: this.version,
+			deployment_id: this.deploymentId,
 		};
 
 		if (this.consoleEnabled) {
@@ -172,10 +190,12 @@ export class Logger {
 	}
 
 	event(name: string, meta?: Record<string, unknown>): EventBuilder {
-		return new EventBuilder(name, (level, message, m) => this.log(level, message, m), {
-			...this.boundMeta,
-			...meta,
-		});
+		return new EventBuilder(
+			name,
+			(level, message, m) => this.log(level, message, m),
+			{ ...this.boundMeta, ...meta },
+			{ sampleRate: this.sampleRate, slowThresholdMs: this.slowThresholdMs },
+		);
 	}
 
 	async flush(): Promise<void> {
