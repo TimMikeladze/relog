@@ -151,26 +151,26 @@ bunx relog.dev tail
 
 ### `createLogger(options)`
 
-| Option          | Type                     | Default          | Description                                                   |
-| --------------- | ------------------------ | ---------------- | ------------------------------------------------------------- |
-| `url`              | `string`                 | —                | Server URL. Omit for console-only logging                     |
-| `service`          | `string`                 | —                | Service name attached to every log                            |
-| `level`            | `LogLevel`               | `"info"`         | Minimum level (`trace` `debug` `info` `warn` `error` `fatal`) |
-| `auth`             | `string`                 | `RELOG_AUTH` env | API key sent as Bearer token                                  |
-| `console`          | `boolean`                | `true` in dev    | Print to stdout (`false` when `NODE_ENV=production`)          |
-| `project`          | `string`                 | auto (git)       | Project name. Also reads `RELOG_PROJECT` env                  |
-| `branch`           | `string`                 | auto (git)       | Git branch. Also reads `RELOG_BRANCH` env                     |
-| `version`          | `string`                 | —                | App version (e.g. `"1.2.3"`, git SHA)                        |
-| `deploymentId`     | `string`                 | —                | Deployment identifier                                        |
-| `sampleRate`       | `number`                 | `1`              | Sample rate for wide events (0–1). Errors and slow events are always kept |
-| `slowThresholdMs`  | `number`                 | —                | Events slower than this (ms) are always kept regardless of sample rate    |
-| `batchSize`        | `number`                 | `50`             | Logs per HTTP batch                                           |
-| `flushInterval`    | `number`                 | `5000`           | Auto-flush interval (ms)                                      |
-| `maxBufferSize`    | `number`                 | `10000`          | Max buffered logs before oldest are dropped                   |
-| `meta`             | `object`                 | —                | Default metadata merged into every log                        |
-| `traceId`          | `string`                 | —                | Trace ID attached to every log                                |
-| `spanId`           | `string`                 | —                | Span ID attached to every log                                 |
-| `onError`          | `(error, batch) => void` | —                | Custom error handler for failed sends                         |
+| Option            | Type                     | Default          | Description                                                               |
+| ----------------- | ------------------------ | ---------------- | ------------------------------------------------------------------------- |
+| `url`             | `string`                 | —                | Server URL. Omit for console-only logging                                 |
+| `service`         | `string`                 | —                | Service name attached to every log                                        |
+| `level`           | `LogLevel`               | `"info"`         | Minimum level (`trace` `debug` `info` `warn` `error` `fatal`)             |
+| `auth`            | `string`                 | `RELOG_AUTH` env | API key sent as Bearer token                                              |
+| `console`         | `boolean`                | `true` in dev    | Print to stdout (`false` when `NODE_ENV=production`)                      |
+| `project`         | `string`                 | auto (git)       | Project name. Also reads `RELOG_PROJECT` env                              |
+| `branch`          | `string`                 | auto (git)       | Git branch. Also reads `RELOG_BRANCH` env                                 |
+| `version`         | `string`                 | —                | App version (e.g. `"1.2.3"`, git SHA)                                     |
+| `deploymentId`    | `string`                 | —                | Deployment identifier                                                     |
+| `sampleRate`      | `number`                 | `1`              | Sample rate for wide events (0–1). Errors and slow events are always kept |
+| `slowThresholdMs` | `number`                 | —                | Events slower than this (ms) are always kept regardless of sample rate    |
+| `batchSize`       | `number`                 | `50`             | Logs per HTTP batch                                                       |
+| `flushInterval`   | `number`                 | `5000`           | Auto-flush interval (ms)                                                  |
+| `maxBufferSize`   | `number`                 | `10000`          | Max buffered logs before oldest are dropped                               |
+| `meta`            | `object`                 | —                | Default metadata merged into every log                                    |
+| `traceId`         | `string`                 | —                | Trace ID attached to every log                                            |
+| `spanId`          | `string`                 | —                | Span ID attached to every log                                             |
+| `onError`         | `(error, batch) => void` | —                | Custom error handler for failed sends                                     |
 
 ### Child Loggers
 
@@ -202,7 +202,7 @@ Instead of scattering log lines throughout a request, build one comprehensive ev
 
 ```typescript
 const ev = logger.event("http_request");
-ev.request(req);                        // auto-extracts method, path, user-agent, trace ID from headers
+ev.request(req); // auto-extracts method, path, user-agent, trace ID from headers
 
 const user = await authenticate(req);
 ev.set("user_id", user.id);
@@ -210,10 +210,10 @@ ev.set("org_id", user.orgId);
 
 try {
 	const result = await handleRequest(req);
-	ev.response(res);                    // auto-extracts status, escalates to error on 500+
+	ev.response(res); // auto-extracts status, escalates to error on 500+
 	ev.set("response_size", result.length);
 } catch (err) {
-	ev.error(err);                       // records error details + auto-escalates level to "error"
+	ev.error(err); // records error details + auto-escalates level to "error"
 }
 
 ev.end(); // emits a single log record with all context + duration_ms
@@ -266,14 +266,14 @@ ev.end();
 
 ### Tail Sampling
 
-Tail sampling makes the keep/drop decision *after* the event completes, so it has full context about what happened. This is the approach recommended by [loggingsucks.com](https://loggingsucks.com/) — always keep the important events, sample the rest.
+Tail sampling makes the keep/drop decision _after_ the event completes, so it has full context about what happened. This is the approach recommended by [loggingsucks.com](https://loggingsucks.com/) — always keep the important events, sample the rest.
 
 ```typescript
 const log = createLogger({
 	url: "http://localhost:3485",
 	service: "api",
-	sampleRate: 0.05,       // keep 5% of normal events
-	slowThresholdMs: 500,   // always keep events slower than 500ms
+	sampleRate: 0.05, // keep 5% of normal events
+	slowThresholdMs: 500, // always keep events slower than 500ms
 });
 
 // Errors are ALWAYS kept (level >= error)
@@ -344,15 +344,15 @@ Start the log server.
 relog.dev start --port 3485 --db relog.db --admin-key mykey --cors true
 ```
 
-| Option         | Default    | Description                                                          |
-| -------------- | ---------- | -------------------------------------------------------------------- |
-| `--port`       | `3485`     | Port to listen on                                                    |
-| `--db`         | `relog.db` | SQLite database file path                                            |
-| `--ingest-key` | —          | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars |
-| `--read-key`   | —          | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars     |
-| `--admin-key`  | —          | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
-| `--key-prefix-length` | `6` | Number of API key characters stored per log for auditing (0 to disable) |
-| `--cors`       | `false`    | Enable CORS headers                                                  |
+| Option                | Default    | Description                                                                          |
+| --------------------- | ---------- | ------------------------------------------------------------------------------------ |
+| `--port`              | `3485`     | Port to listen on                                                                    |
+| `--db`                | `relog.db` | SQLite database file path                                                            |
+| `--ingest-key`        | —          | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars |
+| `--read-key`          | —          | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars     |
+| `--admin-key`         | —          | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
+| `--key-prefix-length` | `6`        | Number of API key characters stored per log for auditing (0 to disable)              |
+| `--cors`              | `false`    | Enable CORS headers                                                                  |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
@@ -528,13 +528,13 @@ With auth:
 
 ### Available Tools
 
-| Tool              | Description                                                                     |
-| ----------------- | ------------------------------------------------------------------------------- |
+| Tool              | Description                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------- |
 | `search_logs`     | Search and filter logs by level, service, project, branch, version, deployment_id, text, and time range |
-| `query_logs`      | Run read-only SQL against the logs table                                        |
-| `get_stats`       | Server health, log counts by level, service breakdown, and project breakdown    |
-| `tail_logs`       | Get the most recent logs                                                        |
-| `get_log_context` | Get logs surrounding a specific log ID (before/after context)                   |
+| `query_logs`      | Run read-only SQL against the logs table                                                                |
+| `get_stats`       | Server health, log counts by level, service breakdown, and project breakdown                            |
+| `tail_logs`       | Get the most recent logs                                                                                |
+| `get_log_context` | Get logs surrounding a specific log ID (before/after context)                                           |
 
 ### Programmatic Use
 
@@ -787,17 +787,17 @@ curl -X POST http://localhost:3485/ingest \
   }'
 ```
 
-| Field       | Required | Description                                        |
-| ----------- | -------- | -------------------------------------------------- |
-| `level`     | yes      | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
-| `message`   | yes      | Log message string                                 |
-| `timestamp` | no       | ISO 8601 timestamp (server time if omitted)        |
-| `meta`      | no       | Arbitrary metadata object                          |
-| `service`   | no       | Service name                                       |
-| `host`      | no       | Hostname                                           |
-| `pid`       | no       | Process ID                                         |
-| `trace_id`  | no       | Trace ID for distributed tracing                   |
-| `span_id`   | no       | Span ID for distributed tracing                    |
+| Field           | Required | Description                                        |
+| --------------- | -------- | -------------------------------------------------- |
+| `level`         | yes      | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| `message`       | yes      | Log message string                                 |
+| `timestamp`     | no       | ISO 8601 timestamp (server time if omitted)        |
+| `meta`          | no       | Arbitrary metadata object                          |
+| `service`       | no       | Service name                                       |
+| `host`          | no       | Hostname                                           |
+| `pid`           | no       | Process ID                                         |
+| `trace_id`      | no       | Trace ID for distributed tracing                   |
+| `span_id`       | no       | Span ID for distributed tracing                    |
 | `project`       | no       | Project name                                       |
 | `branch`        | no       | Git branch                                         |
 | `version`       | no       | App version                                        |
@@ -811,19 +811,19 @@ Search and filter logs.
 curl "http://localhost:3485/logs?level=error&from=1h&service=api&project=my-app&limit=50"
 ```
 
-| Param     | Description                                                 |
-| --------- | ----------------------------------------------------------- |
-| `level`   | Filter by log level                                         |
-| `service` | Filter by service name                                      |
+| Param           | Description                                                 |
+| --------------- | ----------------------------------------------------------- |
+| `level`         | Filter by log level                                         |
+| `service`       | Filter by service name                                      |
 | `project`       | Filter by project                                           |
 | `branch`        | Filter by branch                                            |
 | `version`       | Filter by version                                           |
 | `deployment_id` | Filter by deployment ID                                     |
 | `grep`          | Text search in messages                                     |
-| `from`    | Start time — ISO 8601 or relative (`30s`, `5m`, `1h`, `7d`) |
-| `to`      | End time — ISO 8601 or relative                             |
-| `limit`   | Max results (default 100, max 10000)                        |
-| `offset`  | Pagination offset                                           |
+| `from`          | Start time — ISO 8601 or relative (`30s`, `5m`, `1h`, `7d`) |
+| `to`            | End time — ISO 8601 or relative                             |
+| `limit`         | Max results (default 100, max 10000)                        |
+| `offset`        | Pagination offset                                           |
 
 Returns `{ rows, total, limit, offset }`.
 
@@ -835,15 +835,15 @@ SSE stream of new logs in real-time.
 curl -N "http://localhost:3485/stream?level=error&project=my-app"
 ```
 
-| Param      | Description            |
-| ---------- | ---------------------- |
-| `level`    | Filter by log level    |
-| `service`  | Filter by service name |
-| `trace_id` | Filter by trace ID     |
-| `project`       | Filter by project         |
-| `branch`        | Filter by branch          |
-| `version`       | Filter by version         |
-| `deployment_id` | Filter by deployment ID   |
+| Param           | Description             |
+| --------------- | ----------------------- |
+| `level`         | Filter by log level     |
+| `service`       | Filter by service name  |
+| `trace_id`      | Filter by trace ID      |
+| `project`       | Filter by project       |
+| `branch`        | Filter by branch        |
+| `version`       | Filter by version       |
+| `deployment_id` | Filter by deployment ID |
 
 ### `POST /query`
 
@@ -924,32 +924,32 @@ shutdown();
 
 ### `ServerConfig`
 
-| Option             | Type                            | Default   | Description                              |
-| ------------------ | ------------------------------- | --------- | ---------------------------------------- |
-| `port`             | `number`                        | —         | Port to listen on                        |
-| `dbPath`           | `string`                        | —         | SQLite database file path                |
-| `ingestKeys`       | `string[]`                      | —         | API key(s) for ingest role               |
-| `readKeys`         | `string[]`                      | —         | API key(s) for read role (includes ingest) |
-| `adminKeys`        | `string[]`                      | —         | API key(s) for admin role (includes all) |
+| Option             | Type                            | Default   | Description                                         |
+| ------------------ | ------------------------------- | --------- | --------------------------------------------------- |
+| `port`             | `number`                        | —         | Port to listen on                                   |
+| `dbPath`           | `string`                        | —         | SQLite database file path                           |
+| `ingestKeys`       | `string[]`                      | —         | API key(s) for ingest role                          |
+| `readKeys`         | `string[]`                      | —         | API key(s) for read role (includes ingest)          |
+| `adminKeys`        | `string[]`                      | —         | API key(s) for admin role (includes all)            |
 | `keyPrefixLength`  | `number`                        | `6`       | Characters of API key stored per log (0 to disable) |
-| `cors`             | `boolean \| string \| string[]` | —         | CORS origin(s) or `true` for `*`         |
-| `maxBodySize`      | `number`                        | `5242880` | Max request body size in bytes (5 MB)    |
-| `maxBatchSize`     | `number`                        | `1000`    | Max log entries per ingest request       |
-| `streamDebounceMs` | `number`                        | `50`      | Debounce interval for SSE stream updates |
+| `cors`             | `boolean \| string \| string[]` | —         | CORS origin(s) or `true` for `*`                    |
+| `maxBodySize`      | `number`                        | `5242880` | Max request body size in bytes (5 MB)               |
+| `maxBatchSize`     | `number`                        | `1000`    | Max log entries per ingest request                  |
+| `streamDebounceMs` | `number`                        | `50`      | Debounce interval for SSE stream updates            |
 
 ## Environment Variables
 
-| Variable                    | Description                                                      |
-| --------------------------- | ---------------------------------------------------------------- |
-| `RELOG_URL`                 | Default relog.dev startr URL for the Next.js integration         |
-| `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands |
+| Variable                    | Description                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------------- |
+| `RELOG_URL`                 | Default relog.dev startr URL for the Next.js integration                           |
+| `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands                   |
 | `RELOG_INGEST_KEY*`         | API key(s) for ingest role — any env starting with `RELOG_INGEST_KEY` is collected |
 | `RELOG_READ_KEY*`           | API key(s) for read role — any env starting with `RELOG_READ_KEY` is collected     |
 | `RELOG_ADMIN_KEY*`          | API key(s) for admin role — any env starting with `RELOG_ADMIN_KEY` is collected   |
-| `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                             |
-| `RELOG_PROJECT`             | Override auto-detected project name                              |
-| `RELOG_BRANCH`              | Override auto-detected git branch                                |
-| `NODE_ENV`                  | When set to `production`, console output is disabled by default  |
+| `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                                               |
+| `RELOG_PROJECT`             | Override auto-detected project name                                                |
+| `RELOG_BRANCH`              | Override auto-detected git branch                                                  |
+| `NODE_ENV`                  | When set to `production`, console output is disabled by default                    |
 
 ## Testing Locally
 

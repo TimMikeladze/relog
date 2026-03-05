@@ -49,7 +49,10 @@ export const startCommand: Command = command({
 	handler: async (opts) => {
 		function parseKeys(raw: string | undefined): string[] {
 			if (!raw) return [];
-			return raw.split(",").map((k) => k.trim()).filter(Boolean);
+			return raw
+				.split(",")
+				.map((k) => k.trim())
+				.filter(Boolean);
 		}
 
 		function collectEnvKeys(prefix: string): string[] {
@@ -63,10 +66,7 @@ export const startCommand: Command = command({
 		}
 
 		function resolveKeys(cliValue: string | undefined, envPrefix: string): string[] | undefined {
-			const keys = [
-				...parseKeys(cliValue),
-				...collectEnvKeys(envPrefix),
-			];
+			const keys = [...parseKeys(cliValue), ...collectEnvKeys(envPrefix)];
 			const unique = [...new Set(keys)];
 			return unique.length ? unique : undefined;
 		}

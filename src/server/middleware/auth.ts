@@ -34,7 +34,12 @@ export interface AuthResult {
 	keyPrefix?: string;
 }
 
-export function checkRole(request: Request, requiredRole: Role, keys: AuthKeys, keyPrefixLength: number = 6): AuthResult {
+export function checkRole(
+	request: Request,
+	requiredRole: Role,
+	keys: AuthKeys,
+	keyPrefixLength: number = 6,
+): AuthResult {
 	const hasAnyKey = keys.ingestKeys?.length || keys.readKeys?.length || keys.adminKeys?.length;
 	if (!hasAnyKey) return {};
 

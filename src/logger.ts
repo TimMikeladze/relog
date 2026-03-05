@@ -92,7 +92,17 @@ export class Logger {
 			slowThresholdMs?: number;
 		},
 	): Logger {
-		const { traceId, spanId, project, branch, version, deploymentId, sampleRate, slowThresholdMs, ...rest } = meta;
+		const {
+			traceId,
+			spanId,
+			project,
+			branch,
+			version,
+			deploymentId,
+			sampleRate,
+			slowThresholdMs,
+			...rest
+		} = meta;
 		const childLogger = new Logger(
 			{
 				service: this.service,
