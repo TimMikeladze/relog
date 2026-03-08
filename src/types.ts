@@ -110,7 +110,7 @@ export interface HealthResponse {
 }
 
 export interface StreamFilters {
-	level?: LogLevel;
+	level?: string;
 	service?: string;
 	trace_id?: string;
 	project?: string;
@@ -155,4 +155,23 @@ export interface IngestPayload {
 	branch?: string;
 	version?: string;
 	deployment_id?: string;
+}
+
+export interface Aggregate {
+	id: string;
+	name: string;
+	description?: string;
+	filters: {
+		level?: string;
+		service?: string;
+		project?: string;
+		branch?: string;
+		version?: string;
+		deployment_id?: string;
+		grep?: string;
+		from?: string;
+	};
+	icon?: string;
+	createdAt: number;
+	updatedAt: number;
 }

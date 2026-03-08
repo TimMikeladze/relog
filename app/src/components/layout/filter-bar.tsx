@@ -1,20 +1,58 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Filters, View } from "@/types";
 import { Search, X } from "lucide-react";
+
+function DebouncedInput({
+	value: externalValue,
+	onChange,
+	delay = 300,
+	...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> & {
+	value: string;
+	onChange: (value: string) => void;
+	delay?: number;
+}) {
+	const [localValue, setLocalValue] = useState(externalValue);
+	const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+	useEffect(() => {
+		setLocalValue(externalValue);
+	}, [externalValue]);
+
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const val = e.target.value;
+		setLocalValue(val);
+		clearTimeout(timerRef.current);
+		timerRef.current = setTimeout(() => onChange(val), delay);
+	};
+
+	useEffect(() => () => clearTimeout(timerRef.current), []);
+
+	return <input {...props} value={localValue} onChange={handleChange} />;
+}
 
 const LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
 
 const TIME_PRESETS = [
 	{ label: "5m", value: "5m" },
 	{ label: "15m", value: "15m" },
+	{ label: "30m", value: "30m" },
 	{ label: "1h", value: "1h" },
+	{ label: "3h", value: "3h" },
 	{ label: "6h", value: "6h" },
+	{ label: "12h", value: "12h" },
 	{ label: "24h", value: "24h" },
+	{ label: "3d", value: "3d" },
 	{ label: "7d", value: "7d" },
+	{ label: "14d", value: "14d" },
+	{ label: "30d", value: "30d" },
+	{ label: "90d", value: "90d" },
+	{ label: "6M", value: "6M" },
+	{ label: "1y", value: "1y" },
 ];
 
 function isRelativeTime(v?: string): boolean {
-	return !!v && /^\d+[smhd]$/.test(v);
+	return !!v && /^\d+[smhdwMy]$/.test(v);
 }
 
 function toDatetimeLocal(iso?: string): string {
@@ -91,55 +129,55 @@ export function FilterBar({
 				))}
 			</select>
 
-			<input
+			<DebouncedInput
 				type="text"
 				placeholder="Service"
 				value={filters.service || ""}
-				onChange={(e) => onUpdateFilter("service", e.target.value || undefined)}
+				onChange={(v) => onUpdateFilter("service", v || undefined)}
 				className="h-7 w-24 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 			/>
 
-			<input
+			<DebouncedInput
 				type="text"
 				placeholder="Project"
 				value={filters.project || ""}
-				onChange={(e) => onUpdateFilter("project", e.target.value || undefined)}
+				onChange={(v) => onUpdateFilter("project", v || undefined)}
 				className="h-7 w-24 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 			/>
 
-			<input
+			<DebouncedInput
 				type="text"
 				placeholder="Branch"
 				value={filters.branch || ""}
-				onChange={(e) => onUpdateFilter("branch", e.target.value || undefined)}
+				onChange={(v) => onUpdateFilter("branch", v || undefined)}
 				className="h-7 w-24 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 			/>
 
 			{(view === "explore" || view === "traces") && (
 				<>
-					<input
+					<DebouncedInput
 						type="text"
 						placeholder="Version"
 						value={filters.version || ""}
-						onChange={(e) => onUpdateFilter("version", e.target.value || undefined)}
+						onChange={(v) => onUpdateFilter("version", v || undefined)}
 						className="h-7 w-20 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 					/>
-					<input
+					<DebouncedInput
 						type="text"
 						placeholder="Deploy ID"
 						value={filters.deployment_id || ""}
-						onChange={(e) => onUpdateFilter("deployment_id", e.target.value || undefined)}
+						onChange={(v) => onUpdateFilter("deployment_id", v || undefined)}
 						className="h-7 w-24 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 					/>
 				</>
 			)}
 
 			{view === "traces" && (
-				<input
+				<DebouncedInput
 					type="text"
 					placeholder="Trace ID"
 					value={filters.trace_id || ""}
-					onChange={(e) => onUpdateFilter("trace_id", e.target.value || undefined)}
+					onChange={(v) => onUpdateFilter("trace_id", v || undefined)}
 					className="h-7 w-36 rounded-md border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring font-mono"
 				/>
 			)}
@@ -149,11 +187,11 @@ export function FilterBar({
 					<div className="h-4 w-px bg-border" />
 					<div className="relative">
 						<Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-						<input
+						<DebouncedInput
 							type="text"
 							placeholder="Search messages..."
 							value={filters.grep || ""}
-							onChange={(e) => onUpdateFilter("grep", e.target.value || undefined)}
+							onChange={(v) => onUpdateFilter("grep", v || undefined)}
 							className="h-7 w-48 rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 						/>
 					</div>

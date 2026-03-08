@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import type { Filters, View } from "@/types";
 import { Settings, Moon, Sun, Command, Search } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 const views: { id: View; label: string }[] = [
 	{ id: "explore", label: "Explore" },
@@ -32,6 +32,27 @@ export function Header({
 		return window.matchMedia("(prefers-color-scheme: dark)").matches;
 	});
 	const searchRef = useRef<HTMLInputElement>(null);
+	const [localGrep, setLocalGrep] = useState(filters?.grep || "");
+	const grepTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+	// Sync external filter changes back to local state
+	useEffect(() => {
+		setLocalGrep(filters?.grep || "");
+	}, [filters?.grep]);
+
+	const handleGrepChange = useCallback(
+		(e: React.ChangeEvent<HTMLInputElement>) => {
+			const val = e.target.value;
+			setLocalGrep(val);
+			clearTimeout(grepTimerRef.current);
+			grepTimerRef.current = setTimeout(() => {
+				onUpdateFilter?.("grep", val || undefined);
+			}, 300);
+		},
+		[onUpdateFilter],
+	);
+
+	useEffect(() => () => clearTimeout(grepTimerRef.current), []);
 
 	useEffect(() => {
 		document.documentElement.classList.toggle("dark", dark);
@@ -72,8 +93,8 @@ export function Header({
 							ref={searchRef}
 							type="text"
 							placeholder="Search logs..."
-							value={filters.grep || ""}
-							onChange={(e) => onUpdateFilter("grep", e.target.value || undefined)}
+							value={localGrep}
+							onChange={handleGrepChange}
 							className="h-8 w-full rounded-md border border-border bg-muted/50 pl-9 pr-3 text-xs outline-none placeholder:text-muted-foreground focus:bg-background focus:ring-1 focus:ring-ring transition-colors"
 						/>
 					</div>

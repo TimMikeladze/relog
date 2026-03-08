@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -75,7 +74,7 @@
 }
 
 @theme inline {
-	--font-sans: "Inter Variable", sans-serif;
+	--font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
 	--font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
@@ -129,10 +128,92 @@
 	}
 }
 
+.recharts-wrapper,
+.recharts-wrapper * {
+	outline: none;
+	border-color: transparent;
+}
+
+.resize-handle {
+	width: 1px;
+	background: var(--color-border);
+	transition: background 150ms, width 150ms;
+}
+.resize-handle:hover,
+.resize-handle[data-resize-handle-active] {
+	width: 3px;
+	background: var(--color-primary);
+}
+
 /* Subtle zebra striping for log rows */
 .log-rows > *:nth-child(even) {
 	background-color: oklch(0 0 0 / 2%);
 }
 .dark .log-rows > *:nth-child(even) {
 	background-color: oklch(1 0 0 / 2%);
+}
+
+/* Custom scrollbar for inline detail panels */
+.scrollbar-thin::-webkit-scrollbar {
+	width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+	background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+	background-color: var(--color-border);
+	border-radius: 3px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+}
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+	background-color: var(--color-border);
+	background-clip: content-box;
+}
+
+/* Refined transitions and animations */
+button {
+	transition: all 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
+}
+
+/* Inline detail panel animations */
+.log-detail-inline {
+	animation: slideUpFade 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpFade {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Section header underline animation */
+.section-header-inline::before {
+	content: '';
+	position: absolute;
+	bottom: 0;
+	left: 0;
+	width: 0;
+	height: 1px;
+	background: var(--color-primary);
+	transition: width 300ms cubic-bezier(0.2, 0, 0.38, 0.9);
+}
+
+.section-header-inline:hover::before {
+	width: 100%;
+}
+
+/* Enhanced field interactions */
+.detail-field-value {
+	position: relative;
+	transition: color 150ms ease;
+}
+
+.detail-field-value:hover {
+	color: var(--color-primary);
 }

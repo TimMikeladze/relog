@@ -1,5 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { BookmarksProvider } from "@/hooks/use-bookmarks";
 import { useHashState } from "@/hooks/use-hash-state";
 import { useKeyboard } from "@/hooks/use-keyboard";
 import { Header } from "@/components/layout/header";
@@ -9,25 +11,39 @@ import { AuthDialog } from "@/components/auth-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import type { Command } from "@/components/command-palette";
 import { ShortcutsDialog } from "@/components/shortcuts-dialog";
+import { SupportDialog } from "@/components/support-dialog";
 import { ExploreView } from "@/views/explore";
 import { TracesView } from "@/views/traces";
 import { QueryView } from "@/views/query";
 import { DashboardView } from "@/views/dashboard";
 import { Loader2 } from "lucide-react";
-import type { View } from "@/types";
+import type { Bookmark, View } from "@/types";
 
 function AppContent() {
 	const auth = useAuth();
-	const { view, filters, setView, setFilters, updateFilter, updateFilters } =
-		useHashState();
+	const { view, filters, setView, setFilters, updateFilter, updateFilters } = useHashState();
 	const [showSettings, setShowSettings] = useState(false);
 	const [showCommandPalette, setShowCommandPalette] = useState(false);
 	const [showShortcuts, setShowShortcuts] = useState(false);
+	const [showSupport, setShowSupport] = useState(false);
 
 	const navigateTrace = useCallback(
 		(traceId: string) => {
 			updateFilter("trace_id", traceId);
 			setView("traces" as View);
+		},
+		[updateFilter, setView],
+	);
+
+	const handleBookmarkClick = useCallback(
+		(b: Bookmark) => {
+			if (b.type === "trace" && b.traceId) {
+				updateFilter("trace_id", b.traceId);
+				setView("traces" as View);
+			} else if (b.type === "log" && b.logRecord) {
+				setView("explore" as View);
+				updateFilter("around_id", String(b.logRecord.id));
+			}
 		},
 		[updateFilter, setView],
 	);
@@ -40,6 +56,7 @@ function AppContent() {
 				setShowCommandPalette(false);
 				setShowSettings(false);
 				setShowShortcuts(false);
+				setShowSupport(false);
 			},
 			"g e": () => setView("explore" as View),
 			"g t": () => setView("traces" as View),
@@ -172,17 +189,23 @@ function AppContent() {
 				filters={filters}
 				onUpdateFilter={updateFilter}
 			/>
-			<div className="flex flex-1 overflow-hidden">
+			<PanelGroup className="flex-1 overflow-hidden" id="relog-main">
 				{showSidebar && (
-					<FilterSidebar
-						filters={filters}
-						view={view}
-						onUpdateFilter={updateFilter}
-						onUpdateFilters={updateFilters}
-						onClearFilters={() => setFilters({})}
-					/>
+					<>
+						<Panel id="sidebar" defaultSize="15%" minSize="180px" maxSize="30%" className="overflow-hidden">
+							<FilterSidebar
+								filters={filters}
+								view={view}
+								onUpdateFilter={updateFilter}
+								onUpdateFilters={updateFilters}
+								onClearFilters={() => setFilters({})}
+								onBookmarkClick={handleBookmarkClick}
+							/>
+						</Panel>
+						<PanelResizeHandle className="resize-handle" />
+					</>
 				)}
-				<div className="flex flex-1 overflow-hidden">
+				<Panel id="main" minSize="30%" className="flex overflow-hidden">
 					{view === "explore" && (
 						<ExploreView
 							filters={filters}
@@ -216,14 +239,15 @@ function AppContent() {
 							}}
 						/>
 					)}
-				</div>
-			</div>
-			<StatusBar />
+				</Panel>
+			</PanelGroup>
+			<StatusBar onSettingsClick={() => setShowSettings(true)} onSupportClick={() => setShowSupport(true)} />
 			{showSettings && <AuthDialog onClose={() => setShowSettings(false)} />}
 			{showCommandPalette && (
 				<CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />
 			)}
 			{showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
+			{showSupport && <SupportDialog onClose={() => setShowSupport(false)} />}
 		</div>
 	);
 }
@@ -231,7 +255,9 @@ function AppContent() {
 export default function App() {
 	return (
 		<AuthProvider>
-			<AppContent />
+			<BookmarksProvider>
+				<AppContent />
+			</BookmarksProvider>
 		</AuthProvider>
 	);
 }

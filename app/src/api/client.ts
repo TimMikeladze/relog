@@ -55,6 +55,30 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 	return res.json() as Promise<T>;
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+	const res = await fetch(`${baseUrl}${path}`, {
+		method: "PUT",
+		headers: headers(),
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new ApiError(res.status, (data as { error?: string }).error ?? res.statusText);
+	}
+	return res.json() as Promise<T>;
+}
+
+export async function apiDelete(path: string): Promise<void> {
+	const res = await fetch(`${baseUrl}${path}`, {
+		method: "DELETE",
+		headers: headers(),
+	});
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new ApiError(res.status, (data as { error?: string }).error ?? res.statusText);
+	}
+}
+
 export function streamUrl(params?: Record<string, string>): string {
 	const url = new URL("/stream", baseUrl);
 	if (authKey) {

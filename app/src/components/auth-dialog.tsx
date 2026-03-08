@@ -78,7 +78,7 @@ export function AuthDialog({ onClose }: { onClose: () => void }) {
 						<div>
 							<label className="mb-1.5 block text-xs text-muted-foreground">API Key</label>
 							<div className="flex items-center gap-2">
-								<span className="flex-1 truncate font-mono text-xs text-muted-foreground">
+								<span className="flex-1 truncate text-xs text-muted-foreground">
 									{key.slice(0, 8)}
 									{"..."}
 								</span>

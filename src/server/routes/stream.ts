@@ -1,6 +1,6 @@
 import type { RelogDatabase } from "../../db/database.ts";
 import { VALID_LEVELS } from "../../types.ts";
-import type { LogLevel, StreamFilters } from "../../types.ts";
+import type { StreamFilters } from "../../types.ts";
 
 type StreamClient = {
 	controller: ReadableStreamDefaultController;
@@ -110,10 +110,11 @@ export function handleStream(
 
 	const level = url.searchParams.get("level");
 	if (level) {
-		if (!VALID_LEVELS.has(level)) {
+		const levels = level.split(",");
+		if (levels.some((l) => !VALID_LEVELS.has(l))) {
 			return Response.json({ error: `Invalid level '${level}'` }, { status: 400 });
 		}
-		filters.level = level as LogLevel;
+		filters.level = level;
 	}
 	const service = url.searchParams.get("service");
 	if (service) filters.service = service;

@@ -14,12 +14,14 @@ export default defineConfig({
 	server: {
 		proxy: {
 			"/health": "http://localhost:3485",
+			"/histogram": "http://localhost:3485",
 			"/ingest": "http://localhost:3485",
 			"/logs": "http://localhost:3485",
 			"/query": "http://localhost:3485",
 			"/stream": "http://localhost:3485",
 			"/prune": "http://localhost:3485",
 			"/archive": "http://localhost:3485",
+			"/aggregates": "http://localhost:3485",
 		},
 	},
 });

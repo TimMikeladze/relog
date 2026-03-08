@@ -67,6 +67,13 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 bun add relog.dev
 ```
 
+For Python:
+
+```bash
+pip install relog
+# or: uv add relog
+```
+
 The `relog.dev` package includes the server, CLI, and client SDK. Import from the appropriate entrypoint:
 
 ```typescript
@@ -139,6 +146,25 @@ log.error(new Error("connection failed"));
 
 // flush before exit
 await log.flush();
+```
+
+Or from Python:
+
+```python
+from relog import create_logger
+
+log = create_logger(
+    "http://localhost:3485",
+    service="my-app",
+    # project and branch are auto-detected from git
+)
+
+log.info("server started", {"port": 3000})
+log.warn("slow query", {"duration_ms": 1200})
+log.error(ValueError("connection failed"))
+
+# flush before exit
+log.flush()
 ```
 
 Tail logs in real-time:
@@ -331,6 +357,80 @@ The client registers `SIGINT` and `SIGTERM` handlers to flush all active transpo
 await log.flush(); // flush pending logs
 await log.destroy(); // flush + stop the transport
 ```
+
+## Python Client
+
+The Python client mirrors the TypeScript SDK with Python conventions (snake_case, context managers, sync API).
+
+### Install
+
+```bash
+pip install relog
+# or: uv add relog
+```
+
+### Basic Usage
+
+```python
+from relog import create_logger
+
+log = create_logger("http://localhost:3485", service="my-app")
+
+log.info("server started", {"port": 3000})
+log.warn("slow query", {"duration_ms": 1200})
+log.error(ValueError("connection failed"))
+
+log.flush()
+log.destroy()
+```
+
+### Child Loggers
+
+```python
+req_log = log.child(trace_id="t-1", meta={"request_id": "abc-123"})
+req_log.info("handling request")  # inherits service + meta from parent
+```
+
+### Wide Events
+
+```python
+with log.event("http.request") as ev:
+    ev.request(method="GET", url="/api/users")
+    result = handle_request()
+    ev.set("row_count", len(result))
+    ev.response(status=200)
+# auto-emits with duration_ms on exit
+```
+
+Exceptions are captured automatically:
+
+```python
+with log.event("process_payment") as ev:
+    ev.set("order_id", "abc")
+    charge_card()  # if this raises, ev.error() is called automatically
+```
+
+### `create_logger()` Options
+
+| Option              | Type    | Default      | Description                                                           |
+| ------------------- | ------- | ------------ | --------------------------------------------------------------------- |
+| `url`               | `str`   | —            | Server URL (first positional arg). Omit for console-only              |
+| `service`           | `str`   | —            | Service name attached to every log                                    |
+| `level`             | `str`   | `"info"`     | Minimum level. Also reads `LOG_LEVEL` / `RELOG_LEVEL` env             |
+| `auth`              | `str`   | `RELOG_AUTH`  | API key sent as Bearer token                                          |
+| `console`           | `bool`  | `True`       | Print colored output to stdout/stderr                                 |
+| `project`           | `str`   | auto (git)   | Project name. Also reads `RELOG_PROJECT` env                          |
+| `branch`            | `str`   | auto (git)   | Git branch. Also reads `RELOG_BRANCH` env                             |
+| `version`           | `str`   | —            | App version                                                           |
+| `deployment_id`     | `str`   | —            | Deployment identifier                                                 |
+| `sample_rate`       | `float` | `1.0`        | Sample rate for events (0–1). Errors and slow events always kept      |
+| `slow_threshold_ms` | `float` | —            | Events slower than this (ms) are always kept                          |
+| `batch_size`        | `int`   | `50`         | Logs per HTTP batch                                                   |
+| `flush_interval`    | `float` | `5.0`        | Auto-flush interval in seconds                                        |
+| `max_buffer_size`   | `int`   | `10000`      | Max buffered logs before oldest are dropped                           |
+| `meta`              | `dict`  | —            | Default metadata merged into every log                                |
+| `trace_id`          | `str`   | —            | Trace ID attached to every log                                        |
+| `span_id`           | `str`   | —            | Span ID attached to every log                                         |
 
 ## CLI
 

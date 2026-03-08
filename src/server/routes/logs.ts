@@ -8,7 +8,8 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 
 	const level = url.searchParams.get("level");
 	if (level) {
-		if (!VALID_LEVELS.has(level)) {
+		const levels = level.split(",");
+		if (levels.some((l) => !VALID_LEVELS.has(l))) {
 			return Response.json({ error: `Invalid level '${level}'` }, { status: 400 });
 		}
 		opts.level = level;
@@ -61,6 +62,15 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 		opts.offset = parsed;
 	}
 
+	const aroundId = url.searchParams.get("around_id");
+	if (aroundId) {
+		const parsed = Number.parseInt(aroundId, 10);
+		if (Number.isNaN(parsed) || parsed < 1) {
+			return Response.json({ error: "Invalid 'around_id' value" }, { status: 400 });
+		}
+		opts.around_id = parsed;
+	}
+
 	const result = await duckdb.searchLogs(opts);
 
 	return Response.json({
@@ -72,7 +82,7 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 }
 
 function parseTime(input: string): number {
-	const relative = input.match(/^(\d+)([smhd])$/);
+	const relative = input.match(/^(\d+)([smhdwMy])$/);
 	if (relative) {
 		const value = Number.parseInt(relative[1]!, 10);
 		const unit = relative[2]!;
@@ -81,6 +91,9 @@ function parseTime(input: string): number {
 			m: 60_000,
 			h: 3_600_000,
 			d: 86_400_000,
+			w: 604_800_000,
+			M: 2_592_000_000,
+			y: 31_536_000_000,
 		};
 		return Date.now() - value * multipliers[unit]!;
 	}

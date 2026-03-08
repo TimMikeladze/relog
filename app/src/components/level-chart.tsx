@@ -26,7 +26,7 @@ export function LevelChart({ data }: { data: LevelCount[] }) {
 				const pct = (d.count / total) * 100;
 				return (
 					<div key={d.level} className="flex items-center gap-3">
-						<span className="w-12 shrink-0 text-right font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+						<span className="w-12 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
 							{d.level}
 						</span>
 						<div className="flex-1 h-4 rounded-sm bg-muted/50 overflow-hidden">
@@ -35,10 +35,10 @@ export function LevelChart({ data }: { data: LevelCount[] }) {
 								style={{ width: `${Math.max(pct, 0.5)}%` }}
 							/>
 						</div>
-						<span className="w-14 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+						<span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
 							{pct < 1 ? "<1" : Math.round(pct)}%
 						</span>
-						<span className="w-16 shrink-0 text-right font-mono text-xs tabular-nums">
+						<span className="w-16 shrink-0 text-right text-xs tabular-nums">
 							{d.count.toLocaleString()}
 						</span>
 					</div>

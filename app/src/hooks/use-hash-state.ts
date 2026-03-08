@@ -18,14 +18,35 @@ function parseHash(): { view: View; filters: Filters; page: number } {
 	if (params.get("from")) filters.from = params.get("from")!;
 	if (params.get("to")) filters.to = params.get("to")!;
 	if (params.get("trace_id")) filters.trace_id = params.get("trace_id")!;
+	if (params.get("bookmarked")) filters.bookmarked = params.get("bookmarked")!;
+	if (params.get("around_id")) filters.around_id = params.get("around_id")!;
 
 	const page = parseInt(params.get("page") || "1", 10);
 
 	return { view, filters, page };
 }
 
+// Keys managed by useHashState — all others are view-specific UI state (live, detail, etc.)
+const FILTER_KEYS = new Set([
+	"level", "service", "project", "branch", "version",
+	"deployment_id", "grep", "from", "to", "trace_id",
+	"bookmarked", "around_id", "page",
+]);
+
 function buildHash(view: View, filters: Filters, page: number): string {
 	const params = new URLSearchParams();
+
+	// Preserve view-specific UI params (e.g. live, detail, expanded) when staying on same view.
+	// currentPath may be "" when hash has no view prefix (e.g. first load or fresh hash).
+	const currentHash = window.location.hash.slice(1);
+	const [currentPath, currentSearch] = currentHash.split("?");
+	if (currentPath === view || currentPath === "") {
+		const currentParams = new URLSearchParams(currentSearch || "");
+		for (const [k, v] of currentParams) {
+			if (!FILTER_KEYS.has(k)) params.set(k, v);
+		}
+	}
+
 	for (const [k, v] of Object.entries(filters)) {
 		if (v) params.set(k, v);
 	}

@@ -58,4 +58,37 @@ export interface Filters {
 	from?: string;
 	to?: string;
 	trace_id?: string;
+	bookmarked?: string; // "true" when showing bookmarks only
+	around_id?: string; // log ID to center results around
+}
+
+export interface Bookmark {
+	id: string; // "log:123" | "trace:abc..."
+	type: "log" | "trace";
+	label: string;
+	timestamp: string;
+	level?: string;
+	service?: string;
+	createdAt: number;
+	logRecord?: LogRecord; // snapshot for log bookmarks
+	traceId?: string; // for trace bookmarks
+}
+
+export interface Aggregate {
+	id: string;
+	name: string;
+	description?: string;
+	filters: {
+		level?: string;
+		service?: string;
+		project?: string;
+		branch?: string;
+		version?: string;
+		deployment_id?: string;
+		grep?: string;
+		from?: string;
+	};
+	icon?: string;
+	createdAt: number;
+	updatedAt: number;
 }

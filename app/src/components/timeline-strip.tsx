@@ -1,9 +1,11 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, ReferenceArea } from "recharts";
+import {
+	AreaChart, Area, BarChart, Bar, XAxis, YAxis,
+	ResponsiveContainer, ReferenceArea,
+} from "recharts";
 import { apiPost } from "@/api/client";
-import type { QueryResult } from "@/types";
 
-interface TimelineBucket {
+export interface TimelineBucket {
 	time: number;
 	label: string;
 	info: number;
@@ -15,6 +17,8 @@ interface TimelineBucket {
 	total: number;
 }
 
+export type ChartType = "area" | "bar";
+
 interface TimelineStripProps {
 	from?: string;
 	to?: string;
@@ -23,23 +27,28 @@ interface TimelineStripProps {
 	buckets?: number;
 	height?: number;
 	bare?: boolean;
+	chartType?: ChartType;
+	normalized?: boolean;
 	onTimeRangeSelect?: (from: string, to: string) => void;
+	onHoverBucket?: (bucket: TimelineBucket | null) => void;
 }
 
-const LEVEL_COLORS: Record<string, string> = {
-	fatal: "oklch(0.7 0.19 350)",
-	error: "oklch(0.65 0.2 25)",
-	warn: "oklch(0.8 0.15 85)",
-	info: "oklch(0.7 0.15 160)",
-	debug: "oklch(0.65 0.1 250)",
-	trace: "oklch(0.6 0.02 0)",
+export const LEVEL_COLORS: Record<string, string> = {
+	fatal: "oklch(0.65 0.24 350)",
+	error: "oklch(0.6 0.22 25)",
+	warn: "oklch(0.75 0.18 85)",
+	info: "oklch(0.65 0.17 160)",
+	debug: "oklch(0.55 0.14 250)",
+	trace: "oklch(0.45 0.03 260)",
 };
 
+export const LEVELS_ORDER = ["fatal", "error", "warn", "info", "debug", "trace"] as const;
+
 function parseRelativeTime(rel: string): number {
-	const match = rel.match(/^(\d+)([smhd])$/);
+	const match = rel.match(/^(\d+)([smhdwMy])$/);
 	if (!match) return Date.now() - 3600_000;
 	const [, num, unit] = match;
-	const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000 };
+	const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000, w: 604_800_000, M: 2_592_000_000, y: 31_536_000_000 };
 	return Date.now() - parseInt(num) * (ms[unit] ?? 3600_000);
 }
 
@@ -51,26 +60,42 @@ function formatTimeLabel(ts: number, rangeMs: number): string {
 	return d.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
 }
 
+interface HistogramResponse {
+	buckets: {
+		time: number;
+		fatal: number;
+		error: number;
+		warn: number;
+		info: number;
+		debug: number;
+		trace: number;
+		total: number;
+	}[];
+	bucket_ms: number;
+}
+
 export function TimelineStrip({
 	from,
 	to,
 	filters,
 	refreshKey,
-	buckets = 60,
-	height = 64,
+	buckets,
+	height = 120,
 	bare = false,
+	chartType = "area",
+	normalized = false,
 	onTimeRangeSelect,
+	onHoverBucket,
 }: TimelineStripProps) {
 	const [data, setData] = useState<TimelineBucket[]>([]);
 	const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
 	const [dragEndIndex, setDragEndIndex] = useState<number | null>(null);
-	const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 	const isDragging = useRef(false);
 
 	const timeRange = useMemo(() => {
 		const now = Date.now();
 		const startMs = from
-			? from.match(/^\d+[smhd]$/)
+			? from.match(/^\d+[smhdwMy]$/)
 				? parseRelativeTime(from)
 				: new Date(from).getTime()
 			: now - 3600_000;
@@ -80,57 +105,48 @@ export function TimelineStrip({
 
 	useEffect(() => {
 		const { startMs, endMs, rangeMs } = timeRange;
-		const bucketMs = rangeMs / buckets;
 
-		let whereClause = `WHERE created_at >= ${startMs} AND created_at <= ${endMs}`;
-		if (filters?.level) whereClause += ` AND level = '${filters.level}'`;
-		if (filters?.service) whereClause += ` AND service = '${filters.service}'`;
-		if (filters?.project) whereClause += ` AND project = '${filters.project}'`;
-		if (filters?.branch) whereClause += ` AND branch = '${filters.branch}'`;
+		const histoFilters: Record<string, string> = {};
+		if (filters?.level) histoFilters.level = filters.level;
+		if (filters?.service) histoFilters.service = filters.service;
+		if (filters?.project) histoFilters.project = filters.project;
+		if (filters?.branch) histoFilters.branch = filters.branch;
 
-		const sql = `
-      SELECT
-        CAST((created_at - ${startMs}) / ${Math.floor(bucketMs)} AS INTEGER) as bucket,
-        level,
-        COUNT(*) as count
-      FROM logs
-      ${whereClause}
-      GROUP BY bucket, level
-      ORDER BY bucket
-    `;
+		const body: Record<string, unknown> = {
+			from: startMs,
+			to: endMs,
+			filters: Object.keys(histoFilters).length > 0 ? histoFilters : undefined,
+		};
+		if (buckets != null) body.buckets = buckets;
 
-		apiPost<QueryResult>("/query", { sql })
+		apiPost<HistogramResponse>("/histogram", body)
 			.then((res) => {
-				const bucketMap = new Map<number, TimelineBucket>();
-				for (let i = 0; i < buckets; i++) {
-					const time = startMs + i * bucketMs + bucketMs / 2;
-					bucketMap.set(i, {
-						time,
-						label: formatTimeLabel(time, rangeMs),
-						info: 0,
-						warn: 0,
-						error: 0,
-						debug: 0,
-						trace: 0,
-						fatal: 0,
-						total: 0,
-					});
-				}
-				for (const row of res.rows) {
-					const idx = Number(row.bucket);
-					const bucket = bucketMap.get(idx);
-					if (!bucket) continue;
-					const level = row.level as string;
-					const count = Number(row.count);
-					if (level in bucket) {
-						(bucket as unknown as Record<string, unknown>)[level] = count;
-					}
-					bucket.total += count;
-				}
-				setData(Array.from(bucketMap.values()));
+				const result: TimelineBucket[] = res.buckets.map((b) => ({
+					...b,
+					label: formatTimeLabel(b.time, rangeMs),
+				}));
+				setData(result);
 			})
 			.catch(() => {});
 	}, [timeRange, filters, refreshKey, buckets]);
+
+	// Compute normalized data when needed
+	const chartData = useMemo(() => {
+		if (!normalized) return data;
+		return data.map((bucket) => {
+			if (bucket.total === 0) return bucket;
+			const scale = 100 / bucket.total;
+			return {
+				...bucket,
+				fatal: bucket.fatal * scale,
+				error: bucket.error * scale,
+				warn: bucket.warn * scale,
+				info: bucket.info * scale,
+				debug: bucket.debug * scale,
+				trace: bucket.trace * scale,
+			};
+		});
+	}, [data, normalized]);
 
 	const handleMouseDown = useCallback(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -147,17 +163,18 @@ export function TimelineStrip({
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		(state: any) => {
 			if (state?.activeTooltipIndex != null) {
-				setHoverIndex(Number(state.activeTooltipIndex));
+				const idx = Number(state.activeTooltipIndex);
+				onHoverBucket?.(data[idx] ?? null);
 			}
 			if (!isDragging.current || state?.activeTooltipIndex == null) return;
 			setDragEndIndex(Number(state.activeTooltipIndex));
 		},
-		[],
+		[data, onHoverBucket],
 	);
 
 	const handleMouseLeave = useCallback(() => {
-		setHoverIndex(null);
-	}, []);
+		onHoverBucket?.(null);
+	}, [onHoverBucket]);
 
 	const handleMouseUp = useCallback(() => {
 		if (
@@ -201,31 +218,49 @@ export function TimelineStrip({
 
 	const refAreaX1 =
 		dragStartIndex !== null && dragEndIndex !== null
-			? data[Math.min(dragStartIndex, dragEndIndex)]?.time
+			? chartData[Math.min(dragStartIndex, dragEndIndex)]?.time
 			: undefined;
 	const refAreaX2 =
 		dragStartIndex !== null && dragEndIndex !== null
-			? data[Math.max(dragStartIndex, dragEndIndex)]?.time
+			? chartData[Math.max(dragStartIndex, dragEndIndex)]?.time
 			: undefined;
-
-	const hoverBucket = hoverIndex !== null ? data[hoverIndex] : null;
-	const hoverLabel = hoverBucket
-		? `${new Date(hoverBucket.time).toLocaleTimeString("en-US", { hour12: false })}  ·  ${hoverBucket.total.toLocaleString()} logs`
-		: null;
 
 	if (data.length === 0) return null;
 
 	const wrapperClass = bare ? "" : "shrink-0 border-b border-border px-4 py-2";
 
+	const xAxisProps = {
+		dataKey: "time" as const,
+		type: "number" as const,
+		domain: ["dataMin", "dataMax"] as [string, string],
+		tickFormatter: (ts: number) => formatTimeLabel(ts, timeRange.rangeMs),
+		tick: { fontSize: 9, fill: "var(--color-muted-foreground)" },
+		axisLine: false,
+		tickLine: false,
+		interval: "preserveStartEnd" as const,
+		minTickGap: 60,
+	};
+
+	const mouseHandlers = {
+		onMouseDown: onTimeRangeSelect ? handleMouseDown : undefined,
+		onMouseMove: handleMouseMove,
+		onMouseUp: onTimeRangeSelect ? handleMouseUp : undefined,
+		onMouseLeave: handleMouseLeave,
+	};
+
+	const refArea = refAreaX1 != null && refAreaX2 != null ? (
+		<ReferenceArea
+			x1={refAreaX1}
+			x2={refAreaX2}
+			fill="var(--color-primary)"
+			fillOpacity={0.15}
+			stroke="var(--color-primary)"
+			strokeOpacity={0.4}
+		/>
+	) : null;
+
 	return (
 		<div className={wrapperClass}>
-			<div className="relative">
-				{hoverLabel && (
-					<span className="absolute right-0 top-0 z-10 text-[10px] text-muted-foreground tabular-nums pointer-events-none">
-						{hoverLabel}
-					</span>
-				)}
-			</div>
 			<div
 				style={{
 					height,
@@ -233,85 +268,39 @@ export function TimelineStrip({
 				}}
 			>
 				<ResponsiveContainer width="100%" height="100%">
-					<AreaChart
-						data={data}
-						margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
-						onMouseDown={onTimeRangeSelect ? handleMouseDown : undefined}
-						onMouseMove={handleMouseMove}
-						onMouseUp={onTimeRangeSelect ? handleMouseUp : undefined}
-						onMouseLeave={handleMouseLeave}
-					>
-						<XAxis
-							dataKey="time"
-							type="number"
-							domain={["dataMin", "dataMax"]}
-							tickFormatter={(ts) => formatTimeLabel(ts, timeRange.rangeMs)}
-							tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
-							axisLine={false}
-							tickLine={false}
-							interval="preserveStartEnd"
-							minTickGap={60}
-						/>
-						<YAxis hide />
-						{refAreaX1 != null && refAreaX2 != null && (
-							<ReferenceArea
-								x1={refAreaX1}
-								x2={refAreaX2}
-								fill="var(--color-primary)"
-								fillOpacity={0.15}
-								stroke="var(--color-primary)"
-								strokeOpacity={0.4}
-							/>
-						)}
-						<Area
-							type="monotone"
-							dataKey="error"
-							stackId="1"
-							fill={LEVEL_COLORS.error}
-							stroke="none"
-							fillOpacity={0.85}
-						/>
-						<Area
-							type="monotone"
-							dataKey="fatal"
-							stackId="1"
-							fill={LEVEL_COLORS.fatal}
-							stroke="none"
-							fillOpacity={0.85}
-						/>
-						<Area
-							type="monotone"
-							dataKey="warn"
-							stackId="1"
-							fill={LEVEL_COLORS.warn}
-							stroke="none"
-							fillOpacity={0.6}
-						/>
-						<Area
-							type="monotone"
-							dataKey="info"
-							stackId="1"
-							fill={LEVEL_COLORS.info}
-							stroke="none"
-							fillOpacity={0.5}
-						/>
-						<Area
-							type="monotone"
-							dataKey="debug"
-							stackId="1"
-							fill={LEVEL_COLORS.debug}
-							stroke="none"
-							fillOpacity={0.3}
-						/>
-						<Area
-							type="monotone"
-							dataKey="trace"
-							stackId="1"
-							fill={LEVEL_COLORS.trace}
-							stroke="none"
-							fillOpacity={0.2}
-						/>
-					</AreaChart>
+					{chartType === "bar" ? (
+						<BarChart
+							data={chartData}
+							margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+							{...mouseHandlers}
+						>
+							<XAxis {...xAxisProps} />
+							<YAxis hide domain={normalized ? [0, 100] : undefined} />
+							{refArea}
+							<Bar dataKey="fatal" stackId="1" fill={LEVEL_COLORS.fatal} fillOpacity={1} />
+							<Bar dataKey="error" stackId="1" fill={LEVEL_COLORS.error} fillOpacity={1} />
+							<Bar dataKey="warn" stackId="1" fill={LEVEL_COLORS.warn} fillOpacity={1} />
+							<Bar dataKey="info" stackId="1" fill={LEVEL_COLORS.info} fillOpacity={1} />
+							<Bar dataKey="debug" stackId="1" fill={LEVEL_COLORS.debug} fillOpacity={1} />
+							<Bar dataKey="trace" stackId="1" fill={LEVEL_COLORS.trace} fillOpacity={1} />
+						</BarChart>
+					) : (
+						<AreaChart
+							data={chartData}
+							margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+							{...mouseHandlers}
+						>
+							<XAxis {...xAxisProps} />
+							<YAxis hide domain={normalized ? [0, 100] : undefined} />
+							{refArea}
+							<Area type="monotone" dataKey="fatal" stackId="1" fill={LEVEL_COLORS.fatal} stroke="none" fillOpacity={1} />
+							<Area type="monotone" dataKey="error" stackId="1" fill={LEVEL_COLORS.error} stroke="none" fillOpacity={1} />
+							<Area type="monotone" dataKey="warn" stackId="1" fill={LEVEL_COLORS.warn} stroke="none" fillOpacity={1} />
+							<Area type="monotone" dataKey="info" stackId="1" fill={LEVEL_COLORS.info} stroke="none" fillOpacity={1} />
+							<Area type="monotone" dataKey="debug" stackId="1" fill={LEVEL_COLORS.debug} stroke="none" fillOpacity={1} />
+							<Area type="monotone" dataKey="trace" stackId="1" fill={LEVEL_COLORS.trace} stroke="none" fillOpacity={1} />
+						</AreaChart>
+					)}
 				</ResponsiveContainer>
 			</div>
 		</div>

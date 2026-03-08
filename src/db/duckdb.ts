@@ -148,29 +148,17 @@ export class DuckDBReader {
 		const conditions: string[] = [];
 		const params: (string | number | bigint)[] = [];
 
-		if (opts.level) {
-			conditions.push("level = ?");
-			params.push(opts.level);
-		}
-		if (opts.service) {
-			conditions.push("service = ?");
-			params.push(opts.service);
-		}
-		if (opts.project) {
-			conditions.push("project = ?");
-			params.push(opts.project);
-		}
-		if (opts.branch) {
-			conditions.push("branch = ?");
-			params.push(opts.branch);
-		}
-		if (opts.version) {
-			conditions.push("version = ?");
-			params.push(opts.version);
-		}
-		if (opts.deployment_id) {
-			conditions.push("deployment_id = ?");
-			params.push(opts.deployment_id);
+		for (const col of ["level", "service", "project", "branch", "version", "deployment_id"] as const) {
+			const val = opts[col];
+			if (!val) continue;
+			const values = val.split(",").filter(Boolean);
+			if (values.length === 1) {
+				conditions.push(`${col} = ?`);
+				params.push(values[0]!);
+			} else if (values.length > 1) {
+				conditions.push(`${col} IN (${values.map(() => "?").join(", ")})`);
+				params.push(...values);
+			}
 		}
 		if (opts.grep) {
 			conditions.push("message LIKE ? ESCAPE '\\'");
@@ -208,11 +196,42 @@ export class DuckDBReader {
 				total = Number(countRows[0]?.total ?? 0);
 			}
 
-			const dataParams = [...params, limit, offset];
-			const reader = await conn.runAndReadAll(
-				`SELECT * FROM logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
-				dataParams as (string | number | bigint)[],
-			);
+			// When around_id is specified, fetch logs centered around that ID
+			let sql: string;
+			let dataParams: (string | number | bigint)[];
+
+			if (opts.around_id) {
+				const contextSize = Math.floor((limit - 1) / 2);
+				const conditionStr = conditions.join(" AND ");
+				const wherePrefix = conditionStr ? `${conditionStr} AND ` : "";
+
+				sql = `
+					SELECT * FROM (
+						SELECT * FROM logs
+						WHERE ${wherePrefix}id < ?
+						ORDER BY id DESC LIMIT ?
+					) UNION ALL
+					SELECT * FROM logs
+					WHERE ${wherePrefix}id = ?
+					UNION ALL
+					SELECT * FROM (
+						SELECT * FROM logs
+						WHERE ${wherePrefix}id > ?
+						ORDER BY id ASC LIMIT ?
+					)
+					ORDER BY id ASC
+				`;
+				dataParams = [
+					...params, opts.around_id, contextSize,
+					...params, opts.around_id,
+					...params, opts.around_id, contextSize
+				];
+			} else {
+				sql = `SELECT * FROM logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`;
+				dataParams = [...params, limit, offset];
+			}
+
+			const reader = await conn.runAndReadAll(sql, dataParams as (string | number | bigint)[]);
 			const rawRows = reader.getRowObjects() as Record<string, unknown>[];
 			const rows = rawRows.map(coerceRow) as unknown as LogEntry[];
 
@@ -220,6 +239,81 @@ export class DuckDBReader {
 				rows: rows.map((row) => ({ ...row, meta: parseMeta(row.meta) })),
 				total,
 			};
+		} finally {
+			conn.closeSync();
+		}
+	}
+
+	async histogram(opts: {
+		from: number;
+		to: number;
+		buckets: number;
+		filters?: { level?: string; service?: string; project?: string; branch?: string };
+	}): Promise<{
+		buckets: { time: number; fatal: number; error: number; warn: number; info: number; debug: number; trace: number; total: number }[];
+		bucket_ms: number;
+	}> {
+		const { from, to, buckets: bucketCount } = opts;
+		const rangeMs = to - from;
+		const bucketMs = Math.floor(rangeMs / bucketCount);
+
+		const conditions: string[] = ["created_at >= ?", "created_at <= ?"];
+		const params: (string | number | bigint)[] = [BigInt(Math.floor(from)), BigInt(Math.floor(to))];
+
+		if (opts.filters?.level) {
+			conditions.push("level = ?");
+			params.push(opts.filters.level);
+		}
+		if (opts.filters?.service) {
+			conditions.push("service = ?");
+			params.push(opts.filters.service);
+		}
+		if (opts.filters?.project) {
+			conditions.push("project = ?");
+			params.push(opts.filters.project);
+		}
+		if (opts.filters?.branch) {
+			conditions.push("branch = ?");
+			params.push(opts.filters.branch);
+		}
+
+		const where = `WHERE ${conditions.join(" AND ")}`;
+		const sql = `
+			SELECT
+				CAST((created_at - ${Math.floor(from)}) / ${bucketMs} AS INTEGER) as bucket,
+				level,
+				COUNT(*) as count
+			FROM logs
+			${where}
+			GROUP BY bucket, level
+			ORDER BY bucket
+			LIMIT 100000
+		`;
+
+		const conn = await this.connect();
+		try {
+			const reader = await conn.runAndReadAll(sql, params as (string | number | bigint)[]);
+			const rows = reader.getRowObjects() as { bucket: number | bigint; level: string; count: number | bigint }[];
+
+			const bucketMap = new Map<number, { time: number; fatal: number; error: number; warn: number; info: number; debug: number; trace: number; total: number }>();
+			for (let i = 0; i < bucketCount; i++) {
+				const time = from + i * bucketMs + bucketMs / 2;
+				bucketMap.set(i, { time, fatal: 0, error: 0, warn: 0, info: 0, debug: 0, trace: 0, total: 0 });
+			}
+
+			for (const row of rows) {
+				const idx = Number(row.bucket);
+				const bucket = bucketMap.get(idx);
+				if (!bucket) continue;
+				const level = row.level as string;
+				const count = Number(row.count);
+				if (level in bucket) {
+					(bucket as unknown as Record<string, unknown>)[level] = count;
+				}
+				bucket.total += count;
+			}
+
+			return { buckets: Array.from(bucketMap.values()), bucket_ms: bucketMs };
 		} finally {
 			conn.closeSync();
 		}

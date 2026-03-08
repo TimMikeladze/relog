@@ -56,7 +56,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
 								{group.items.map((item) => (
 									<div key={item.keys} className="flex items-center justify-between py-0.5">
 										<span className="text-xs text-popover-foreground">{item.desc}</span>
-										<kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+										<kbd className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
 											{item.keys}
 										</kbd>
 									</div>

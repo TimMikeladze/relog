@@ -24,7 +24,7 @@ export function JsonViewer({
 	return (
 		<pre
 			className={cn(
-				"overflow-x-auto rounded-md bg-muted/50 p-3 text-xs leading-relaxed font-mono",
+				"overflow-x-auto rounded-md bg-muted/50 p-3 text-xs leading-relaxed",
 				className,
 			)}
 		>

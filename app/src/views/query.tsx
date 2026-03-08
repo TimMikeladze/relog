@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHashParam } from "@/hooks/use-hash-param";
 import { useQueryExecute } from "@/hooks/use-query-execute";
 import { useKeyboard } from "@/hooks/use-keyboard";
-import { TimelineStrip } from "@/components/timeline-strip";
+import { TimelineChart } from "@/components/timeline-chart";
 import { LevelBadge } from "@/components/level-badge";
 import type { LogLevel } from "@/types";
 import {
@@ -270,11 +271,19 @@ export function QueryView({
 	const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
 	const [savedQueries, setSavedQueries] = useState(loadSaved);
 	const [queryHistory, setQueryHistory] = useState(loadHistory);
-	const [sortCol, setSortCol] = useState<string | null>(null);
-	const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+	const [sortCol, setSortCol] = useHashParam("sort");
+	const [sortDirParam, setSortDir] = useHashParam("dir", "asc");
+	const sortDir = (sortDirParam ?? "asc") as "asc" | "desc";
+	const [, setQueryParam] = useHashParam("q");
 	const [showExport, setShowExport] = useState(false);
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
+	// Read initial SQL from URL hash synchronously before editor mounts
+	const initialQueryRef = useRef<string | undefined>((() => {
+		const hash = window.location.hash.slice(1);
+		const [, search] = hash.split("?");
+		return new URLSearchParams(search || "").get("q") ?? undefined;
+	})());
 
 	useEffect(() => {
 		if (!editorRef.current || viewRef.current) return;
@@ -308,7 +317,7 @@ export function QueryView({
 		}
 
 		const state = EditorState.create({
-			doc: "SELECT * FROM logs ORDER BY created_at DESC LIMIT 100",
+			doc: initialQueryRef.current || "SELECT * FROM logs ORDER BY created_at DESC LIMIT 100",
 			extensions,
 		});
 
@@ -326,16 +335,19 @@ export function QueryView({
 		const view = viewRef.current;
 		if (!view) return;
 		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-	}, []);
+		setQueryParam(content);
+	}, [setQueryParam]);
 
 	const runQuery = useCallback(async () => {
 		const sqlStr = getEditorContent().trim();
 		if (!sqlStr) return;
+		setQueryParam(sqlStr);
 		addToHistory(sqlStr);
 		setQueryHistory(loadHistory());
-		setSortCol(null);
+		setSortCol(undefined);
+		setSortDir("asc");
 		await execute(sqlStr);
-	}, [execute, getEditorContent]);
+	}, [execute, getEditorContent, setQueryParam, setSortCol, setSortDir]);
 
 	const saveQuery = useCallback(() => {
 		const sqlStr = getEditorContent().trim();
@@ -437,7 +449,7 @@ export function QueryView({
 
 	return (
 		<div className="flex flex-1 flex-col overflow-hidden">
-			<TimelineStrip from="1h" buckets={45} onTimeRangeSelect={onZoom} />
+			<TimelineChart from="1h" buckets={45} onTimeRangeSelect={onZoom} />
 
 			{/* Editor */}
 			<div className="shrink-0 border-b border-border">
@@ -564,7 +576,7 @@ export function QueryView({
 											setEditorContent(h.sql);
 											setActiveDropdown(null);
 										}}
-										className="block w-full rounded px-3 py-1.5 text-left font-mono text-[10px] text-popover-foreground hover:bg-muted truncate"
+										className="block w-full rounded px-3 py-1.5 text-left text-[10px] text-popover-foreground hover:bg-muted truncate"
 									>
 										<span className="text-muted-foreground mr-2">
 											{new Date(h.time).toLocaleTimeString("en-US", {
@@ -632,7 +644,7 @@ export function QueryView({
 			{/* Results table */}
 			<div className="flex-1 overflow-auto">
 				{sortedRows.length > 0 ? (
-					<table className="w-full border-collapse font-mono text-xs">
+					<table className="w-full border-collapse text-xs">
 						<thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
 							<tr className="border-b-2 border-border">
 								<th className="w-8 px-2 py-2 text-right text-[10px] font-medium text-muted-foreground/50">
@@ -644,7 +656,7 @@ export function QueryView({
 										className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer select-none transition-colors hover:text-foreground"
 										onClick={() => {
 											if (sortCol === col) {
-												setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+												setSortDir(sortDir === "asc" ? "desc" : "asc");
 											} else {
 												setSortCol(col);
 												setSortDir("asc");

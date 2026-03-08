@@ -7,7 +7,7 @@ function getHighlighter() {
 	if (!highlighterPromise) {
 		highlighterPromise = createHighlighter({
 			themes: ["github-dark-default"],
-			langs: ["typescript", "bash", "json", "jsonc", "sql"],
+			langs: ["typescript", "bash", "json", "jsonc", "sql", "python"],
 		});
 	}
 	return highlighterPromise;
@@ -19,8 +19,9 @@ function App() {
 			<Header />
 			<main className="max-w-5xl mx-auto px-5 sm:px-8 pt-20 sm:pt-24 pb-10">
 				<Hero />
-				<Features />
 				<Examples />
+				<Features />
+				<AppPreview />
 				<FAQ />
 				<Footer />
 			</main>
@@ -44,10 +45,11 @@ function Header() {
 						GitHub
 					</a>
 					<a
-						href="https://www.npmjs.com/package/relog.dev"
-						className="text-bg bg-fg rounded-md px-3 py-1 font-medium hover:bg-fg/85 transition-colors"
+						href="https://app.relog.dev"
+						className="text-bg bg-fg rounded-md px-3 py-1 font-medium hover:bg-fg/85 transition-colors flex items-center gap-1.5"
 					>
-						Install
+						<ExternalLinkIcon />
+						Open App
 					</a>
 				</nav>
 			</div>
@@ -69,6 +71,117 @@ function Hero() {
 				stream in real-time, and let AI agents analyze everything via MCP.
 			</p>
 			<CodeBlock lang="bash" code={`bunx relog.dev start`} />
+		</section>
+	);
+}
+
+function AppPreview() {
+	const views = [
+		{ label: "Explore", color: "bg-accent", desc: "Browse & filter logs in real-time" },
+		{ label: "Traces", color: "bg-cyan", desc: "Distributed trace visualization" },
+		{ label: "Query", color: "bg-emerald", desc: "SQL query interface" },
+		{ label: "Dashboard", color: "bg-amber", desc: "Volume & level analytics" },
+	];
+
+	return (
+		<section className="mb-14 sm:mb-18">
+			{/* Main preview — large placeholder */}
+			<div className="rounded-xl border border-border overflow-hidden mb-3">
+				{/* Browser chrome */}
+				<div className="flex items-center gap-1.5 px-4 h-9 bg-bg-card border-b border-border">
+					<span className="w-2.5 h-2.5 rounded-full bg-border" />
+					<span className="w-2.5 h-2.5 rounded-full bg-border" />
+					<span className="w-2.5 h-2.5 rounded-full bg-border" />
+					<span className="ml-3 text-[11px] text-muted/50 bg-bg rounded px-3 py-0.5 flex-1 max-w-48">
+						app.relog.dev
+					</span>
+				</div>
+				{/* Mock app shell */}
+				<div className="bg-bg-code h-72 sm:h-96 flex">
+					{/* Sidebar */}
+					<div className="w-44 border-r border-border p-3 shrink-0 hidden sm:block">
+						<div className="h-2 w-16 rounded bg-border/60 mb-4" />
+						{["Explore", "Traces", "Query", "Dashboard"].map((v, i) => (
+							<div
+								key={v}
+								className={`flex items-center gap-2 px-2 py-1.5 rounded-md mb-0.5 ${i === 0 ? "bg-white/[0.06]" : ""}`}
+							>
+								<span className={`w-1.5 h-1.5 rounded-full ${views[i]!.color} opacity-70`} />
+								<span className="text-[11px] text-dim">{v}</span>
+							</div>
+						))}
+						<div className="mt-4 pt-4 border-t border-border space-y-2">
+							{["Level", "Service", "Project"].map((f) => (
+								<div key={f} className="px-2">
+									<div className="text-[10px] text-muted/50 mb-1">{f}</div>
+									<div className="h-5 rounded bg-border/40 w-full" />
+								</div>
+							))}
+						</div>
+					</div>
+					{/* Main area */}
+					<div className="flex-1 flex flex-col min-w-0">
+						{/* Toolbar */}
+						<div className="flex items-center gap-2 px-4 h-10 border-b border-border shrink-0">
+							<div className="h-5 rounded bg-border/50 w-48" />
+							<div className="ml-auto h-5 rounded bg-border/30 w-16" />
+							<div className="h-5 rounded bg-border/30 w-16" />
+						</div>
+						{/* Log rows */}
+						<div className="flex-1 overflow-hidden">
+							{Array.from({ length: 10 }).map((_, i) => {
+								const levels = ["info", "info", "warn", "info", "error", "info", "debug", "info", "warn", "info"];
+								const colors: Record<string, string> = {
+									info: "bg-accent",
+									warn: "bg-amber",
+									error: "bg-rose",
+									debug: "bg-muted",
+								};
+								const level = levels[i]!;
+								const widths = [32, 48, 40, 52, 36, 44, 28, 56, 38, 42];
+								return (
+									<div
+										key={i}
+										className={`flex items-center gap-3 px-4 h-8 border-b border-border/40 ${i === 2 ? "bg-white/[0.03]" : ""}`}
+									>
+										<div className="text-[10px] text-muted/40 w-20 shrink-0">
+											{`0${i + 1}:${String(i * 7 % 60).padStart(2, "0")}:${String(i * 13 % 60).padStart(2, "0")}`}
+										</div>
+										<span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${colors[level]} text-bg shrink-0`}>
+											{level}
+										</span>
+										<div
+											className="h-1.5 rounded bg-border/60"
+											style={{ width: `${widths[i]}%` }}
+										/>
+									</div>
+								);
+							})}
+						</div>
+					</div>
+				</div>
+			</div>
+
+			{/* Smaller view previews */}
+			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+				{views.map((v) => (
+					<div key={v.label} className="rounded-lg border border-border overflow-hidden">
+						<div className="flex items-center gap-1.5 px-3 h-7 bg-bg-card border-b border-border">
+							<span className={`w-1.5 h-1.5 rounded-full ${v.color}`} />
+							<span className="text-[10px] text-dim">{v.label}</span>
+						</div>
+						<div className="bg-bg-code h-20 p-2 space-y-1.5">
+							<div className="h-1.5 rounded bg-border/60 w-3/4" />
+							<div className="h-1.5 rounded bg-border/40 w-1/2" />
+							<div className="h-1.5 rounded bg-border/50 w-5/6" />
+							<div className="h-1.5 rounded bg-border/30 w-2/3" />
+						</div>
+						<div className="px-3 py-2 bg-bg-card border-t border-border">
+							<p className="text-[10px] text-muted/60">{v.desc}</p>
+						</div>
+					</div>
+				))}
+			</div>
 		</section>
 	);
 }
@@ -216,6 +329,12 @@ function Examples() {
 			color: "bg-accent",
 			title: "CLI Toolkit",
 			desc: "Tail, search, query, export, and manage logs from the terminal. Real-time streaming with server-side filters.",
+		},
+		{
+			label: "Python",
+			color: "bg-accent",
+			title: "Python SDK",
+			desc: "Ship structured logs from any Python app. Covers basic logging, child loggers, wide events with explicit end(), and the context manager for automatic cleanup.",
 		},
 	];
 
@@ -458,6 +577,48 @@ bunx relog.dev export --format csv --from 7d
 # View log volume stats
 bunx relog.dev stats --from 24h`,
 		},
+		{
+			lang: "python",
+			code: `from relog import create_logger
+
+log = create_logger(
+    url="http://localhost:3485",
+    service="api",
+    sample_rate=0.05,       # keep 5% of normal traffic
+    slow_threshold_ms=500,  # always keep slow events
+)
+
+# Structured key-value pairs on every log
+log.info("server started", {"port": 3000})
+log.warn("slow query", {"duration_ms": 1200, "table": "users"})
+log.error(ValueError("connection failed"))
+
+# Child loggers inherit + extend context — perfect for tracing
+req_log = log.child(trace_id="abc-123", meta={"path": "/users"})
+req_log.info("request started")
+req_log.info("auth passed", {"user_id": "u_42"})
+
+# Wide events — explicit style
+ev = log.event("http_request")
+ev.request(method="POST", url="/users")
+ev.set("user_id", "u_42")
+try:
+    result = handle_request(request)
+    ev.set("result_count", len(result.items))
+    ev.response(status=200)
+except Exception as e:
+    ev.error(e)  # errors always bypass sampling
+ev.end()         # sampling decision + emit
+
+# Wide events — context manager (auto end + exception capture)
+with log.event("db_query") as ev:
+    ev.set("table", "orders")
+    rows = db.execute("SELECT * FROM orders WHERE user_id = ?", [user_id])
+    ev.set("row_count", len(rows))
+
+# Flush before shutdown to ensure delivery
+log.flush()`,
+		},
 	];
 
 	return (
@@ -601,6 +762,16 @@ function Footer() {
 			</div>
 			<p className="text-muted/30 text-xs mt-4 pb-4">&copy; {new Date().getFullYear()} relog.dev</p>
 		</footer>
+	);
+}
+
+function ExternalLinkIcon() {
+	return (
+		<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" />
+			<path d="M8 1h3v3" />
+			<path d="M11 1 6 6" />
+		</svg>
 	);
 }
 

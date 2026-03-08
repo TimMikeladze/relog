@@ -1,3 +1,5 @@
+import { memo } from "react";
+import { Bookmark, BookmarkCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LogRecord } from "@/types";
 
@@ -44,32 +46,38 @@ function formatDateTime(timestamp: string): string {
 	}
 }
 
-export function LogRow({
+export const LogRow = memo(function LogRow({
 	log,
 	selected,
 	onClick,
 	showDate = false,
+	isBookmarked = false,
+	onToggleBookmark,
 }: {
 	log: LogRecord;
 	selected?: boolean;
 	onClick?: () => void;
 	showDate?: boolean;
+	isBookmarked?: boolean;
+	onToggleBookmark?: (e: React.MouseEvent) => void;
 }) {
 	return (
 		<button
 			type="button"
 			onClick={onClick}
 			className={cn(
-				"group flex w-full items-center border-l-2 text-left font-mono text-xs transition-colors hover:bg-muted/40",
+				"group flex w-full items-center border-l-2 text-left text-xs transition-colors hover:bg-muted/40",
 				LEVEL_BORDERS[log.level] || "border-l-transparent",
 				selected && "bg-muted/60",
 			)}
 		>
 			{/* Timestamp */}
-			<span className={cn(
-				"shrink-0 px-3 py-[5px] text-muted-foreground tabular-nums",
-				showDate ? "w-[200px]" : "w-[110px]",
-			)}>
+			<span
+				className={cn(
+					"shrink-0 px-3 py-[5px] text-muted-foreground tabular-nums",
+					showDate ? "w-[200px]" : "w-[110px]",
+				)}
+			>
 				{showDate ? formatDateTime(log.timestamp) : formatTime(log.timestamp)}
 			</span>
 
@@ -90,6 +98,28 @@ export function LogRow({
 
 			{/* Message */}
 			<span className="min-w-0 flex-1 py-[5px] pr-3 truncate">{log.message}</span>
+
+			{/* Bookmark */}
+			{onToggleBookmark && (
+				<span
+					role="button"
+					tabIndex={-1}
+					onClick={onToggleBookmark}
+					onKeyDown={(e) => e.key === "Enter" && onToggleBookmark(e as unknown as React.MouseEvent)}
+					className={cn(
+						"shrink-0 mr-2 rounded p-0.5 transition-colors",
+						isBookmarked
+							? "text-amber-400"
+							: "text-transparent group-hover:text-muted-foreground hover:!text-amber-400",
+					)}
+				>
+					{isBookmarked ? (
+						<BookmarkCheck className="h-3 w-3" />
+					) : (
+						<Bookmark className="h-3 w-3" />
+					)}
+				</span>
+			)}
 		</button>
 	);
-}
+});

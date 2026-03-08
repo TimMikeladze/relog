@@ -59,3 +59,60 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run build
+
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Setup Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        working-directory: python
+        run: uv sync
+
+      - name: Type check
+        working-directory: python
+        run: uv run mypy src/relog/
+
+      - name: Run unit tests
+        working-directory: python
+        run: uv run pytest tests/ --ignore=tests/test_integration.py -v
+
+  python-integration:
+    name: Python Integration
+    runs-on: ubuntu-latest
+    needs: [ci, python]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install JS dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Setup Python
+        run: uv python install 3.12
+
+      - name: Install Python dependencies
+        working-directory: python
+        run: uv sync
+
+      - name: Run integration tests
+        working-directory: python
+        run: uv run pytest tests/test_integration.py -v

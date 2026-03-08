@@ -19,6 +19,7 @@ export interface SearchOptions {
 	limit?: number;
 	offset?: number;
 	includeTotal?: boolean;
+	around_id?: number; // center results around this log ID
 }
 
 export class RelogDatabase {
@@ -130,35 +131,18 @@ export class RelogDatabase {
 		const conditions = ["id > ?"];
 		const params: SQLQueryBindings[] = [lastId];
 
-		if (filters.level) {
-			conditions.push("level = ?");
-			params.push(filters.level);
+		for (const col of ["level", "service", "trace_id", "project", "branch", "version", "deployment_id"] as const) {
+			const val = filters[col];
+			if (!val) continue;
+			const values = String(val).split(",").filter(Boolean);
+			if (values.length === 1) {
+				conditions.push(`${col} = ?`);
+				params.push(values[0]!);
+			} else if (values.length > 1) {
+				conditions.push(`${col} IN (${values.map(() => "?").join(", ")})`);
+				params.push(...values);
+			}
 		}
-		if (filters.service) {
-			conditions.push("service = ?");
-			params.push(filters.service);
-		}
-		if (filters.trace_id) {
-			conditions.push("trace_id = ?");
-			params.push(filters.trace_id);
-		}
-		if (filters.project) {
-			conditions.push("project = ?");
-			params.push(filters.project);
-		}
-		if (filters.branch) {
-			conditions.push("branch = ?");
-			params.push(filters.branch);
-		}
-		if (filters.version) {
-			conditions.push("version = ?");
-			params.push(filters.version);
-		}
-		if (filters.deployment_id) {
-			conditions.push("deployment_id = ?");
-			params.push(filters.deployment_id);
-		}
-
 		params.push(limit);
 		const sql = `SELECT * FROM logs WHERE ${conditions.join(" AND ")} ORDER BY id ASC LIMIT ?`;
 		const rows = this.readonlyDb.prepare(sql).all(...params) as LogEntry[];

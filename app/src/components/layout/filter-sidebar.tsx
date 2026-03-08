@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiPost } from "@/api/client";
-import type { Filters, QueryResult, View } from "@/types";
+import type { Bookmark, Filters, QueryResult, View } from "@/types";
+import { useBookmarks } from "@/hooks/use-bookmarks";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -13,18 +14,33 @@ import {
 	Route,
 	PanelLeftClose,
 	PanelLeftOpen,
+	CalendarIcon,
+	Bookmark as BookmarkIcon,
+	FileText,
+	X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const LOG_LEVELS = ["trace", "debug", "info", "warn", "error", "fatal"];
 
 const TIME_PRESETS = [
 	{ label: "5m", value: "5m" },
 	{ label: "15m", value: "15m" },
+	{ label: "30m", value: "30m" },
 	{ label: "1h", value: "1h" },
+	{ label: "3h", value: "3h" },
 	{ label: "6h", value: "6h" },
+	{ label: "12h", value: "12h" },
 	{ label: "24h", value: "24h" },
+	{ label: "3d", value: "3d" },
 	{ label: "7d", value: "7d" },
+	{ label: "14d", value: "14d" },
+	{ label: "30d", value: "30d" },
+	{ label: "90d", value: "90d" },
+	{ label: "6M", value: "6M" },
+	{ label: "1y", value: "1y" },
 ];
 
 const LEVEL_DOTS: Record<string, string> = {
@@ -45,24 +61,37 @@ interface FacetCounts {
 }
 
 function isRelativeTime(v?: string): boolean {
-	return !!v && /^\d+[smhd]$/.test(v);
+	return !!v && /^\d+[smhdwMy]$/.test(v);
 }
 
-function toDatetimeLocal(iso?: string): string {
-	if (!iso || isRelativeTime(iso)) return "";
-	try {
-		const d = new Date(iso);
-		if (isNaN(d.getTime())) return "";
-		const pad = (n: number) => String(n).padStart(2, "0");
-		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-	} catch {
-		return "";
-	}
-}
 
-function fromDatetimeLocal(val: string): string | undefined {
-	if (!val) return undefined;
-	return new Date(val).toISOString();
+function DebouncedInput({
+	value: externalValue,
+	onChange,
+	delay = 300,
+	...props
+}: Omit<React.InputHTMLAttributes<HTMLInputElement>, "onChange"> & {
+	value: string;
+	onChange: (value: string) => void;
+	delay?: number;
+}) {
+	const [localValue, setLocalValue] = useState(externalValue);
+	const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+	useEffect(() => {
+		setLocalValue(externalValue);
+	}, [externalValue]);
+
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const val = e.target.value;
+		setLocalValue(val);
+		clearTimeout(timerRef.current);
+		timerRef.current = setTimeout(() => onChange(val), delay);
+	};
+
+	useEffect(() => () => clearTimeout(timerRef.current), []);
+
+	return <input {...props} value={localValue} onChange={handleChange} />;
 }
 
 function Section({
@@ -105,33 +134,150 @@ function FacetList({
 	onSelect: (value: string | undefined) => void;
 	dotColors?: Record<string, string>;
 }) {
+	const selectedSet = new Set(selected?.split(",").filter(Boolean) ?? []);
 	const sorted = Object.entries(items).sort((a, b) => b[1] - a[1]);
 	if (sorted.length === 0) {
 		return <span className="text-[10px] text-muted-foreground italic">No data</span>;
 	}
+
+	const toggle = (value: string) => {
+		const next = new Set(selectedSet);
+		if (next.has(value)) {
+			next.delete(value);
+		} else {
+			next.add(value);
+		}
+		onSelect(next.size > 0 ? Array.from(next).join(",") : undefined);
+	};
+
 	return (
 		<div className="space-y-0.5">
-			{sorted.map(([value, count]) => (
-				<button
-					key={value}
-					type="button"
-					onClick={() => onSelect(selected === value ? undefined : value)}
-					className={cn(
-						"flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors",
-						selected === value
-							? "bg-primary/15 text-primary font-medium"
-							: "text-foreground hover:bg-muted/50",
-					)}
-				>
-					{dotColors && (
+			{sorted.map(([value, count]) => {
+				const isSelected = selectedSet.has(value);
+				return (
+					<button
+						key={value}
+						type="button"
+						onClick={() => toggle(value)}
+						className={cn(
+							"flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors",
+							isSelected
+								? "bg-primary/15 text-primary font-medium"
+								: "text-foreground hover:bg-muted/50",
+						)}
+					>
 						<span
-							className={cn("h-2 w-2 shrink-0 rounded-full", dotColors[value] || "bg-zinc-400")}
+							className={cn(
+								"flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border transition-colors",
+								isSelected
+									? "border-primary bg-primary text-primary-foreground"
+									: "border-muted-foreground/40",
+							)}
+						>
+							{isSelected && (
+								<svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
+									<path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+								</svg>
+							)}
+						</span>
+						{dotColors && (
+							<span
+								className={cn("h-2 w-2 shrink-0 rounded-full", dotColors[value] || "bg-zinc-400")}
+							/>
+						)}
+						<span className="flex-1 truncate text-left">{value}</span>
+						<span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">{count}</span>
+					</button>
+				);
+			})}
+		</div>
+	);
+}
+
+function DateTimePicker({
+	label,
+	value,
+	onChange,
+}: {
+	label: string;
+	value?: string;
+	onChange: (v: string | undefined) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const date = value && !isRelativeTime(value) ? new Date(value) : undefined;
+	const isValidDate = date && !isNaN(date.getTime());
+
+	const formatDisplay = () => {
+		if (!isValidDate) return "Pick date & time";
+		const d = date!;
+		const pad = (n: number) => String(n).padStart(2, "0");
+		return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+	};
+
+	const handleDateSelect = (selected: Date | undefined) => {
+		if (!selected) return;
+		const existing = isValidDate ? date! : new Date();
+		selected.setHours(existing.getHours(), existing.getMinutes(), 0, 0);
+		onChange(selected.toISOString());
+	};
+
+	const handleTimeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const [hours, minutes] = e.target.value.split(":").map(Number);
+		const d = isValidDate ? new Date(date!) : new Date();
+		d.setHours(hours ?? 0, minutes ?? 0, 0, 0);
+		onChange(d.toISOString());
+	};
+
+	const timeValue = isValidDate
+		? `${String(date!.getHours()).padStart(2, "0")}:${String(date!.getMinutes()).padStart(2, "0")}`
+		: "";
+
+	return (
+		<div className="flex items-center gap-1.5">
+			<span className="text-[10px] text-muted-foreground w-8">{label}</span>
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger asChild>
+					<button
+						type="button"
+						className={cn(
+							"flex h-6 flex-1 items-center gap-1 rounded border border-border bg-background px-1.5 text-[10px] outline-none transition-colors hover:bg-muted focus:ring-1 focus:ring-ring",
+							!isValidDate && "text-muted-foreground",
+						)}
+					>
+						<CalendarIcon className="h-3 w-3 shrink-0 text-muted-foreground" />
+						<span className="truncate">{formatDisplay()}</span>
+					</button>
+				</PopoverTrigger>
+				<PopoverContent className="w-auto p-0" align="start" side="bottom">
+					<Calendar
+						mode="single"
+						selected={isValidDate ? date : undefined}
+						onSelect={handleDateSelect}
+						initialFocus
+					/>
+					<div className="border-t border-border px-3 py-2 flex items-center gap-2">
+						<Clock className="h-3.5 w-3.5 text-muted-foreground" />
+						<input
+							type="time"
+							value={timeValue}
+							onChange={handleTimeChange}
+							className="h-7 flex-1 rounded border border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring [color-scheme:dark]"
 						/>
-					)}
-					<span className="flex-1 truncate text-left">{value}</span>
-					<span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">{count}</span>
-				</button>
-			))}
+						{isValidDate && (
+							<button
+								type="button"
+								onClick={() => {
+									onChange(undefined);
+									setOpen(false);
+								}}
+								className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
+							>
+								Clear
+							</button>
+						)}
+					</div>
+				</PopoverContent>
+			</Popover>
 		</div>
 	);
 }
@@ -142,13 +288,16 @@ export function FilterSidebar({
 	onUpdateFilter,
 	onUpdateFilters,
 	onClearFilters,
+	onBookmarkClick,
 }: {
 	filters: Filters;
 	view: View;
 	onUpdateFilter: (key: keyof Filters, value: string | undefined) => void;
 	onUpdateFilters: (updates: Partial<Filters>) => void;
 	onClearFilters: () => void;
+	onBookmarkClick?: (b: Bookmark) => void;
 }) {
+	const { bookmarks, remove } = useBookmarks();
 	const [collapsed, setCollapsed] = useState(false);
 	const [facets, setFacets] = useState<FacetCounts>({
 		level: {},
@@ -164,14 +313,17 @@ export function FilterSidebar({
 	// Fetch facet counts
 	useEffect(() => {
 		const timeConstraint = filters.from
-			? filters.from.match(/^(\d+)([smhd])$/)
+			? filters.from.match(/^(\d+)([smhdwMy])$/)
 				? (() => {
-						const match = filters.from!.match(/^(\d+)([smhd])$/)!;
+						const match = filters.from!.match(/^(\d+)([smhdwMy])$/)!;
 						const ms: Record<string, number> = {
 							s: 1000,
 							m: 60_000,
 							h: 3600_000,
 							d: 86400_000,
+							w: 604_800_000,
+							M: 2_592_000_000,
+							y: 31_536_000_000,
 						};
 						return `WHERE created_at > ${Date.now() - parseInt(match[1]) * (ms[match[2]] ?? 3600_000)}`;
 					})()
@@ -186,18 +338,21 @@ export function FilterSidebar({
 			`SELECT deployment_id, COUNT(*) as count FROM logs ${timeConstraint} AND deployment_id IS NOT NULL GROUP BY deployment_id ORDER BY count DESC LIMIT 10`,
 		];
 
-		Promise.all(queries.map((sql) => apiPost<QueryResult>("/query", { sql }).catch(() => ({ rows: [], count: 0, time_ms: 0 }))))
-			.then(([levelRes, serviceRes, projectRes, branchRes, deployRes]) => {
-				const toMap = (res: QueryResult, key: string) =>
-					Object.fromEntries(res.rows.map((r) => [r[key] as string, Number(r.count)]));
-				setFacets({
-					level: toMap(levelRes, "level"),
-					service: toMap(serviceRes, "service"),
-					project: toMap(projectRes, "project"),
-					branch: toMap(branchRes, "branch"),
-					deployment_id: toMap(deployRes, "deployment_id"),
-				});
+		Promise.all(
+			queries.map((sql) =>
+				apiPost<QueryResult>("/query", { sql }).catch(() => ({ rows: [], count: 0, time_ms: 0 })),
+			),
+		).then(([levelRes, serviceRes, projectRes, branchRes, deployRes]) => {
+			const toMap = (res: QueryResult, key: string) =>
+				Object.fromEntries(res.rows.map((r) => [r[key] as string, Number(r.count)]));
+			setFacets({
+				level: toMap(levelRes, "level"),
+				service: toMap(serviceRes, "service"),
+				project: toMap(projectRes, "project"),
+				branch: toMap(branchRes, "branch"),
+				deployment_id: toMap(deployRes, "deployment_id"),
 			});
+		});
 	}, [filters.from]);
 
 	const miniItems = [
@@ -208,11 +363,12 @@ export function FilterSidebar({
 		{ icon: GitBranch, label: "Branch", filter: "branch" as const },
 		{ icon: Rocket, label: "Deploy", filter: "deployment_id" as const },
 		...(view === "traces" ? [{ icon: Route, label: "Trace", filter: "trace_id" as const }] : []),
+		{ icon: BookmarkIcon, label: "Bookmarks", filter: "bookmarked" as const },
 	];
 
 	if (collapsed) {
 		return (
-			<div className="flex w-11 shrink-0 flex-col items-center border-r border-border">
+			<div className="flex w-full shrink-0 flex-col items-center border-r border-border">
 				<button
 					type="button"
 					onClick={() => setCollapsed(false)}
@@ -244,7 +400,7 @@ export function FilterSidebar({
 	}
 
 	return (
-		<div className="flex w-64 shrink-0 flex-col border-r border-border overflow-hidden">
+		<div className="flex h-full w-full flex-col border-r border-border overflow-hidden">
 			<div className="flex items-center justify-between border-b border-border px-4 py-2">
 				<span className="text-xs font-medium">Filters</span>
 				<div className="flex items-center gap-1">
@@ -271,7 +427,7 @@ export function FilterSidebar({
 			<div className="flex-1 overflow-y-auto">
 				<Section title="Timeline" defaultOpen>
 					<div className="space-y-2">
-						<div className="flex gap-1">
+						<div className="flex flex-wrap gap-1">
 							{TIME_PRESETS.map((p) => (
 								<button
 									key={p.value}
@@ -295,33 +451,23 @@ export function FilterSidebar({
 							))}
 						</div>
 						<div className="space-y-1.5">
-							<div className="flex items-center gap-1.5">
-								<span className="text-[10px] text-muted-foreground w-8">From</span>
-								<input
-									type="datetime-local"
-									value={toDatetimeLocal(filters.from)}
-									onChange={(e) => onUpdateFilter("from", fromDatetimeLocal(e.target.value))}
-									className="h-6 flex-1 rounded border border-border bg-background px-1.5 text-[10px] outline-none focus:ring-1 focus:ring-ring [color-scheme:dark] dark:[color-scheme:dark]"
-								/>
-							</div>
-							<div className="flex items-center gap-1.5">
-								<span className="text-[10px] text-muted-foreground w-8">To</span>
-								<input
-									type="datetime-local"
-									value={toDatetimeLocal(filters.to)}
-									onChange={(e) => onUpdateFilter("to", fromDatetimeLocal(e.target.value))}
-									className="h-6 flex-1 rounded border border-border bg-background px-1.5 text-[10px] outline-none focus:ring-1 focus:ring-ring [color-scheme:dark] dark:[color-scheme:dark]"
-								/>
-							</div>
+							<DateTimePicker
+								label="From"
+								value={filters.from}
+								onChange={(v) => onUpdateFilter("from", v)}
+							/>
+							<DateTimePicker
+								label="To"
+								value={filters.to}
+								onChange={(v) => onUpdateFilter("to", v)}
+							/>
 						</div>
 					</div>
 				</Section>
 
 				<Section title="Level" defaultOpen>
 					<FacetList
-						items={Object.fromEntries(
-							LOG_LEVELS.map((l) => [l, facets.level[l] || 0]),
-						)}
+						items={Object.fromEntries(LOG_LEVELS.map((l) => [l, facets.level[l] || 0]))}
 						selected={filters.level}
 						onSelect={(v) => onUpdateFilter("level", v)}
 						dotColors={LEVEL_DOTS}
@@ -362,13 +508,73 @@ export function FilterSidebar({
 
 				{view === "traces" && (
 					<Section title="Trace ID">
-						<input
+						<DebouncedInput
 							type="text"
 							placeholder="Filter by trace ID..."
 							value={filters.trace_id || ""}
-							onChange={(e) => onUpdateFilter("trace_id", e.target.value || undefined)}
-							className="h-7 w-full rounded border border-border bg-background px-2 text-xs font-mono outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
+							onChange={(v) => onUpdateFilter("trace_id", v || undefined)}
+							className="h-7 w-full rounded border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 						/>
+					</Section>
+				)}
+				{bookmarks.length > 0 && (
+					<Section title={`Bookmarks (${bookmarks.length})`} defaultOpen>
+						<div className="space-y-1">
+							<button
+								type="button"
+								onClick={() => onUpdateFilter("bookmarked", filters.bookmarked === "true" ? undefined : "true")}
+								className={cn(
+									"flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors",
+									filters.bookmarked === "true"
+										? "bg-primary/15 text-primary font-medium"
+										: "text-foreground hover:bg-muted/50",
+								)}
+							>
+								<span
+									className={cn(
+										"flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border transition-colors",
+										filters.bookmarked === "true"
+											? "border-primary bg-primary text-primary-foreground"
+											: "border-muted-foreground/40",
+									)}
+								>
+									{filters.bookmarked === "true" && (
+										<svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
+											<path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+										</svg>
+									)}
+								</span>
+								Show bookmarked only
+							</button>
+							<div className="mt-1 space-y-0.5">
+								{bookmarks.map((b) => (
+									<div key={b.id} className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted/40">
+										<button
+											type="button"
+											onClick={() => onBookmarkClick?.(b)}
+											className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+										>
+											{b.type === "trace" ? (
+												<Route className="h-3 w-3 shrink-0 text-muted-foreground" />
+											) : (
+												<FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
+											)}
+											<span className="min-w-0 flex-1 truncate text-[10px]">{b.label}</span>
+											{b.level && (
+												<span className="shrink-0 text-[9px] text-muted-foreground uppercase">{b.level}</span>
+											)}
+										</button>
+										<button
+											type="button"
+											onClick={() => remove(b.id)}
+											className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+										>
+											<X className="h-2.5 w-2.5" />
+										</button>
+									</div>
+								))}
+							</div>
+						</div>
 					</Section>
 				)}
 			</div>

@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { run } from "@drizzle-team/brocli";
 import { archiveCommand } from "./cli/archive.ts";
+import { deleteDbCommand } from "./cli/delete-db.ts";
 import { archiverServiceCommand } from "./cli/archiver-service.ts";
 import { exportCommand } from "./cli/export.ts";
 import { mcpCommand } from "./cli/mcp.ts";
@@ -27,6 +28,7 @@ run(
 		archiveCommand,
 		archiverServiceCommand,
 		mcpCommand,
+		deleteDbCommand,
 	],
 	{
 		name: "relog.dev",

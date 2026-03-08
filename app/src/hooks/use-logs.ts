@@ -29,6 +29,7 @@ export function useLogs(filters: Filters, enabled: boolean) {
 			if (filters.grep) params.grep = filters.grep;
 			if (filters.from) params.from = filters.from;
 			if (filters.to) params.to = filters.to;
+			if (filters.around_id) params.around_id = filters.around_id;
 			return params;
 		},
 		[filters],

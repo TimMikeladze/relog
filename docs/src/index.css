@@ -14,7 +14,7 @@
 	--color-amber: #fcd34d;
 	--color-rose: #fda4af;
 	--font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Fira Code", monospace;
+	--font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
 }
 
 html {

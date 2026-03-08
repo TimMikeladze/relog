@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useHashParam } from "@/hooks/use-hash-param";
 import { useHealth } from "@/hooks/use-health";
 import { StatCard } from "@/components/stat-card";
 import { LevelBadge } from "@/components/level-badge";
@@ -73,8 +74,10 @@ export function DashboardView({
 	enabled: boolean;
 	onZoom?: (from: string, to: string) => void;
 }) {
-	const [timeRange, setTimeRange] = useState(TIME_RANGES[2]); // 24h
-	const [refreshMs, setRefreshMs] = useState(0);
+	const [timeRangeLabel, setTimeRangeLabel] = useHashParam("range", "24h");
+	const timeRange = TIME_RANGES.find((tr) => tr.label === timeRangeLabel) ?? TIME_RANGES[2];
+	const [refreshMsStr, setRefreshMsStr] = useHashParam("refresh", "0");
+	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
 	const [showRefreshMenu, setShowRefreshMenu] = useState(false);
 	const [chartRefreshKey, setChartRefreshKey] = useState(0);
 	const [levelCounts, setLevelCounts] = useState<LevelCount[]>([]);
@@ -162,7 +165,7 @@ export function DashboardView({
 						<button
 							key={tr.label}
 							type="button"
-							onClick={() => setTimeRange(tr)}
+							onClick={() => setTimeRangeLabel(tr.label)}
 							className={`rounded-sm px-2.5 py-1 text-xs font-medium transition-colors ${
 								timeRange.label === tr.label
 									? "bg-background text-foreground shadow-sm"
@@ -197,7 +200,7 @@ export function DashboardView({
 									key={o.label}
 									type="button"
 									onClick={() => {
-										setRefreshMs(o.ms);
+										setRefreshMsStr(String(o.ms));
 										setShowRefreshMenu(false);
 									}}
 									className={`block w-full rounded px-3 py-1.5 text-left text-xs hover:bg-muted ${refreshMs === o.ms ? "text-foreground font-medium" : "text-popover-foreground"}`}
@@ -342,7 +345,7 @@ export function DashboardView({
 					) : (
 						<div className="divide-y divide-border/50">
 							{recentErrors.map((err) => (
-								<div key={err.id} className="flex items-center gap-3 py-1.5 font-mono text-xs">
+								<div key={err.id} className="flex items-center gap-3 py-1.5 text-xs">
 									<span className="shrink-0 text-muted-foreground tabular-nums">
 										{new Date(err.timestamp).toLocaleTimeString("en-US", { hour12: false })}
 									</span>

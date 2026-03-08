@@ -7,8 +7,11 @@ import { handleHealth } from "./routes/health.ts";
 import { handleIngest } from "./routes/ingest.ts";
 import { handleLogs } from "./routes/logs.ts";
 import { handlePrune } from "./routes/prune.ts";
+import { handleHistogram } from "./routes/histogram.ts";
 import { handleQuery, handleQueryStream } from "./routes/query.ts";
 import { StreamManager, handleStream } from "./routes/stream.ts";
+import { AggregatesManager } from "./aggregates.ts";
+import { handleAggregates } from "./routes/aggregates.ts";
 
 const DEFAULT_MAX_BODY = 5 * 1024 * 1024;
 const DEFAULT_INGEST_RPM = 600;
@@ -79,6 +82,7 @@ export interface ServerInstance {
 	db: RelogDatabase;
 	duckdb: DuckDBReader;
 	streamManager: StreamManager;
+	aggregatesManager: AggregatesManager;
 	shutdown: () => void;
 	autoPruneTimer?: ReturnType<typeof setInterval>;
 }
@@ -89,6 +93,8 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const maxBody = config.maxBodySize ?? DEFAULT_MAX_BODY;
 	const maxBatchSize = config.maxBatchSize ?? 1000;
 	const streamManager = new StreamManager(db, config.streamDebounceMs);
+	const aggregatesManager = new AggregatesManager();
+	await aggregatesManager.init();
 	const ingestLimiter = new RateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
 
 	const duckdb = new DuckDBReader(config.dbPath, config.archive);
@@ -152,6 +158,10 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 						response = await handleIngest(request, db, maxBatchSize, auth.keyPrefix);
 						if (response.status === 201) streamManager.notify();
 					}
+				} else if (method === "POST" && path === "/histogram") {
+					auth = checkRole(request, "read", keys, prefixLen);
+					if (auth.error) return auth.error;
+					response = await handleHistogram(request, duckdb);
 				} else if (method === "POST" && path === "/query") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
@@ -176,6 +186,15 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
 					response = handleStream(request, streamManager, db);
+				} else if (path.startsWith("/aggregates")) {
+					// Aggregates are read-accessible, write requires admin
+					if (method === "GET") {
+						auth = checkRole(request, "read", keys, prefixLen);
+					} else {
+						auth = checkRole(request, "admin", keys, prefixLen);
+					}
+					if (auth.error) return auth.error;
+					response = await handleAggregates(request, aggregatesManager);
 				} else {
 					response = Response.json({ error: "Not found" }, { status: 404 });
 				}
@@ -230,5 +249,5 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		db.close();
 	};
 
-	return { server, db, duckdb, streamManager, shutdown, autoPruneTimer };
+	return { server, db, duckdb, streamManager, aggregatesManager, shutdown, autoPruneTimer };
 }

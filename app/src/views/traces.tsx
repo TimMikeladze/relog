@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useHashParam } from "@/hooks/use-hash-param";
 import { apiPost } from "@/api/client";
 import { useStream } from "@/hooks/use-stream";
-import { TimelineStrip } from "@/components/timeline-strip";
+import { TimelineChart, HoverStats } from "@/components/timeline-chart";
 import { LevelBadge } from "@/components/level-badge";
 import type { Filters, LogRecord, QueryResult } from "@/types";
 
-import { ChevronRight, ChevronDown, Circle, Pause, Play, Radio, Trash2 } from "lucide-react";
+import { ChevronRight, ChevronDown, Circle, Pause, Play, Radio, Trash2, Bookmark, BookmarkCheck } from "lucide-react";
+import { useBookmarks } from "@/hooks/use-bookmarks";
 
 interface TraceRow {
 	trace_id: string;
@@ -131,18 +133,19 @@ export function TracesView({
 	enabled: boolean;
 	onUpdateFilters: (updates: Partial<Filters>) => void;
 }) {
+	const { toggle, isBookmarked } = useBookmarks();
 	const [traces, setTraces] = useState<TraceRow[]>([]);
 	const [loading, setLoading] = useState(false);
-	const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
+	const [expandedTrace, setExpandedTrace] = useHashParam("expanded");
 	const [traceLogs, setTraceLogs] = useState<LogRecord[]>([]);
 	const [traceSpans, setTraceSpans] = useState<SpanBar[]>([]);
-	const [live, setLive] = useState(false);
+	const [live, setLive] = useHashParam("live");
 
-	const stream = useStream(filters, enabled && live);
+	const stream = useStream(filters, enabled && live === "1");
 
 	const liveTraces = useMemo(() => logsToTraceRows(stream.logs), [stream.logs]);
 	const liveTraceLogs = useMemo(() => {
-		if (!live || !expandedTrace) return [];
+		if (live !== "1" || !expandedTrace) return [];
 		return stream.logs
 			.filter((l) => l.trace_id === expandedTrace)
 			.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -153,28 +156,33 @@ export function TracesView({
 	const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
 	useEffect(() => {
-		if (!live) return;
+		if (live !== "1") return;
 		intervalRef.current = setInterval(() => setRefreshKey((k) => k + 1), 10_000);
 		return () => clearInterval(intervalRef.current);
 	}, [live]);
 
 	useEffect(() => {
-		if (!enabled || live) return;
+		if (!enabled || live === "1") return;
 		setLoading(true);
 
 		let where = "WHERE trace_id IS NOT NULL AND trace_id != ''";
-		if (filters.trace_id) where += ` AND trace_id = '${filters.trace_id}'`;
-		if (filters.service) where += ` AND service = '${filters.service}'`;
-		if (filters.project) where += ` AND project = '${filters.project}'`;
-		if (filters.branch) where += ` AND branch = '${filters.branch}'`;
-		if (filters.version) where += ` AND version = '${filters.version}'`;
-		if (filters.deployment_id) where += ` AND deployment_id = '${filters.deployment_id}'`;
-		if (filters.level) where += ` AND level = '${filters.level}'`;
+		const inClause = (col: string, val?: string) => {
+			if (!val) return;
+			const vals = val.split(",").map((v) => `'${v.replace(/'/g, "''")}'`);
+			where += vals.length === 1 ? ` AND ${col} = ${vals[0]}` : ` AND ${col} IN (${vals.join(", ")})`;
+		};
+		inClause("trace_id", filters.trace_id);
+		inClause("service", filters.service);
+		inClause("project", filters.project);
+		inClause("branch", filters.branch);
+		inClause("version", filters.version);
+		inClause("deployment_id", filters.deployment_id);
+		inClause("level", filters.level);
 		if (filters.grep) where += ` AND message LIKE '%${filters.grep.replace(/'/g, "''")}%'`;
 		if (filters.from) {
-			const match = filters.from.match(/^(\d+)([smhd])$/);
+			const match = filters.from.match(/^(\d+)([smhdwMy])$/);
 			if (match) {
-				const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000 };
+				const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000, w: 604_800_000, M: 2_592_000_000, y: 31_536_000_000 };
 				where += ` AND created_at > ${Date.now() - parseInt(match[1]) * (ms[match[2]] ?? 3600_000)}`;
 			}
 		}
@@ -228,28 +236,30 @@ export function TracesView({
 	}, [enabled, live, filters]);
 
 	const expandTrace = useCallback(
-		async (traceId: string) => {
-			if (expandedTrace === traceId) {
-				setExpandedTrace(null);
-				return;
-			}
-			setExpandedTrace(traceId);
+		(traceId: string) => {
+			setExpandedTrace(expandedTrace === traceId ? undefined : traceId);
+		},
+		[expandedTrace],
+	);
 
-			if (live) return; // live mode uses liveTraceLogs/liveTraceSpans via useMemo
-
-			const sql = `SELECT * FROM logs WHERE trace_id = '${traceId}' ORDER BY created_at ASC LIMIT 200`;
-			try {
-				const res = await apiPost<QueryResult>("/query", { sql });
+	// Fetch trace logs whenever expandedTrace changes (covers both user clicks and URL restore).
+	// Always clear first to avoid showing stale logs from a previously expanded trace.
+	useEffect(() => {
+		setTraceLogs([]);
+		setTraceSpans([]);
+		if (!expandedTrace || live === "1" || !enabled) return;
+		const sql = `SELECT * FROM logs WHERE trace_id = '${expandedTrace}' ORDER BY created_at ASC LIMIT 200`;
+		apiPost<QueryResult>("/query", { sql })
+			.then((res) => {
 				const logs = res.rows as unknown as LogRecord[];
 				setTraceLogs(logs);
 				setTraceSpans(buildSpans(logs));
-			} catch {
+			})
+			.catch(() => {
 				setTraceLogs([]);
 				setTraceSpans([]);
-			}
-		},
-		[expandedTrace, live],
-	);
+			});
+	}, [expandedTrace, live, enabled]);
 
 	const statusDot = (level: string) => {
 		const colors: Record<string, string> = {
@@ -261,25 +271,29 @@ export function TracesView({
 		return colors[level] || colors.info;
 	};
 
-	const displayTraces = live ? liveTraces : traces;
-	const displayTraceLogs = live ? liveTraceLogs : traceLogs;
-	const displayTraceSpans = live ? liveTraceSpans : traceSpans;
+	const allTraces = live === "1" ? liveTraces : traces;
+	const displayTraces = filters.bookmarked === "true"
+		? allTraces.filter((t) => isBookmarked(`trace:${t.trace_id}`))
+		: allTraces;
+	const displayTraceLogs = live === "1" ? liveTraceLogs : traceLogs;
+	const displayTraceSpans = live === "1" ? liveTraceSpans : traceSpans;
 
 	return (
 		<div className="flex flex-1 flex-col overflow-hidden">
-			<TimelineStrip
-				from={live ? "15m" : filters.from || "1h"}
-				to={live ? undefined : filters.to}
+			<TimelineChart
+				from={live === "1" ? "15m" : filters.from || "1h"}
+				to={live === "1" ? undefined : filters.to}
 				filters={filters as Record<string, string | undefined>}
-				refreshKey={live ? refreshKey : undefined}
-				onTimeRangeSelect={live ? undefined : (from, to) => onUpdateFilters({ from, to })}
-			/>
-			<div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-1.5">
+				refreshKey={live === "1" ? refreshKey : undefined}
+				onTimeRangeSelect={live === "1" ? undefined : (from, to) => onUpdateFilters({ from, to })}
+				onResetTimeRange={live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined}
+			>
+				{(hoverBucket) => (<>
 				<button
 					type="button"
-					onClick={() => setLive((prev) => !prev)}
+					onClick={() => setLive(live === "1" ? undefined : "1")}
 					className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
-						live
+						live === "1"
 							? "bg-emerald-500/15 text-emerald-500"
 							: "text-muted-foreground hover:bg-muted hover:text-foreground"
 					}`}
@@ -288,7 +302,7 @@ export function TracesView({
 					Live
 				</button>
 
-				{live && (
+				{live === "1" && (
 					<>
 						<div className="h-3 w-px bg-border" />
 						<div className="flex items-center gap-1.5">
@@ -305,18 +319,16 @@ export function TracesView({
 					</>
 				)}
 
-				{!live && loading && (
-					<span className="text-[10px] text-muted-foreground">Loading...</span>
+				{live !== "1" && loading && <span className="text-[10px] text-muted-foreground">Loading...</span>}
+				{live !== "1" && !loading && (
+					<span className="text-[10px] text-muted-foreground">{traces.length} traces</span>
 				)}
-				{!live && !loading && (
-					<span className="text-[10px] text-muted-foreground">
-						{traces.length} traces
-					</span>
-				)}
+
+				<HoverStats bucket={hoverBucket} />
 
 				<div className="flex-1" />
 
-				{live && (
+				{live === "1" && (
 					<>
 						<button
 							type="button"
@@ -345,16 +357,17 @@ export function TracesView({
 						</button>
 					</>
 				)}
-			</div>
+				</>)}
+			</TimelineChart>
 			<div className="flex-1 overflow-y-auto">
-				{!live && loading && (
+				{live !== "1" && loading && (
 					<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
 						Loading traces...
 					</div>
 				)}
 				{!loading && displayTraces.length === 0 && (
 					<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
-						{live
+						{live === "1"
 							? stream.connected
 								? "Waiting for traces..."
 								: "Not connected"
@@ -364,27 +377,40 @@ export function TracesView({
 				<div className="divide-y divide-border/50">
 					{displayTraces.map((t) => (
 						<div key={t.trace_id}>
-							<button
-								type="button"
-								onClick={() => expandTrace(t.trace_id)}
-								className="flex w-full items-center gap-3 px-4 py-2 text-left font-mono text-xs transition-colors hover:bg-muted/50"
-							>
-								{expandedTrace === t.trace_id ? (
-									<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-								) : (
-									<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-								)}
-								<span className="w-32 shrink-0 truncate text-primary">{t.trace_id}</span>
-								<span className="w-24 shrink-0 text-muted-foreground tabular-nums">
-									{new Date(t.first_ts).toLocaleTimeString("en-US", { hour12: false })}
-								</span>
-								<span className="w-16 shrink-0 tabular-nums">{t.span_count} spans</span>
-								<span className="w-20 shrink-0 tabular-nums">
-									{t.duration_ms > 0 ? `${Math.round(t.duration_ms)}ms` : "\u2014"}
-								</span>
-								<span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(t.max_level)}`} />
-								<span className="min-w-0 flex-1 truncate text-muted-foreground">{t.services}</span>
-							</button>
+							<div className="group flex w-full items-center hover:bg-muted/50">
+								<button
+									type="button"
+									onClick={() => expandTrace(t.trace_id)}
+									className="flex flex-1 items-center gap-3 px-4 py-2 text-left text-xs"
+								>
+									{expandedTrace === t.trace_id ? (
+										<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+									) : (
+										<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+									)}
+									<span className="w-32 shrink-0 truncate text-primary">{t.trace_id}</span>
+									<span className="w-24 shrink-0 text-muted-foreground tabular-nums">
+										{new Date(t.first_ts).toLocaleTimeString("en-US", { hour12: false })}
+									</span>
+									<span className="w-16 shrink-0 tabular-nums">{t.span_count} spans</span>
+									<span className="w-20 shrink-0 tabular-nums">
+										{t.duration_ms > 0 ? `${Math.round(t.duration_ms)}ms` : "\u2014"}
+									</span>
+									<span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(t.max_level)}`} />
+									<span className="min-w-0 flex-1 truncate text-muted-foreground">{t.services}</span>
+								</button>
+								<button
+									type="button"
+									onClick={() => toggle({ type: "trace", label: t.trace_id, timestamp: t.first_ts, level: t.max_level, traceId: t.trace_id })}
+									className={`mr-2 shrink-0 rounded p-0.5 transition-colors ${isBookmarked(`trace:${t.trace_id}`) ? "text-amber-400" : "text-transparent group-hover:text-muted-foreground hover:!text-amber-400"}`}
+								>
+									{isBookmarked(`trace:${t.trace_id}`) ? (
+										<BookmarkCheck className="h-3 w-3" />
+									) : (
+										<Bookmark className="h-3 w-3" />
+									)}
+								</button>
+							</div>
 
 							{expandedTrace === t.trace_id && (
 								<div className="border-t border-border/50 bg-muted/20 px-4 py-4 space-y-4">
@@ -439,7 +465,7 @@ export function TracesView({
 											{displayTraceLogs.map((l) => (
 												<div
 													key={l.id}
-													className="flex items-center gap-3 px-3 py-1 font-mono text-xs"
+													className="flex items-center gap-3 px-3 py-1 text-xs"
 												>
 													<span className="shrink-0 text-muted-foreground tabular-nums">
 														{new Date(l.timestamp).toLocaleTimeString("en-US", {
