@@ -1,6 +1,6 @@
-import { type Command, command, number, string } from "@drizzle-team/brocli";
+import { type Command, boolean, command, number, string } from "@drizzle-team/brocli";
 import { startServer } from "../server/server.ts";
-import { getDefaultDbPath } from "../paths.ts";
+import { getAppDistPath, getDefaultDbPath } from "../paths.ts";
 import type { ArchiveConfig, AutoPruneConfig } from "../types.ts";
 
 function parseSize(s: string): number {
@@ -46,6 +46,8 @@ export const startCommand: Command = command({
 		s3SecretKey: string("s3-secret-key").desc("S3 secret key"),
 		s3Prefix: string("s3-prefix").desc("S3 path prefix").default("logs"),
 		s3Region: string("s3-region").desc("S3 region").default("us-east-1"),
+		noUi: boolean("no-ui").desc("Disable serving the web UI"),
+		noOpen: boolean("no-open").desc("Serve the web UI but skip opening it in the browser"),
 	},
 	handler: async (opts) => {
 		function parseKeys(raw: string | undefined): string[] {
@@ -97,6 +99,8 @@ export const startCommand: Command = command({
 			};
 		}
 
+		const uiDistPath = opts.noUi ? undefined : (getAppDistPath() ?? undefined);
+
 		const { server, shutdown } = await startServer({
 			port: opts.port,
 			dbPath: opts.db,
@@ -107,9 +111,12 @@ export const startCommand: Command = command({
 			cors: opts.cors === "true",
 			autoPrune,
 			archive,
+			uiDistPath,
 		});
 
-		console.log(`relog.dev server listening on http://localhost:${server.port}`);
+		const url = `http://localhost:${server.port}`;
+		console.log(`relog.dev server listening on ${url}`);
+		if (uiDistPath) console.log(`  ui: ${url}`);
 		console.log(`  database: ${opts.db}`);
 		const hasAuth = ingestKeys || readKeys || adminKeys;
 		if (hasAuth) console.log("  auth: enabled (role-based API keys)");
@@ -120,6 +127,16 @@ export const startCommand: Command = command({
 			if (autoPrune.maxAgeDays) parts.push(`max-age=${autoPrune.maxAgeDays}d`);
 			parts.push(`interval=${autoPrune.intervalSeconds}s`);
 			console.log(`  auto-prune: ${parts.join(", ")}`);
+		}
+
+		if (uiDistPath && !opts.noOpen) {
+			const opener =
+				process.platform === "darwin"
+					? "open"
+					: process.platform === "win32"
+						? "explorer"
+						: "xdg-open";
+			Bun.spawn([opener, url], { stdout: null, stderr: null });
 		}
 
 		const onSignal = () => {

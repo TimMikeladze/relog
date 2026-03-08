@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
 import type { ServerConfig } from "../types.ts";
@@ -195,6 +196,15 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					}
 					if (auth.error) return auth.error;
 					response = await handleAggregates(request, aggregatesManager);
+				} else if (method === "GET" && config.uiDistPath) {
+					// Serve the bundled web UI with SPA fallback
+					const filePath = join(config.uiDistPath, path === "/" ? "index.html" : path);
+					const file = Bun.file(filePath);
+					if (await file.exists()) {
+						response = new Response(file);
+					} else {
+						response = new Response(Bun.file(join(config.uiDistPath, "index.html")));
+					}
 				} else {
 					response = Response.json({ error: "Not found" }, { status: 404 });
 				}

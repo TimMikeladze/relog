@@ -12,6 +12,7 @@ import { CommandPalette } from "@/components/command-palette";
 import type { Command } from "@/components/command-palette";
 import { ShortcutsDialog } from "@/components/shortcuts-dialog";
 import { SupportDialog } from "@/components/support-dialog";
+import { GettingStartedDialog, useGettingStarted } from "@/components/getting-started-dialog";
 import { ExploreView } from "@/views/explore";
 import { TracesView } from "@/views/traces";
 import { QueryView } from "@/views/query";
@@ -26,6 +27,7 @@ function AppContent() {
 	const [showCommandPalette, setShowCommandPalette] = useState(false);
 	const [showShortcuts, setShowShortcuts] = useState(false);
 	const [showSupport, setShowSupport] = useState(false);
+	const gettingStarted = useGettingStarted();
 
 	const navigateTrace = useCallback(
 		(traceId: string) => {
@@ -57,6 +59,7 @@ function AppContent() {
 				setShowSettings(false);
 				setShowShortcuts(false);
 				setShowSupport(false);
+				gettingStarted.setOpen(false);
 			},
 			"g e": () => setView("explore" as View),
 			"g t": () => setView("traces" as View),
@@ -161,22 +164,6 @@ function AppContent() {
 		);
 	}
 
-	if (auth.status === "error") {
-		return (
-			<div className="flex h-screen flex-col items-center justify-center gap-3 bg-background">
-				<span className="text-sm text-destructive">{auth.error}</span>
-				<button
-					type="button"
-					onClick={() => setShowSettings(true)}
-					className="rounded-md bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
-				>
-					Change Server URL
-				</button>
-				{showSettings && <AuthDialog onClose={() => setShowSettings(false)} />}
-			</div>
-		);
-	}
-
 	const showSidebar = view === "explore" || view === "traces";
 
 	return (
@@ -250,6 +237,7 @@ function AppContent() {
 			<StatusBar
 				onSettingsClick={() => setShowSettings(true)}
 				onSupportClick={() => setShowSupport(true)}
+				onGettingStartedClick={() => gettingStarted.setOpen(true)}
 			/>
 			{showSettings && <AuthDialog onClose={() => setShowSettings(false)} />}
 			{showCommandPalette && (
@@ -257,6 +245,9 @@ function AppContent() {
 			)}
 			{showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
 			{showSupport && <SupportDialog onClose={() => setShowSupport(false)} />}
+			{gettingStarted.open && (
+				<GettingStartedDialog onClose={() => gettingStarted.setOpen(false)} />
+			)}
 		</div>
 	);
 }

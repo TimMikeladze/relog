@@ -13,6 +13,8 @@ interface AuthContextValue extends AuthState {
 	login: (key: string) => Promise<void>;
 	logout: () => void;
 	setServerUrl: (url: string) => void;
+	/** True when the app is being served from the same origin as the API (i.e. local CLI mode) */
+	isLocal: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -95,8 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		[checkAuth],
 	);
 
+	const isLocal = state.serverUrl === window.location.origin;
+
 	return (
-		<AuthContext.Provider value={{ ...state, login, logout, setServerUrl: setServerUrlCb }}>
+		<AuthContext.Provider
+			value={{ ...state, login, logout, setServerUrl: setServerUrlCb, isLocal }}
+		>
 			{children}
 		</AuthContext.Provider>
 	);

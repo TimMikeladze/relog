@@ -55,7 +55,7 @@
 		"./package.json": "./package.json"
 	},
 	"scripts": {
-		"build": "bunup",
+		"build": "cd app && bun run build && cd .. && bunup && cp -r app/dist dist/app",
 		"dev": "bunup --watch & bun --watch src/cli.ts start & sleep 2 && bun run src/cli.ts seed --count 0 --rate 0.0083 --batch-size 1 & (cd app && bun run dev) & (cd docs && bun run dev) & wait",
 		"dev:build": "bunup --watch",
 		"dev:server": "bun --watch src/cli.ts start",

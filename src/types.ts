@@ -88,6 +88,7 @@ export interface ServerConfig {
 	ingestRpm?: number;
 	autoPrune?: AutoPruneConfig;
 	archive?: ArchiveConfig;
+	uiDistPath?: string;
 }
 
 export interface QueryResult {

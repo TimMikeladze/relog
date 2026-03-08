@@ -1,6 +1,6 @@
 import { useHealth } from "@/hooks/use-health";
 import { useAuth } from "@/hooks/use-auth";
-import { Circle, Heart, Lock, LockOpen } from "lucide-react";
+import { Circle, Heart, Lock, LockOpen, Rocket } from "lucide-react";
 
 function formatBytes(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
@@ -22,14 +22,17 @@ function formatUptime(ms: number): string {
 export function StatusBar({
 	onSettingsClick,
 	onSupportClick,
+	onGettingStartedClick,
 }: {
 	onSettingsClick?: () => void;
 	onSupportClick?: () => void;
+	onGettingStartedClick?: () => void;
 }) {
 	const { data: health } = useHealth(true, 15_000);
 	const auth = useAuth();
 
 	const authed = auth.status === "authenticated";
+	const { isLocal } = auth;
 
 	return (
 		<div className="flex shrink-0 items-center gap-3 border-t border-border px-4 py-1 text-[10px] text-muted-foreground">
@@ -39,6 +42,14 @@ export function StatusBar({
 				/>
 				<span>{health?.ok ? "Connected" : "Disconnected"}</span>
 			</div>
+			{isLocal && (
+				<>
+					<div className="h-3 w-px bg-border" />
+					<span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400 border border-emerald-500/20">
+						local
+					</span>
+				</>
+			)}
 			<div className="h-3 w-px bg-border" />
 			<button
 				type="button"
@@ -66,6 +77,14 @@ export function StatusBar({
 			<span>{health ? `up ${formatUptime(health.uptime)}` : "\u2014"}</span>
 			<div className="flex-1" />
 			<div className="flex items-center gap-1">
+				<button
+					type="button"
+					onClick={onGettingStartedClick}
+					title="Getting started"
+					className="rounded p-1 cursor-pointer transition-colors hover:bg-muted hover:text-foreground"
+				>
+					<Rocket className="h-3 w-3" />
+				</button>
 				<a
 					href="https://github.com/TimMikeladze/relog"
 					target="_blank"
