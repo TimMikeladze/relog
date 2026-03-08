@@ -141,9 +141,7 @@ export function CommandPalette({
 									>
 										<span>{cmd.name}</span>
 										{cmd.shortcut && (
-											<span className="text-[10px] text-muted-foreground">
-												{cmd.shortcut}
-											</span>
+											<span className="text-[10px] text-muted-foreground">{cmd.shortcut}</span>
 										)}
 									</button>
 								))}

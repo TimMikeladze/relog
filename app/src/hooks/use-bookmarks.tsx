@@ -44,10 +44,7 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
 		});
 	}, []);
 
-	const isBookmarked = useCallback(
-		(id: string) => bookmarks.some((b) => b.id === id),
-		[bookmarks],
-	);
+	const isBookmarked = useCallback((id: string) => bookmarks.some((b) => b.id === id), [bookmarks]);
 
 	const toggle = useCallback(
 		(b: Omit<Bookmark, "id" | "createdAt">) => {

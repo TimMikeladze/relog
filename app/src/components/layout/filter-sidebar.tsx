@@ -64,7 +64,6 @@ function isRelativeTime(v?: string): boolean {
 	return !!v && /^\d+[smhdwMy]$/.test(v);
 }
 
-
 function DebouncedInput({
 	value: externalValue,
 	onChange,
@@ -176,7 +175,13 @@ function FacetList({
 						>
 							{isSelected && (
 								<svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-									<path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+									<path
+										d="M2.5 6L5 8.5L9.5 3.5"
+										stroke="currentColor"
+										strokeWidth="1.5"
+										strokeLinecap="round"
+										strokeLinejoin="round"
+									/>
 								</svg>
 							)}
 						</span>
@@ -522,7 +527,9 @@ export function FilterSidebar({
 						<div className="space-y-1">
 							<button
 								type="button"
-								onClick={() => onUpdateFilter("bookmarked", filters.bookmarked === "true" ? undefined : "true")}
+								onClick={() =>
+									onUpdateFilter("bookmarked", filters.bookmarked === "true" ? undefined : "true")
+								}
 								className={cn(
 									"flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors",
 									filters.bookmarked === "true"
@@ -540,7 +547,13 @@ export function FilterSidebar({
 								>
 									{filters.bookmarked === "true" && (
 										<svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-											<path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+											<path
+												d="M2.5 6L5 8.5L9.5 3.5"
+												stroke="currentColor"
+												strokeWidth="1.5"
+												strokeLinecap="round"
+												strokeLinejoin="round"
+											/>
 										</svg>
 									)}
 								</span>
@@ -548,7 +561,10 @@ export function FilterSidebar({
 							</button>
 							<div className="mt-1 space-y-0.5">
 								{bookmarks.map((b) => (
-									<div key={b.id} className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted/40">
+									<div
+										key={b.id}
+										className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted/40"
+									>
 										<button
 											type="button"
 											onClick={() => onBookmarkClick?.(b)}
@@ -561,7 +577,9 @@ export function FilterSidebar({
 											)}
 											<span className="min-w-0 flex-1 truncate text-[10px]">{b.label}</span>
 											{b.level && (
-												<span className="shrink-0 text-[9px] text-muted-foreground uppercase">{b.level}</span>
+												<span className="shrink-0 text-[9px] text-muted-foreground uppercase">
+													{b.level}
+												</span>
 											)}
 										</button>
 										<button

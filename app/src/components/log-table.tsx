@@ -68,9 +68,7 @@ export function LogTable({
 
 	const columnHeaders = (
 		<div className="flex shrink-0 items-center border-b border-border bg-muted/30 text-[10px] font-medium uppercase tracking-wider text-muted-foreground border-l-2 border-l-transparent">
-			<span className={`shrink-0 px-3 py-1.5 ${showDate ? "w-[200px]" : "w-[110px]"}`}>
-				Time
-			</span>
+			<span className={`shrink-0 px-3 py-1.5 ${showDate ? "w-[200px]" : "w-[110px]"}`}>Time</span>
 			<span className="shrink-0 w-[52px] py-1.5">Level</span>
 			<span className="shrink-0 w-[120px] py-1.5">Service</span>
 			<span className="min-w-0 flex-1 py-1.5 pr-3">Message</span>
@@ -93,7 +91,14 @@ export function LogTable({
 									isBookmarked={isBookmarked(`log:${log.id}`)}
 									onToggleBookmark={(e) => {
 										e.stopPropagation();
-										toggle({ type: "log", label: log.message.slice(0, 80), timestamp: log.timestamp, level: log.level, service: log.service ?? undefined, logRecord: log });
+										toggle({
+											type: "log",
+											label: log.message.slice(0, 80),
+											timestamp: log.timestamp,
+											level: log.level,
+											service: log.service ?? undefined,
+											logRecord: log,
+										});
 									}}
 									onClick={() =>
 										setExpandedIds((prev) => {
@@ -139,20 +144,27 @@ export function LogTable({
 				<div className="flex h-full flex-col overflow-hidden">
 					{columnHeaders}
 					<div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto log-rows">
-					{logs.map((log) => (
-						<LogRow
-							key={log.id}
-							log={log}
-							showDate={showDate}
-							selected={log.id === selectedId}
-							isBookmarked={isBookmarked(`log:${log.id}`)}
-							onToggleBookmark={(e) => {
-								e.stopPropagation();
-								toggle({ type: "log", label: log.message.slice(0, 80), timestamp: log.timestamp, level: log.level, service: log.service ?? undefined, logRecord: log });
-							}}
-							onClick={() => setSelectedId((prev) => prev === log.id ? null : log.id)}
-						/>
-					))}
+						{logs.map((log) => (
+							<LogRow
+								key={log.id}
+								log={log}
+								showDate={showDate}
+								selected={log.id === selectedId}
+								isBookmarked={isBookmarked(`log:${log.id}`)}
+								onToggleBookmark={(e) => {
+									e.stopPropagation();
+									toggle({
+										type: "log",
+										label: log.message.slice(0, 80),
+										timestamp: log.timestamp,
+										level: log.level,
+										service: log.service ?? undefined,
+										logRecord: log,
+									});
+								}}
+								onClick={() => setSelectedId((prev) => (prev === log.id ? null : log.id))}
+							/>
+						))}
 
 						{loadingMore && (
 							<div className="flex items-center justify-center py-3">

@@ -137,7 +137,9 @@
 .resize-handle {
 	width: 1px;
 	background: var(--color-border);
-	transition: background 150ms, width 150ms;
+	transition:
+		background 150ms,
+		width 150ms;
 }
 .resize-handle:hover,
 .resize-handle[data-resize-handle-active] {
@@ -194,7 +196,7 @@ button {
 
 /* Section header underline animation */
 .section-header-inline::before {
-	content: '';
+	content: "";
 	position: absolute;
 	bottom: 0;
 	left: 0;

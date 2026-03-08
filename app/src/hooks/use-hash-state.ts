@@ -28,9 +28,19 @@ function parseHash(): { view: View; filters: Filters; page: number } {
 
 // Keys managed by useHashState — all others are view-specific UI state (live, detail, etc.)
 const FILTER_KEYS = new Set([
-	"level", "service", "project", "branch", "version",
-	"deployment_id", "grep", "from", "to", "trace_id",
-	"bookmarked", "around_id", "page",
+	"level",
+	"service",
+	"project",
+	"branch",
+	"version",
+	"deployment_id",
+	"grep",
+	"from",
+	"to",
+	"trace_id",
+	"bookmarked",
+	"around_id",
+	"page",
 ]);
 
 function buildHash(view: View, filters: Filters, page: number): string {

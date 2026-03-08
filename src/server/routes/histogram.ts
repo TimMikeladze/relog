@@ -32,7 +32,10 @@ export async function handleHistogram(request: Request, duckdb: DuckDBReader): P
 	}
 
 	if (typeof body.from !== "number" || typeof body.to !== "number") {
-		return Response.json({ error: "Missing or invalid 'from'/'to' (must be epoch ms)" }, { status: 400 });
+		return Response.json(
+			{ error: "Missing or invalid 'from'/'to' (must be epoch ms)" },
+			{ status: 400 },
+		);
 	}
 
 	if (body.to <= body.from) {

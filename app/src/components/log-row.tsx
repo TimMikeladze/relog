@@ -113,11 +113,7 @@ export const LogRow = memo(function LogRow({
 							: "text-transparent group-hover:text-muted-foreground hover:!text-amber-400",
 					)}
 				>
-					{isBookmarked ? (
-						<BookmarkCheck className="h-3 w-3" />
-					) : (
-						<Bookmark className="h-3 w-3" />
-					)}
+					{isBookmarked ? <BookmarkCheck className="h-3 w-3" /> : <Bookmark className="h-3 w-3" />}
 				</span>
 			)}
 		</button>

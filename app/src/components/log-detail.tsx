@@ -66,12 +66,20 @@ function DetailField({
 	);
 }
 
-function SectionHeader({ children, inline = false }: { children: React.ReactNode; inline?: boolean }) {
+function SectionHeader({
+	children,
+	inline = false,
+}: {
+	children: React.ReactNode;
+	inline?: boolean;
+}) {
 	if (inline) {
 		return (
 			<div className="pt-4 pb-2.5 flex items-center gap-2.5 first:pt-2">
 				<div className="h-px flex-1 bg-gradient-to-r from-border/50 via-border/30 to-transparent" />
-				<span className="text-[9px] font-semibold text-muted-foreground/80 uppercase tracking-widest">{children}</span>
+				<span className="text-[9px] font-semibold text-muted-foreground/80 uppercase tracking-widest">
+					{children}
+				</span>
 				<div className="h-px flex-1 bg-gradient-to-l from-border/50 via-border/30 to-transparent" />
 			</div>
 		);
@@ -143,21 +151,30 @@ export function LogDetailPanel({
 
 	const hasHttp = httpMeta && (httpMeta.method || httpMeta.status);
 
-	const inlineClass = variant === "inline"
-		? "flex w-full flex-col border border-border/50 bg-gradient-to-br from-card via-card/98 to-card/95 rounded-xl shadow-md backdrop-blur-md log-detail-inline"
-		: "flex h-full w-full flex-col border-l border-border bg-card";
+	const inlineClass =
+		variant === "inline"
+			? "flex w-full flex-col border border-border/50 bg-gradient-to-br from-card via-card/98 to-card/95 rounded-xl shadow-md backdrop-blur-md log-detail-inline"
+			: "flex h-full w-full flex-col border-l border-border bg-card";
 
 	return (
 		<div className={inlineClass}>
 			{/* Header */}
-			<div className={`flex items-center justify-between px-4 py-3.5 ${variant === "inline" ? "bg-gradient-to-r from-muted/30 via-muted/10 to-transparent border-b border-border/30" : "border-b border-border"}`}>
+			<div
+				className={`flex items-center justify-between px-4 py-3.5 ${variant === "inline" ? "bg-gradient-to-r from-muted/30 via-muted/10 to-transparent border-b border-border/30" : "border-b border-border"}`}
+			>
 				<div className="flex items-center gap-2 min-w-0">
 					{hasHttp ? (
-						<span className={`${variant === "inline" ? "text-sm font-semibold tracking-tight text-foreground" : "text-xs font-semibold"} truncate`}>
+						<span
+							className={`${variant === "inline" ? "text-sm font-semibold tracking-tight text-foreground" : "text-xs font-semibold"} truncate`}
+						>
 							{httpMeta?.method} {httpMeta?.path || log.message}
 						</span>
 					) : (
-						<span className={`${variant === "inline" ? "text-sm font-semibold tracking-tight text-foreground" : "text-xs font-semibold"} truncate`}>{log.message}</span>
+						<span
+							className={`${variant === "inline" ? "text-sm font-semibold tracking-tight text-foreground" : "text-xs font-semibold"} truncate`}
+						>
+							{log.message}
+						</span>
 					)}
 				</div>
 				{variant === "inline" && (
@@ -171,20 +188,34 @@ export function LogDetailPanel({
 				)}
 			</div>
 
-			<div className={`flex-1 overflow-y-auto px-4 pb-4 pt-1 ${variant === "inline" ? "scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-transparent hover:scrollbar-thumb-border/60" : ""}`}>
+			<div
+				className={`flex-1 overflow-y-auto px-4 pb-4 pt-1 ${variant === "inline" ? "scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-transparent hover:scrollbar-thumb-border/60" : ""}`}
+			>
 				{/* Event timeline */}
-				<div className={`py-3 space-y-2 ${variant === "inline" ? "bg-gradient-to-r from-muted/20 to-transparent rounded-lg px-3 py-3" : ""}`}>
+				<div
+					className={`py-3 space-y-2 ${variant === "inline" ? "bg-gradient-to-r from-muted/20 to-transparent rounded-lg px-3 py-3" : ""}`}
+				>
 					<div className="flex items-center gap-2">
-						<Circle className={`h-2.5 w-2.5 shrink-0 ${variant === "inline" ? "fill-primary text-primary" : "text-muted-foreground"}`} />
-						<span className={`${variant === "inline" ? "text-xs font-semibold" : "text-xs font-medium"}`}>Log recorded</span>
-						<span className={`ml-auto text-[10px] ${variant === "inline" ? "text-muted-foreground/80" : "text-muted-foreground"} tabular-nums font-mono`}>
+						<Circle
+							className={`h-2.5 w-2.5 shrink-0 ${variant === "inline" ? "fill-primary text-primary" : "text-muted-foreground"}`}
+						/>
+						<span
+							className={`${variant === "inline" ? "text-xs font-semibold" : "text-xs font-medium"}`}
+						>
+							Log recorded
+						</span>
+						<span
+							className={`ml-auto text-[10px] ${variant === "inline" ? "text-muted-foreground/80" : "text-muted-foreground"} tabular-nums font-mono`}
+						>
 							{formatFullTimestamp(log.timestamp)}
 						</span>
 					</div>
 
 					{/* Request info if HTTP */}
 					{hasHttp && (
-						<div className={`ml-1 border-l pl-4 space-y-1 ${variant === "inline" ? "border-primary/30" : "border-border/50"}`}>
+						<div
+							className={`ml-1 border-l pl-4 space-y-1 ${variant === "inline" ? "border-primary/30" : "border-border/50"}`}
+						>
 							<DetailField label="Method" value={httpMeta?.method} />
 							<DetailField label="Status" value={httpMeta?.status} />
 							<DetailField label="Path" value={httpMeta?.path} />
@@ -194,8 +225,12 @@ export function LogDetailPanel({
 
 					{httpMeta?.duration != null && (
 						<div className="flex items-center gap-2">
-							<Circle className={`h-2.5 w-2.5 shrink-0 ${variant === "inline" ? "fill-emerald-500 text-emerald-500" : "fill-emerald-400 text-emerald-400"}`} />
-							<span className={`text-xs font-medium ${variant === "inline" ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+							<Circle
+								className={`h-2.5 w-2.5 shrink-0 ${variant === "inline" ? "fill-emerald-500 text-emerald-500" : "fill-emerald-400 text-emerald-400"}`}
+							/>
+							<span
+								className={`text-xs font-medium ${variant === "inline" ? "text-emerald-600 dark:text-emerald-400" : ""}`}
+							>
 								Completed in {Math.round(httpMeta.duration)}ms
 							</span>
 						</div>
@@ -203,12 +238,16 @@ export function LogDetailPanel({
 				</div>
 
 				{/* Level + Message */}
-				<div className={`border-t border-border/50 pt-3 space-y-2 ${variant === "inline" ? "pb-2" : ""}`}>
+				<div
+					className={`border-t border-border/50 pt-3 space-y-2 ${variant === "inline" ? "pb-2" : ""}`}
+				>
 					<div className="flex items-center gap-2">
 						<LevelBadge level={log.level} />
 						<span className="text-[10px] text-muted-foreground">#{log.id}</span>
 					</div>
-					<p className={`rounded-lg text-xs whitespace-pre-wrap break-all leading-relaxed font-mono ${variant === "inline" ? "bg-gradient-to-b from-muted/40 to-muted/25 border border-border/25 p-3 hover:from-muted/45 hover:to-muted/30 transition-all" : "bg-muted/50 p-2.5"}`}>
+					<p
+						className={`rounded-lg text-xs whitespace-pre-wrap break-all leading-relaxed font-mono ${variant === "inline" ? "bg-gradient-to-b from-muted/40 to-muted/25 border border-border/25 p-3 hover:from-muted/45 hover:to-muted/30 transition-all" : "bg-muted/50 p-2.5"}`}
+					>
 						{log.message}
 					</p>
 				</div>
@@ -217,7 +256,9 @@ export function LogDetailPanel({
 				{(log.service || log.host || log.pid) && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Identification</SectionHeader>
-						<div className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 divide-y divide-border/15 px-3 py-2" : "border border-border/50 divide-y divide-border/30 px-3"}`}>
+						<div
+							className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 divide-y divide-border/15 px-3 py-2" : "border border-border/50 divide-y divide-border/30 px-3"}`}
+						>
 							<DetailField label="Service" value={log.service} />
 							<DetailField label="Host" value={log.host} />
 							<DetailField label="PID" value={log.pid} />
@@ -229,7 +270,9 @@ export function LogDetailPanel({
 				{(log.trace_id || log.span_id) && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Trace</SectionHeader>
-						<div className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 px-3 py-2" : "border border-border/50 px-3"}`}>
+						<div
+							className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 px-3 py-2" : "border border-border/50 px-3"}`}
+						>
 							<DetailField
 								label="Trace ID"
 								value={log.trace_id}
@@ -246,7 +289,9 @@ export function LogDetailPanel({
 				{(log.project || log.branch || log.version || log.deployment_id) && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Deployment Information</SectionHeader>
-						<div className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 px-3 py-2" : "border border-border/50 px-3"}`}>
+						<div
+							className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 px-3 py-2" : "border border-border/50 px-3"}`}
+						>
 							<DetailField label="Project" value={log.project} />
 							<DetailField label="Branch" value={log.branch} />
 							<DetailField label="Version" value={log.version} />
@@ -267,7 +312,9 @@ export function LogDetailPanel({
 				{contextLogs && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Context</SectionHeader>
-						<div className={`rounded-lg border overflow-hidden divide-y ${variant === "inline" ? "border-border/25 divide-border/15 bg-muted/10" : "border-border divide-border/30"}`}>
+						<div
+							className={`rounded-lg border overflow-hidden divide-y ${variant === "inline" ? "border-border/25 divide-border/15 bg-muted/10" : "border-border divide-border/30"}`}
+						>
 							{contextLogs.map((l) => (
 								<LogRow key={l.id} log={l} selected={l.id === log.id} />
 							))}
@@ -277,7 +324,9 @@ export function LogDetailPanel({
 			</div>
 
 			{/* Footer actions */}
-			<div className={`flex items-center gap-1.5 px-3 py-3 ${variant === "inline" ? "border-t border-border/30 bg-gradient-to-t from-muted/15 via-muted/5 to-transparent" : "border-t border-border"}`}>
+			<div
+				className={`flex items-center gap-1.5 px-3 py-3 ${variant === "inline" ? "border-t border-border/30 bg-gradient-to-t from-muted/15 via-muted/5 to-transparent" : "border-t border-border"}`}
+			>
 				<button
 					type="button"
 					onClick={loadContext}

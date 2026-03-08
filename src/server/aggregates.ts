@@ -72,7 +72,10 @@ export class AggregatesManager {
 		return agg;
 	}
 
-	async update(id: string, updates: Partial<Omit<Aggregate, "id" | "createdAt">>): Promise<Aggregate | null> {
+	async update(
+		id: string,
+		updates: Partial<Omit<Aggregate, "id" | "createdAt">>,
+	): Promise<Aggregate | null> {
 		const existing = this.aggregates.get(id);
 		if (!existing) return null;
 		const updated: Aggregate = {

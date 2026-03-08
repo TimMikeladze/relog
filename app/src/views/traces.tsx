@@ -6,7 +6,17 @@ import { TimelineChart, HoverStats } from "@/components/timeline-chart";
 import { LevelBadge } from "@/components/level-badge";
 import type { Filters, LogRecord, QueryResult } from "@/types";
 
-import { ChevronRight, ChevronDown, Circle, Pause, Play, Radio, Trash2, Bookmark, BookmarkCheck } from "lucide-react";
+import {
+	ChevronRight,
+	ChevronDown,
+	Circle,
+	Pause,
+	Play,
+	Radio,
+	Trash2,
+	Bookmark,
+	BookmarkCheck,
+} from "lucide-react";
 import { useBookmarks } from "@/hooks/use-bookmarks";
 
 interface TraceRow {
@@ -169,7 +179,8 @@ export function TracesView({
 		const inClause = (col: string, val?: string) => {
 			if (!val) return;
 			const vals = val.split(",").map((v) => `'${v.replace(/'/g, "''")}'`);
-			where += vals.length === 1 ? ` AND ${col} = ${vals[0]}` : ` AND ${col} IN (${vals.join(", ")})`;
+			where +=
+				vals.length === 1 ? ` AND ${col} = ${vals[0]}` : ` AND ${col} IN (${vals.join(", ")})`;
 		};
 		inClause("trace_id", filters.trace_id);
 		inClause("service", filters.service);
@@ -182,7 +193,15 @@ export function TracesView({
 		if (filters.from) {
 			const match = filters.from.match(/^(\d+)([smhdwMy])$/);
 			if (match) {
-				const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000, w: 604_800_000, M: 2_592_000_000, y: 31_536_000_000 };
+				const ms: Record<string, number> = {
+					s: 1000,
+					m: 60_000,
+					h: 3600_000,
+					d: 86400_000,
+					w: 604_800_000,
+					M: 2_592_000_000,
+					y: 31_536_000_000,
+				};
 				where += ` AND created_at > ${Date.now() - parseInt(match[1]) * (ms[match[2]] ?? 3600_000)}`;
 			}
 		}
@@ -272,9 +291,10 @@ export function TracesView({
 	};
 
 	const allTraces = live === "1" ? liveTraces : traces;
-	const displayTraces = filters.bookmarked === "true"
-		? allTraces.filter((t) => isBookmarked(`trace:${t.trace_id}`))
-		: allTraces;
+	const displayTraces =
+		filters.bookmarked === "true"
+			? allTraces.filter((t) => isBookmarked(`trace:${t.trace_id}`))
+			: allTraces;
 	const displayTraceLogs = live === "1" ? liveTraceLogs : traceLogs;
 	const displayTraceSpans = live === "1" ? liveTraceSpans : traceSpans;
 
@@ -286,78 +306,84 @@ export function TracesView({
 				filters={filters as Record<string, string | undefined>}
 				refreshKey={live === "1" ? refreshKey : undefined}
 				onTimeRangeSelect={live === "1" ? undefined : (from, to) => onUpdateFilters({ from, to })}
-				onResetTimeRange={live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined}
+				onResetTimeRange={
+					live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined
+				}
 			>
-				{(hoverBucket) => (<>
-				<button
-					type="button"
-					onClick={() => setLive(live === "1" ? undefined : "1")}
-					className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
-						live === "1"
-							? "bg-emerald-500/15 text-emerald-500"
-							: "text-muted-foreground hover:bg-muted hover:text-foreground"
-					}`}
-				>
-					<Radio className="h-3 w-3" />
-					Live
-				</button>
-
-				{live === "1" && (
-					<>
-						<div className="h-3 w-px bg-border" />
-						<div className="flex items-center gap-1.5">
-							<Circle
-								className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
-							/>
-							<span className="text-[10px] text-muted-foreground">
-								{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
-							</span>
-						</div>
-						<span className="text-[10px] text-muted-foreground tabular-nums">
-							{liveTraces.length} traces / {stream.logs.length.toLocaleString()} events
-						</span>
-					</>
-				)}
-
-				{live !== "1" && loading && <span className="text-[10px] text-muted-foreground">Loading...</span>}
-				{live !== "1" && !loading && (
-					<span className="text-[10px] text-muted-foreground">{traces.length} traces</span>
-				)}
-
-				<HoverStats bucket={hoverBucket} />
-
-				<div className="flex-1" />
-
-				{live === "1" && (
+				{(hoverBucket) => (
 					<>
 						<button
 							type="button"
-							onClick={stream.clear}
-							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							onClick={() => setLive(live === "1" ? undefined : "1")}
+							className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+								live === "1"
+									? "bg-emerald-500/15 text-emerald-500"
+									: "text-muted-foreground hover:bg-muted hover:text-foreground"
+							}`}
 						>
-							<Trash2 className="h-3 w-3" />
-							Clear
+							<Radio className="h-3 w-3" />
+							Live
 						</button>
-						<button
-							type="button"
-							onClick={stream.paused ? stream.resume : stream.pause}
-							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						>
-							{stream.paused ? (
-								<>
-									<Play className="h-3 w-3" />
-									Resume
-								</>
-							) : (
-								<>
-									<Pause className="h-3 w-3" />
-									Pause
-								</>
-							)}
-						</button>
+
+						{live === "1" && (
+							<>
+								<div className="h-3 w-px bg-border" />
+								<div className="flex items-center gap-1.5">
+									<Circle
+										className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
+									/>
+									<span className="text-[10px] text-muted-foreground">
+										{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
+									</span>
+								</div>
+								<span className="text-[10px] text-muted-foreground tabular-nums">
+									{liveTraces.length} traces / {stream.logs.length.toLocaleString()} events
+								</span>
+							</>
+						)}
+
+						{live !== "1" && loading && (
+							<span className="text-[10px] text-muted-foreground">Loading...</span>
+						)}
+						{live !== "1" && !loading && (
+							<span className="text-[10px] text-muted-foreground">{traces.length} traces</span>
+						)}
+
+						<HoverStats bucket={hoverBucket} />
+
+						<div className="flex-1" />
+
+						{live === "1" && (
+							<>
+								<button
+									type="button"
+									onClick={stream.clear}
+									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									<Trash2 className="h-3 w-3" />
+									Clear
+								</button>
+								<button
+									type="button"
+									onClick={stream.paused ? stream.resume : stream.pause}
+									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									{stream.paused ? (
+										<>
+											<Play className="h-3 w-3" />
+											Resume
+										</>
+									) : (
+										<>
+											<Pause className="h-3 w-3" />
+											Pause
+										</>
+									)}
+								</button>
+							</>
+						)}
 					</>
 				)}
-				</>)}
 			</TimelineChart>
 			<div className="flex-1 overflow-y-auto">
 				{live !== "1" && loading && (
@@ -397,11 +423,21 @@ export function TracesView({
 										{t.duration_ms > 0 ? `${Math.round(t.duration_ms)}ms` : "\u2014"}
 									</span>
 									<span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(t.max_level)}`} />
-									<span className="min-w-0 flex-1 truncate text-muted-foreground">{t.services}</span>
+									<span className="min-w-0 flex-1 truncate text-muted-foreground">
+										{t.services}
+									</span>
 								</button>
 								<button
 									type="button"
-									onClick={() => toggle({ type: "trace", label: t.trace_id, timestamp: t.first_ts, level: t.max_level, traceId: t.trace_id })}
+									onClick={() =>
+										toggle({
+											type: "trace",
+											label: t.trace_id,
+											timestamp: t.first_ts,
+											level: t.max_level,
+											traceId: t.trace_id,
+										})
+									}
 									className={`mr-2 shrink-0 rounded p-0.5 transition-colors ${isBookmarked(`trace:${t.trace_id}`) ? "text-amber-400" : "text-transparent group-hover:text-muted-foreground hover:!text-amber-400"}`}
 								>
 									{isBookmarked(`trace:${t.trace_id}`) ? (
@@ -463,10 +499,7 @@ export function TracesView({
 										</div>
 										<div className="rounded-md border border-border overflow-hidden divide-y divide-border/50">
 											{displayTraceLogs.map((l) => (
-												<div
-													key={l.id}
-													className="flex items-center gap-3 px-3 py-1 text-xs"
-												>
+												<div key={l.id} className="flex items-center gap-3 px-3 py-1 text-xs">
 													<span className="shrink-0 text-muted-foreground tabular-nums">
 														{new Date(l.timestamp).toLocaleTimeString("en-US", {
 															hour12: false,

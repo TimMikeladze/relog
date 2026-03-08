@@ -24,30 +24,25 @@ export function useAggregates() {
 		fetchAggregates();
 	}, [fetchAggregates]);
 
-	const create = useCallback(
-		async (aggregate: Omit<Aggregate, "createdAt" | "updatedAt">) => {
-			try {
-				const res = await apiPost<{ aggregate: Aggregate }>("/aggregates", aggregate);
-				if (res.aggregate) {
-					setAggregates((prev) => [...prev, res.aggregate]);
-					return res.aggregate;
-				}
-			} catch (err) {
-				console.error("Failed to create aggregate:", err);
-				throw err;
+	const create = useCallback(async (aggregate: Omit<Aggregate, "createdAt" | "updatedAt">) => {
+		try {
+			const res = await apiPost<{ aggregate: Aggregate }>("/aggregates", aggregate);
+			if (res.aggregate) {
+				setAggregates((prev) => [...prev, res.aggregate]);
+				return res.aggregate;
 			}
-		},
-		[],
-	);
+		} catch (err) {
+			console.error("Failed to create aggregate:", err);
+			throw err;
+		}
+	}, []);
 
 	const update = useCallback(
 		async (id: string, updates: Partial<Omit<Aggregate, "id" | "createdAt">>) => {
 			try {
 				const res = await apiPut<{ aggregate: Aggregate }>(`/aggregates/${id}`, updates);
 				if (res.aggregate) {
-					setAggregates((prev) =>
-						prev.map((agg) => (agg.id === id ? res.aggregate : agg)),
-					);
+					setAggregates((prev) => prev.map((agg) => (agg.id === id ? res.aggregate : agg)));
 					return res.aggregate;
 				}
 			} catch (err) {

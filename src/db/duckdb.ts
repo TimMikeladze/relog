@@ -148,7 +148,14 @@ export class DuckDBReader {
 		const conditions: string[] = [];
 		const params: (string | number | bigint)[] = [];
 
-		for (const col of ["level", "service", "project", "branch", "version", "deployment_id"] as const) {
+		for (const col of [
+			"level",
+			"service",
+			"project",
+			"branch",
+			"version",
+			"deployment_id",
+		] as const) {
 			const val = opts[col];
 			if (!val) continue;
 			const values = val.split(",").filter(Boolean);
@@ -222,9 +229,14 @@ export class DuckDBReader {
 					ORDER BY id ASC
 				`;
 				dataParams = [
-					...params, opts.around_id, contextSize,
-					...params, opts.around_id,
-					...params, opts.around_id, contextSize
+					...params,
+					opts.around_id,
+					contextSize,
+					...params,
+					opts.around_id,
+					...params,
+					opts.around_id,
+					contextSize,
 				];
 			} else {
 				sql = `SELECT * FROM logs ${where} ORDER BY id DESC LIMIT ? OFFSET ?`;
@@ -250,7 +262,16 @@ export class DuckDBReader {
 		buckets: number;
 		filters?: { level?: string; service?: string; project?: string; branch?: string };
 	}): Promise<{
-		buckets: { time: number; fatal: number; error: number; warn: number; info: number; debug: number; trace: number; total: number }[];
+		buckets: {
+			time: number;
+			fatal: number;
+			error: number;
+			warn: number;
+			info: number;
+			debug: number;
+			trace: number;
+			total: number;
+		}[];
 		bucket_ms: number;
 	}> {
 		const { from, to, buckets: bucketCount } = opts;
@@ -293,12 +314,37 @@ export class DuckDBReader {
 		const conn = await this.connect();
 		try {
 			const reader = await conn.runAndReadAll(sql, params as (string | number | bigint)[]);
-			const rows = reader.getRowObjects() as { bucket: number | bigint; level: string; count: number | bigint }[];
+			const rows = reader.getRowObjects() as {
+				bucket: number | bigint;
+				level: string;
+				count: number | bigint;
+			}[];
 
-			const bucketMap = new Map<number, { time: number; fatal: number; error: number; warn: number; info: number; debug: number; trace: number; total: number }>();
+			const bucketMap = new Map<
+				number,
+				{
+					time: number;
+					fatal: number;
+					error: number;
+					warn: number;
+					info: number;
+					debug: number;
+					trace: number;
+					total: number;
+				}
+			>();
 			for (let i = 0; i < bucketCount; i++) {
 				const time = from + i * bucketMs + bucketMs / 2;
-				bucketMap.set(i, { time, fatal: 0, error: 0, warn: 0, info: 0, debug: 0, trace: 0, total: 0 });
+				bucketMap.set(i, {
+					time,
+					fatal: 0,
+					error: 0,
+					warn: 0,
+					info: 0,
+					debug: 0,
+					trace: 0,
+					total: 0,
+				});
 			}
 
 			for (const row of rows) {

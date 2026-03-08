@@ -279,11 +279,13 @@ export function QueryView({
 	const editorRef = useRef<HTMLDivElement>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	// Read initial SQL from URL hash synchronously before editor mounts
-	const initialQueryRef = useRef<string | undefined>((() => {
-		const hash = window.location.hash.slice(1);
-		const [, search] = hash.split("?");
-		return new URLSearchParams(search || "").get("q") ?? undefined;
-	})());
+	const initialQueryRef = useRef<string | undefined>(
+		(() => {
+			const hash = window.location.hash.slice(1);
+			const [, search] = hash.split("?");
+			return new URLSearchParams(search || "").get("q") ?? undefined;
+		})(),
+	);
 
 	useEffect(() => {
 		if (!editorRef.current || viewRef.current) return;
@@ -331,12 +333,15 @@ export function QueryView({
 
 	const getEditorContent = useCallback(() => viewRef.current?.state.doc.toString() || "", []);
 
-	const setEditorContent = useCallback((content: string) => {
-		const view = viewRef.current;
-		if (!view) return;
-		view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
-		setQueryParam(content);
-	}, [setQueryParam]);
+	const setEditorContent = useCallback(
+		(content: string) => {
+			const view = viewRef.current;
+			if (!view) return;
+			view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: content } });
+			setQueryParam(content);
+		},
+		[setQueryParam],
+	);
 
 	const runQuery = useCallback(async () => {
 		const sqlStr = getEditorContent().trim();

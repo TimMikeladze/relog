@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Check, X, Star, Users, Heart, Share2, Info } from "lucide-react";
+import {
+	ChevronDown,
+	ChevronUp,
+	Copy,
+	Check,
+	X,
+	Star,
+	Users,
+	Heart,
+	Share2,
+	Info,
+} from "lucide-react";
 
 const GITHUB_URL = "https://github.com/TimMikeladze/relog";
 const TWITTER_URL = "https://x.com/linesofcode";
@@ -7,9 +18,18 @@ const BLUESKY_URL = "https://bsky.app/profile/linesofcode.bsky.social";
 const LINKEDIN_URL = "https://linkedin.com/in/tim-mikeladze";
 const SPONSOR_URL = "https://github.com/sponsors/TimMikeladze";
 
-const SHARE_TEXT = "Check out relog - the universal logging system\nhttps://github.com/TimMikeladze/relog";
+const SHARE_TEXT =
+	"Check out relog - the universal logging system\nhttps://github.com/TimMikeladze/relog";
 
-function SocialButton({ icon, label, href }: { icon: React.ReactNode; label: string; href: string }) {
+function SocialButton({
+	icon,
+	label,
+	href,
+}: {
+	icon: React.ReactNode;
+	label: string;
+	href: string;
+}) {
 	return (
 		<a
 			href={href}
@@ -152,13 +172,19 @@ export function SupportDialog({ onClose }: { onClose: () => void }) {
 						collapsible
 					>
 						<div className="flex items-start gap-2 rounded-md border border-border bg-muted/30 p-3">
-							<span className="flex-1 text-xs text-muted-foreground whitespace-pre-line">{SHARE_TEXT}</span>
+							<span className="flex-1 text-xs text-muted-foreground whitespace-pre-line">
+								{SHARE_TEXT}
+							</span>
 							<button
 								type="button"
 								onClick={handleCopy}
 								className="shrink-0 rounded p-1 cursor-pointer text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 							>
-								{copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+								{copied ? (
+									<Check className="h-3.5 w-3.5 text-emerald-400" />
+								) : (
+									<Copy className="h-3.5 w-3.5" />
+								)}
 							</button>
 						</div>
 						<div className="flex gap-2">

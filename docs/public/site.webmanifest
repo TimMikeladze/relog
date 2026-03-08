@@ -1,16 +1,16 @@
 {
-  "name": "relog.dev",
-  "short_name": "relog",
-  "description": "Free, self-hosted structured logging for Bun and TypeScript",
-  "start_url": "/",
-  "display": "browser",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
-  "icons": [
-    {
-      "src": "/favicon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
-    }
-  ]
+	"name": "relog.dev",
+	"short_name": "relog",
+	"description": "Free, self-hosted structured logging for Bun and TypeScript",
+	"start_url": "/",
+	"display": "browser",
+	"background_color": "#09090b",
+	"theme_color": "#09090b",
+	"icons": [
+		{
+			"src": "/favicon.svg",
+			"sizes": "any",
+			"type": "image/svg+xml"
+		}
+	]
 }

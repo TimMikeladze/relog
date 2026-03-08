@@ -131,7 +131,15 @@ export class RelogDatabase {
 		const conditions = ["id > ?"];
 		const params: SQLQueryBindings[] = [lastId];
 
-		for (const col of ["level", "service", "trace_id", "project", "branch", "version", "deployment_id"] as const) {
+		for (const col of [
+			"level",
+			"service",
+			"trace_id",
+			"project",
+			"branch",
+			"version",
+			"deployment_id",
+		] as const) {
 			const val = filters[col];
 			if (!val) continue;
 			const values = String(val).split(",").filter(Boolean);

@@ -29,7 +29,10 @@ export async function handleAggregates(
 
 			// Validate required fields
 			if (!body.id || !body.name || !body.filters) {
-				return Response.json({ error: "Missing required fields: id, name, filters" }, { status: 400 });
+				return Response.json(
+					{ error: "Missing required fields: id, name, filters" },
+					{ status: 400 },
+				);
 			}
 
 			const aggregate = await aggregatesManager.add(body);

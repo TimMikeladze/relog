@@ -3,23 +3,16 @@ name = "relog"
 version = "0.1.0"
 description = "Python client for relog structured logging"
 readme = "README.md"
-authors = [
-    { name = "TimMikeladze", email = "tim.mikeladze@gmail.com" }
-]
+authors = [{ name = "TimMikeladze", email = "tim.mikeladze@gmail.com" }]
 requires-python = ">=3.12"
-dependencies = [
-    "httpx",
-]
+dependencies = ["httpx"]
 
 [build-system]
 requires = ["uv_build>=0.9.24,<0.10.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "pytest",
-    "mypy",
-]
+dev = ["pytest", "mypy"]
 
 [tool.mypy]
 strict = true

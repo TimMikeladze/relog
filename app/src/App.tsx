@@ -192,7 +192,13 @@ function AppContent() {
 			<PanelGroup className="flex-1 overflow-hidden" id="relog-main">
 				{showSidebar && (
 					<>
-						<Panel id="sidebar" defaultSize="15%" minSize="180px" maxSize="30%" className="overflow-hidden">
+						<Panel
+							id="sidebar"
+							defaultSize="15%"
+							minSize="180px"
+							maxSize="30%"
+							className="overflow-hidden"
+						>
 							<FilterSidebar
 								filters={filters}
 								view={view}
@@ -241,7 +247,10 @@ function AppContent() {
 					)}
 				</Panel>
 			</PanelGroup>
-			<StatusBar onSettingsClick={() => setShowSettings(true)} onSupportClick={() => setShowSupport(true)} />
+			<StatusBar
+				onSettingsClick={() => setShowSettings(true)}
+				onSupportClick={() => setShowSupport(true)}
+			/>
 			{showSettings && <AuthDialog onClose={() => setShowSettings(false)} />}
 			{showCommandPalette && (
 				<CommandPalette commands={commands} onClose={() => setShowCommandPalette(false)} />

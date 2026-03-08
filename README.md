@@ -412,25 +412,25 @@ with log.event("process_payment") as ev:
 
 ### `create_logger()` Options
 
-| Option              | Type    | Default      | Description                                                           |
-| ------------------- | ------- | ------------ | --------------------------------------------------------------------- |
-| `url`               | `str`   | —            | Server URL (first positional arg). Omit for console-only              |
-| `service`           | `str`   | —            | Service name attached to every log                                    |
-| `level`             | `str`   | `"info"`     | Minimum level. Also reads `LOG_LEVEL` / `RELOG_LEVEL` env             |
-| `auth`              | `str`   | `RELOG_AUTH`  | API key sent as Bearer token                                          |
-| `console`           | `bool`  | `True`       | Print colored output to stdout/stderr                                 |
-| `project`           | `str`   | auto (git)   | Project name. Also reads `RELOG_PROJECT` env                          |
-| `branch`            | `str`   | auto (git)   | Git branch. Also reads `RELOG_BRANCH` env                             |
-| `version`           | `str`   | —            | App version                                                           |
-| `deployment_id`     | `str`   | —            | Deployment identifier                                                 |
-| `sample_rate`       | `float` | `1.0`        | Sample rate for events (0–1). Errors and slow events always kept      |
-| `slow_threshold_ms` | `float` | —            | Events slower than this (ms) are always kept                          |
-| `batch_size`        | `int`   | `50`         | Logs per HTTP batch                                                   |
-| `flush_interval`    | `float` | `5.0`        | Auto-flush interval in seconds                                        |
-| `max_buffer_size`   | `int`   | `10000`      | Max buffered logs before oldest are dropped                           |
-| `meta`              | `dict`  | —            | Default metadata merged into every log                                |
-| `trace_id`          | `str`   | —            | Trace ID attached to every log                                        |
-| `span_id`           | `str`   | —            | Span ID attached to every log                                         |
+| Option              | Type    | Default      | Description                                                      |
+| ------------------- | ------- | ------------ | ---------------------------------------------------------------- |
+| `url`               | `str`   | —            | Server URL (first positional arg). Omit for console-only         |
+| `service`           | `str`   | —            | Service name attached to every log                               |
+| `level`             | `str`   | `"info"`     | Minimum level. Also reads `LOG_LEVEL` / `RELOG_LEVEL` env        |
+| `auth`              | `str`   | `RELOG_AUTH` | API key sent as Bearer token                                     |
+| `console`           | `bool`  | `True`       | Print colored output to stdout/stderr                            |
+| `project`           | `str`   | auto (git)   | Project name. Also reads `RELOG_PROJECT` env                     |
+| `branch`            | `str`   | auto (git)   | Git branch. Also reads `RELOG_BRANCH` env                        |
+| `version`           | `str`   | —            | App version                                                      |
+| `deployment_id`     | `str`   | —            | Deployment identifier                                            |
+| `sample_rate`       | `float` | `1.0`        | Sample rate for events (0–1). Errors and slow events always kept |
+| `slow_threshold_ms` | `float` | —            | Events slower than this (ms) are always kept                     |
+| `batch_size`        | `int`   | `50`         | Logs per HTTP batch                                              |
+| `flush_interval`    | `float` | `5.0`        | Auto-flush interval in seconds                                   |
+| `max_buffer_size`   | `int`   | `10000`      | Max buffered logs before oldest are dropped                      |
+| `meta`              | `dict`  | —            | Default metadata merged into every log                           |
+| `trace_id`          | `str`   | —            | Trace ID attached to every log                                   |
+| `span_id`           | `str`   | —            | Span ID attached to every log                                    |
 
 ## CLI
 

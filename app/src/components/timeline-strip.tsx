@@ -1,7 +1,13 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import {
-	AreaChart, Area, BarChart, Bar, XAxis, YAxis,
-	ResponsiveContainer, ReferenceArea,
+	AreaChart,
+	Area,
+	BarChart,
+	Bar,
+	XAxis,
+	YAxis,
+	ResponsiveContainer,
+	ReferenceArea,
 } from "recharts";
 import { apiPost } from "@/api/client";
 
@@ -48,7 +54,15 @@ function parseRelativeTime(rel: string): number {
 	const match = rel.match(/^(\d+)([smhdwMy])$/);
 	if (!match) return Date.now() - 3600_000;
 	const [, num, unit] = match;
-	const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000, w: 604_800_000, M: 2_592_000_000, y: 31_536_000_000 };
+	const ms: Record<string, number> = {
+		s: 1000,
+		m: 60_000,
+		h: 3600_000,
+		d: 86400_000,
+		w: 604_800_000,
+		M: 2_592_000_000,
+		y: 31_536_000_000,
+	};
 	return Date.now() - parseInt(num) * (ms[unit] ?? 3600_000);
 }
 
@@ -248,16 +262,17 @@ export function TimelineStrip({
 		onMouseLeave: handleMouseLeave,
 	};
 
-	const refArea = refAreaX1 != null && refAreaX2 != null ? (
-		<ReferenceArea
-			x1={refAreaX1}
-			x2={refAreaX2}
-			fill="var(--color-primary)"
-			fillOpacity={0.15}
-			stroke="var(--color-primary)"
-			strokeOpacity={0.4}
-		/>
-	) : null;
+	const refArea =
+		refAreaX1 != null && refAreaX2 != null ? (
+			<ReferenceArea
+				x1={refAreaX1}
+				x2={refAreaX2}
+				fill="var(--color-primary)"
+				fillOpacity={0.15}
+				stroke="var(--color-primary)"
+				strokeOpacity={0.4}
+			/>
+		) : null;
 
 	return (
 		<div className={wrapperClass}>
@@ -293,12 +308,54 @@ export function TimelineStrip({
 							<XAxis {...xAxisProps} />
 							<YAxis hide domain={normalized ? [0, 100] : undefined} />
 							{refArea}
-							<Area type="monotone" dataKey="fatal" stackId="1" fill={LEVEL_COLORS.fatal} stroke="none" fillOpacity={1} />
-							<Area type="monotone" dataKey="error" stackId="1" fill={LEVEL_COLORS.error} stroke="none" fillOpacity={1} />
-							<Area type="monotone" dataKey="warn" stackId="1" fill={LEVEL_COLORS.warn} stroke="none" fillOpacity={1} />
-							<Area type="monotone" dataKey="info" stackId="1" fill={LEVEL_COLORS.info} stroke="none" fillOpacity={1} />
-							<Area type="monotone" dataKey="debug" stackId="1" fill={LEVEL_COLORS.debug} stroke="none" fillOpacity={1} />
-							<Area type="monotone" dataKey="trace" stackId="1" fill={LEVEL_COLORS.trace} stroke="none" fillOpacity={1} />
+							<Area
+								type="monotone"
+								dataKey="fatal"
+								stackId="1"
+								fill={LEVEL_COLORS.fatal}
+								stroke="none"
+								fillOpacity={1}
+							/>
+							<Area
+								type="monotone"
+								dataKey="error"
+								stackId="1"
+								fill={LEVEL_COLORS.error}
+								stroke="none"
+								fillOpacity={1}
+							/>
+							<Area
+								type="monotone"
+								dataKey="warn"
+								stackId="1"
+								fill={LEVEL_COLORS.warn}
+								stroke="none"
+								fillOpacity={1}
+							/>
+							<Area
+								type="monotone"
+								dataKey="info"
+								stackId="1"
+								fill={LEVEL_COLORS.info}
+								stroke="none"
+								fillOpacity={1}
+							/>
+							<Area
+								type="monotone"
+								dataKey="debug"
+								stackId="1"
+								fill={LEVEL_COLORS.debug}
+								stroke="none"
+								fillOpacity={1}
+							/>
+							<Area
+								type="monotone"
+								dataKey="trace"
+								stackId="1"
+								fill={LEVEL_COLORS.trace}
+								stroke="none"
+								fillOpacity={1}
+							/>
 						</AreaChart>
 					)}
 				</ResponsiveContainer>

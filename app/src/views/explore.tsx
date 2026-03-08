@@ -6,7 +6,18 @@ import { useBookmarks } from "@/hooks/use-bookmarks";
 import { LogTable } from "@/components/log-table";
 import { TimelineChart, HoverStats } from "@/components/timeline-chart";
 import type { Filters } from "@/types";
-import { Circle, Download, Loader2, Pause, Play, RefreshCw, Radio, Trash2, PanelRight, AlignLeft } from "lucide-react";
+import {
+	Circle,
+	Download,
+	Loader2,
+	Pause,
+	Play,
+	RefreshCw,
+	Radio,
+	Trash2,
+	PanelRight,
+	AlignLeft,
+} from "lucide-react";
 
 export function ExploreView({
 	filters,
@@ -102,17 +113,19 @@ export function ExploreView({
 	);
 
 	// In live mode, prepend streamed logs on top of existing fetched logs
-	const allLogs = live === "1"
-		? (() => {
-				const existingIds = new Set(rows.map((r) => r.id));
-				const newLogs = stream.logs.filter((l) => !existingIds.has(l.id));
-				return [...newLogs.reverse(), ...rows];
-			})()
-		: rows;
+	const allLogs =
+		live === "1"
+			? (() => {
+					const existingIds = new Set(rows.map((r) => r.id));
+					const newLogs = stream.logs.filter((l) => !existingIds.has(l.id));
+					return [...newLogs.reverse(), ...rows];
+				})()
+			: rows;
 	// Show bookmarked logs filter only when not viewing around a specific log
-	const logs = filters.bookmarked === "true" && !filters.around_id
-		? allLogs.filter((l) => isBookmarked(`log:${l.id}`))
-		: allLogs;
+	const logs =
+		filters.bookmarked === "true" && !filters.around_id
+			? allLogs.filter((l) => isBookmarked(`log:${l.id}`))
+			: allLogs;
 
 	// Only show date column when time range spans more than 24h
 	const showDate =
@@ -121,7 +134,15 @@ export function ExploreView({
 			if (!filters.from) return false;
 			const match = filters.from.match(/^(\d+)([smhdwMy])$/);
 			if (match) {
-				const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000, w: 604_800_000, M: 2_592_000_000, y: 31_536_000_000 };
+				const ms: Record<string, number> = {
+					s: 1000,
+					m: 60_000,
+					h: 3600_000,
+					d: 86400_000,
+					w: 604_800_000,
+					M: 2_592_000_000,
+					y: 31_536_000_000,
+				};
 				return parseInt(match[1]) * (ms[match[2]] ?? 3600_000) > 86400_000;
 			}
 			if (filters.to) {
@@ -139,166 +160,174 @@ export function ExploreView({
 				refreshKey={live === "1" ? refreshKey : rows.length > 0 ? 1 : 0}
 				buckets={bucketGranularity ?? (live === "1" ? 45 : undefined)}
 				onTimeRangeSelect={live === "1" ? undefined : handleTimeRangeSelect}
-				onResetTimeRange={live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined}
+				onResetTimeRange={
+					live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined
+				}
 			>
-				{(hoverBucket) => (<>
-				<button
-					type="button"
-					onClick={toggleLive}
-					className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
-						live === "1"
-							? "bg-emerald-500/15 text-emerald-500"
-							: "text-muted-foreground hover:bg-muted hover:text-foreground"
-					}`}
-				>
-					<Radio className="h-3 w-3" />
-					Live
-				</button>
-
-				{live === "1" && (
+				{(hoverBucket) => (
 					<>
-						<div className="h-3 w-px bg-border" />
-						<div className="flex items-center gap-1.5">
-							<Circle
-								className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
-							/>
+						<button
+							type="button"
+							onClick={toggleLive}
+							className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+								live === "1"
+									? "bg-emerald-500/15 text-emerald-500"
+									: "text-muted-foreground hover:bg-muted hover:text-foreground"
+							}`}
+						>
+							<Radio className="h-3 w-3" />
+							Live
+						</button>
+
+						{live === "1" && (
+							<>
+								<div className="h-3 w-px bg-border" />
+								<div className="flex items-center gap-1.5">
+									<Circle
+										className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
+									/>
+									<span className="text-[10px] text-muted-foreground">
+										{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
+									</span>
+								</div>
+								<span className="text-[10px] text-muted-foreground tabular-nums">
+									{stream.logs.length.toLocaleString()} events
+								</span>
+							</>
+						)}
+
+						{live !== "1" && loading && (
+							<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+						)}
+						{live !== "1" && error && <span className="text-xs text-destructive">{error}</span>}
+						{live !== "1" && !loading && (
 							<span className="text-[10px] text-muted-foreground">
-								{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
+								{total.toLocaleString()} results
+								{total > 0 && ` (${rows.length} loaded)`}
 							</span>
-						</div>
-						<span className="text-[10px] text-muted-foreground tabular-nums">
-							{stream.logs.length.toLocaleString()} events
-						</span>
-					</>
-				)}
+						)}
 
-				{live !== "1" && loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-				{live !== "1" && error && <span className="text-xs text-destructive">{error}</span>}
-				{live !== "1" && !loading && (
-					<span className="text-[10px] text-muted-foreground">
-						{total.toLocaleString()} results
-						{total > 0 && ` (${rows.length} loaded)`}
-					</span>
-				)}
+						<HoverStats bucket={hoverBucket} />
 
-				<HoverStats bucket={hoverBucket} />
+						<div className="flex-1" />
 
-				<div className="flex-1" />
-
-				<div className="flex items-center rounded-md border border-border overflow-hidden">
-					<button
-						type="button"
-						onClick={() => setDetailMode("inline")}
-						title="Inline detail"
-						className={`flex items-center px-1.5 py-0.5 transition-colors ${
-							detailMode === "inline"
-								? "bg-muted text-foreground"
-								: "text-muted-foreground hover:text-foreground"
-						}`}
-					>
-						<AlignLeft className="h-3 w-3" />
-					</button>
-					<button
-						type="button"
-						onClick={() => setDetailMode("panel")}
-						title="Side panel"
-						className={`flex items-center px-1.5 py-0.5 transition-colors ${
-							detailMode === "panel"
-								? "bg-muted text-foreground"
-								: "text-muted-foreground hover:text-foreground"
-						}`}
-					>
-						<PanelRight className="h-3 w-3" />
-					</button>
-				</div>
-
-				<div className="flex items-center rounded-md border border-border px-2 py-0.5">
-					<select
-						value={bucketGranularity?.toString() || ""}
-						onChange={(e) => setBucketGranularity(e.target.value ? Number(e.target.value) : undefined)}
-						title="Chart bucket granularity"
-						className="text-[10px] bg-transparent border-0 text-muted-foreground hover:text-foreground cursor-pointer outline-none appearance-none"
-					>
-						<option value="">Auto granularity</option>
-						<option value="60">Granular (60 buckets)</option>
-						<option value="45">Normal (45 buckets)</option>
-						<option value="30">Coarse (30 buckets)</option>
-						<option value="20">Very coarse (20 buckets)</option>
-						<option value="12">Ultra coarse (12 buckets)</option>
-					</select>
-				</div>
-
-				{live === "1" && (
-					<>
-						<button
-							type="button"
-							onClick={stream.clear}
-							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						>
-							<Trash2 className="h-3 w-3" />
-							Clear
-						</button>
-						<button
-							type="button"
-							onClick={stream.paused ? stream.resume : stream.pause}
-							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						>
-							{stream.paused ? (
-								<>
-									<Play className="h-3 w-3" />
-									Resume
-								</>
-							) : (
-								<>
-									<Pause className="h-3 w-3" />
-									Pause
-								</>
-							)}
-						</button>
-					</>
-				)}
-
-				{live !== "1" && (
-					<>
-						<div className="relative">
+						<div className="flex items-center rounded-md border border-border overflow-hidden">
 							<button
 								type="button"
-								onClick={() => setShowExport(!showExport)}
-								className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								onClick={() => setDetailMode("inline")}
+								title="Inline detail"
+								className={`flex items-center px-1.5 py-0.5 transition-colors ${
+									detailMode === "inline"
+										? "bg-muted text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
 							>
-								<Download className="h-3 w-3" />
-								Export
+								<AlignLeft className="h-3 w-3" />
 							</button>
-							{showExport && (
-								<div className="absolute right-0 top-full z-10 mt-1 rounded-md border border-border bg-popover p-1 shadow-md">
-									<button
-										type="button"
-										onClick={() => exportData("json")}
-										className="block w-full rounded px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted"
-									>
-										Download JSON
-									</button>
-									<button
-										type="button"
-										onClick={() => exportData("csv")}
-										className="block w-full rounded px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted"
-									>
-										Download CSV
-									</button>
-								</div>
-							)}
+							<button
+								type="button"
+								onClick={() => setDetailMode("panel")}
+								title="Side panel"
+								className={`flex items-center px-1.5 py-0.5 transition-colors ${
+									detailMode === "panel"
+										? "bg-muted text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+							>
+								<PanelRight className="h-3 w-3" />
+							</button>
 						</div>
-						<button
-							type="button"
-							onClick={refetch}
-							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-						>
-							<RefreshCw className="h-3 w-3" />
-							Refresh
-						</button>
+
+						<div className="flex items-center rounded-md border border-border px-2 py-0.5">
+							<select
+								value={bucketGranularity?.toString() || ""}
+								onChange={(e) =>
+									setBucketGranularity(e.target.value ? Number(e.target.value) : undefined)
+								}
+								title="Chart bucket granularity"
+								className="text-[10px] bg-transparent border-0 text-muted-foreground hover:text-foreground cursor-pointer outline-none appearance-none"
+							>
+								<option value="">Auto granularity</option>
+								<option value="60">Granular (60 buckets)</option>
+								<option value="45">Normal (45 buckets)</option>
+								<option value="30">Coarse (30 buckets)</option>
+								<option value="20">Very coarse (20 buckets)</option>
+								<option value="12">Ultra coarse (12 buckets)</option>
+							</select>
+						</div>
+
+						{live === "1" && (
+							<>
+								<button
+									type="button"
+									onClick={stream.clear}
+									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									<Trash2 className="h-3 w-3" />
+									Clear
+								</button>
+								<button
+									type="button"
+									onClick={stream.paused ? stream.resume : stream.pause}
+									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									{stream.paused ? (
+										<>
+											<Play className="h-3 w-3" />
+											Resume
+										</>
+									) : (
+										<>
+											<Pause className="h-3 w-3" />
+											Pause
+										</>
+									)}
+								</button>
+							</>
+						)}
+
+						{live !== "1" && (
+							<>
+								<div className="relative">
+									<button
+										type="button"
+										onClick={() => setShowExport(!showExport)}
+										className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+									>
+										<Download className="h-3 w-3" />
+										Export
+									</button>
+									{showExport && (
+										<div className="absolute right-0 top-full z-10 mt-1 rounded-md border border-border bg-popover p-1 shadow-md">
+											<button
+												type="button"
+												onClick={() => exportData("json")}
+												className="block w-full rounded px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted"
+											>
+												Download JSON
+											</button>
+											<button
+												type="button"
+												onClick={() => exportData("csv")}
+												className="block w-full rounded px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted"
+											>
+												Download CSV
+											</button>
+										</div>
+									)}
+								</div>
+								<button
+									type="button"
+									onClick={refetch}
+									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									<RefreshCw className="h-3 w-3" />
+									Refresh
+								</button>
+							</>
+						)}
 					</>
 				)}
-				</>)}
 			</TimelineChart>
 			<LogTable
 				logs={logs}

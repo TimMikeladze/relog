@@ -53,7 +53,9 @@ export function StatusBar({
 					) : (
 						<LockOpen className="h-2.5 w-2.5" />
 					)}
-					<span>{authed ? (auth.key ? "Authenticated" : "No auth required") : "Not authenticated"}</span>
+					<span>
+						{authed ? (auth.key ? "Authenticated" : "No auth required") : "Not authenticated"}
+					</span>
 				</div>
 			</button>
 			<div className="h-3 w-px bg-border" />

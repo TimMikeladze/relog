@@ -18,7 +18,9 @@ export const deleteDbCommand: Command = command({
 		}
 
 		if (!opts.yes) {
-			process.stdout.write(`This will permanently delete the database at ${dbPath}. Continue? [y/N] `);
+			process.stdout.write(
+				`This will permanently delete the database at ${dbPath}. Continue? [y/N] `,
+			);
 			const input = await new Promise<string>((resolve) => {
 				process.stdin.once("data", (data) => resolve(data.toString().trim().toLowerCase()));
 			});

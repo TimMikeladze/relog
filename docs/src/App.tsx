@@ -130,7 +130,18 @@ function AppPreview() {
 						{/* Log rows */}
 						<div className="flex-1 overflow-hidden">
 							{Array.from({ length: 10 }).map((_, i) => {
-								const levels = ["info", "info", "warn", "info", "error", "info", "debug", "info", "warn", "info"];
+								const levels = [
+									"info",
+									"info",
+									"warn",
+									"info",
+									"error",
+									"info",
+									"debug",
+									"info",
+									"warn",
+									"info",
+								];
 								const colors: Record<string, string> = {
 									info: "bg-accent",
 									warn: "bg-amber",
@@ -145,9 +156,11 @@ function AppPreview() {
 										className={`flex items-center gap-3 px-4 h-8 border-b border-border/40 ${i === 2 ? "bg-white/[0.03]" : ""}`}
 									>
 										<div className="text-[10px] text-muted/40 w-20 shrink-0">
-											{`0${i + 1}:${String(i * 7 % 60).padStart(2, "0")}:${String(i * 13 % 60).padStart(2, "0")}`}
+											{`0${i + 1}:${String((i * 7) % 60).padStart(2, "0")}:${String((i * 13) % 60).padStart(2, "0")}`}
 										</div>
-										<span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${colors[level]} text-bg shrink-0`}>
+										<span
+											className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${colors[level]} text-bg shrink-0`}
+										>
 											{level}
 										</span>
 										<div
@@ -767,7 +780,16 @@ function Footer() {
 
 function ExternalLinkIcon() {
 	return (
-		<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+		<svg
+			width="12"
+			height="12"
+			viewBox="0 0 12 12"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="1.5"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
 			<path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" />
 			<path d="M8 1h3v3" />
 			<path d="M11 1 6 6" />
