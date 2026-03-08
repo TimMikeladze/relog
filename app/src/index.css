@@ -128,3 +128,11 @@
 		@apply font-sans;
 	}
 }
+
+/* Subtle zebra striping for log rows */
+.log-rows > *:nth-child(even) {
+	background-color: oklch(0 0 0 / 2%);
+}
+.dark .log-rows > *:nth-child(even) {
+	background-color: oklch(1 0 0 / 2%);
+}

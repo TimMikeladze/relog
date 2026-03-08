@@ -2,22 +2,17 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useLogs } from "@/hooks/use-logs";
 import { useStream } from "@/hooks/use-stream";
 import { LogTable } from "@/components/log-table";
-import { Pagination } from "@/components/pagination";
 import { TimelineStrip } from "@/components/timeline-strip";
 import type { Filters } from "@/types";
 import { Circle, Download, Loader2, Pause, Play, RefreshCw, Radio, Trash2 } from "lucide-react";
 
 export function ExploreView({
 	filters,
-	page,
-	onPageChange,
 	enabled,
 	onNavigateTrace,
 	onUpdateFilters,
 }: {
 	filters: Filters;
-	page: number;
-	onPageChange: (page: number) => void;
 	enabled: boolean;
 	onNavigateTrace?: (traceId: string) => void;
 	onUpdateFilters: (updates: Partial<Filters>) => void;
@@ -26,7 +21,7 @@ export function ExploreView({
 	const [showExport, setShowExport] = useState(false);
 
 	const stream = useStream(filters, enabled && live);
-	const { data, loading, error, refetch } = useLogs(filters, page, enabled && !live);
+	const { rows, total, loading, loadingMore, error, hasMore, loadMore, refetch } = useLogs(filters, enabled && !live);
 
 	const [refreshKey, setRefreshKey] = useState(0);
 	const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -50,8 +45,8 @@ export function ExploreView({
 
 	const exportData = useCallback(
 		(format: "json" | "csv") => {
-			const rows = live ? stream.logs : data?.rows;
-			if (!rows?.length) return;
+			const exportRows = live ? stream.logs : rows;
+			if (!exportRows?.length) return;
 			let content: string;
 			let ext: string;
 
@@ -67,7 +62,7 @@ export function ExploreView({
 					"trace_id",
 					"meta",
 				];
-				const csvRows = rows.map((r) =>
+				const csvRows = exportRows.map((r) =>
 					headers
 						.map((h) => {
 							const val = r[h as keyof typeof r];
@@ -80,7 +75,7 @@ export function ExploreView({
 				content = [headers.join(","), ...csvRows].join("\n");
 				ext = "csv";
 			} else {
-				content = JSON.stringify(rows, null, 2);
+				content = JSON.stringify(exportRows, null, 2);
 				ext = "json";
 			}
 
@@ -95,10 +90,24 @@ export function ExploreView({
 			URL.revokeObjectURL(url);
 			setShowExport(false);
 		},
-		[live, stream.logs, data],
+		[live, stream.logs, rows],
 	);
 
-	const logs = live ? stream.logs : (data?.rows ?? []);
+	const logs = live ? stream.logs : rows;
+
+	// Only show date column when time range spans more than 24h
+	const showDate = !live && (() => {
+		if (!filters.from) return false;
+		const match = filters.from.match(/^(\d+)([smhd])$/);
+		if (match) {
+			const ms: Record<string, number> = { s: 1000, m: 60_000, h: 3600_000, d: 86400_000 };
+			return parseInt(match[1]) * (ms[match[2]] ?? 3600_000) > 86400_000;
+		}
+		if (filters.to) {
+			return new Date(filters.to).getTime() - new Date(filters.from).getTime() > 86400_000;
+		}
+		return false;
+	})();
 
 	return (
 		<div className="flex flex-1 flex-col overflow-hidden">
@@ -106,7 +115,7 @@ export function ExploreView({
 				from={live ? "15m" : filters.from}
 				to={live ? undefined : filters.to}
 				filters={filters as Record<string, string | undefined>}
-				refreshKey={live ? refreshKey : data ? 1 : 0}
+				refreshKey={live ? refreshKey : rows.length > 0 ? 1 : 0}
 				buckets={live ? 45 : 60}
 				onTimeRangeSelect={live ? undefined : handleTimeRangeSelect}
 			/>
@@ -143,10 +152,10 @@ export function ExploreView({
 
 				{!live && loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
 				{!live && error && <span className="text-xs text-destructive">{error}</span>}
-				{!live && data && !loading && (
+				{!live && !loading && (
 					<span className="text-[10px] text-muted-foreground">
-						{data.total.toLocaleString()} results
-						{data.total > 0 && ` (${data.rows.length} shown)`}
+						{total.toLocaleString()} results
+						{total > 0 && ` (${rows.length} loaded)`}
 					</span>
 				)}
 
@@ -226,7 +235,7 @@ export function ExploreView({
 			<LogTable
 				logs={logs}
 				autoScroll={live}
-				showDate={!live}
+				showDate={showDate}
 				emptyMessage={
 					live
 						? stream.connected
@@ -237,10 +246,10 @@ export function ExploreView({
 							: "No logs found"
 				}
 				onNavigateTrace={onNavigateTrace}
+				onLoadMore={live ? undefined : loadMore}
+				loadingMore={loadingMore}
+				hasMore={hasMore}
 			/>
-			{!live && data && (
-				<Pagination page={page} total={data.total} limit={data.limit} onPageChange={onPageChange} />
-			)}
 		</div>
 	);
 }

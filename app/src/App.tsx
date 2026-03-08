@@ -3,7 +3,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { useHashState } from "@/hooks/use-hash-state";
 import { useKeyboard } from "@/hooks/use-keyboard";
 import { Header } from "@/components/layout/header";
-import { FilterBar } from "@/components/layout/filter-bar";
+import { FilterSidebar } from "@/components/layout/filter-sidebar";
 import { StatusBar } from "@/components/layout/status-bar";
 import { AuthDialog } from "@/components/auth-dialog";
 import { CommandPalette } from "@/components/command-palette";
@@ -18,7 +18,7 @@ import type { View } from "@/types";
 
 function AppContent() {
 	const auth = useAuth();
-	const { view, filters, page, setView, setFilters, updateFilter, updateFilters, setPage } =
+	const { view, filters, setView, setFilters, updateFilter, updateFilters } =
 		useHashState();
 	const [showSettings, setShowSettings] = useState(false);
 	const [showCommandPalette, setShowCommandPalette] = useState(false);
@@ -160,7 +160,7 @@ function AppContent() {
 		);
 	}
 
-	const showFilterBar = view !== "dashboard" && view !== "query";
+	const showSidebar = view === "explore" || view === "traces";
 
 	return (
 		<div className="flex h-screen flex-col bg-background text-foreground">
@@ -169,52 +169,54 @@ function AppContent() {
 				onViewChange={setView}
 				onSettingsClick={() => setShowSettings(true)}
 				onCommandPalette={() => setShowCommandPalette(true)}
+				filters={filters}
+				onUpdateFilter={updateFilter}
 			/>
-			{showFilterBar && (
-				<FilterBar
-					filters={filters}
-					view={view}
-					onUpdateFilter={updateFilter}
-					onUpdateFilters={updateFilters}
-					onClearFilters={() => setFilters({})}
-				/>
-			)}
 			<div className="flex flex-1 overflow-hidden">
-				{view === "explore" && (
-					<ExploreView
+				{showSidebar && (
+					<FilterSidebar
 						filters={filters}
-						page={page}
-						onPageChange={setPage}
-						enabled={view === "explore"}
-						onNavigateTrace={navigateTrace}
+						view={view}
+						onUpdateFilter={updateFilter}
 						onUpdateFilters={updateFilters}
+						onClearFilters={() => setFilters({})}
 					/>
 				)}
-				{view === "traces" && (
-					<TracesView
-						filters={filters}
-						enabled={view === "traces"}
-						onUpdateFilters={updateFilters}
-					/>
-				)}
-				{view === "query" && (
-					<QueryView
-						enabled={view === "query"}
-						onZoom={(from, to) => {
-							updateFilters({ from, to });
-							setView("explore" as View);
-						}}
-					/>
-				)}
-				{view === "dashboard" && (
-					<DashboardView
-						enabled={view === "dashboard"}
-						onZoom={(from, to) => {
-							updateFilters({ from, to });
-							setView("explore" as View);
-						}}
-					/>
-				)}
+				<div className="flex flex-1 overflow-hidden">
+					{view === "explore" && (
+						<ExploreView
+							filters={filters}
+							enabled={view === "explore"}
+							onNavigateTrace={navigateTrace}
+							onUpdateFilters={updateFilters}
+						/>
+					)}
+					{view === "traces" && (
+						<TracesView
+							filters={filters}
+							enabled={view === "traces"}
+							onUpdateFilters={updateFilters}
+						/>
+					)}
+					{view === "query" && (
+						<QueryView
+							enabled={view === "query"}
+							onZoom={(from, to) => {
+								updateFilters({ from, to });
+								setView("explore" as View);
+							}}
+						/>
+					)}
+					{view === "dashboard" && (
+						<DashboardView
+							enabled={view === "dashboard"}
+							onZoom={(from, to) => {
+								updateFilters({ from, to });
+								setView("explore" as View);
+							}}
+						/>
+					)}
+				</div>
 			</div>
 			<StatusBar />
 			{showSettings && <AuthDialog onClose={() => setShowSettings(false)} />}

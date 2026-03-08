@@ -3,9 +3,11 @@ import type { LogRecord } from "@/types";
 import { LevelBadge } from "./level-badge";
 import { JsonViewer } from "./json-viewer";
 import { LogRow } from "./log-row";
-import { X, Copy, Route, Rows3, Check } from "lucide-react";
+import { X, Copy, Route, Rows3, Check, Circle } from "lucide-react";
 import { apiGet } from "@/api/client";
 import type { LogsResponse } from "@/types";
+
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 function parseMeta(meta: LogRecord["meta"]): Record<string, unknown> | null {
 	if (!meta) return null;
@@ -19,30 +21,56 @@ function parseMeta(meta: LogRecord["meta"]): Record<string, unknown> | null {
 	return meta;
 }
 
-function Field({
+function formatFullTimestamp(ts: string): string {
+	try {
+		const d = new Date(ts);
+		const time = d.toLocaleTimeString("en-US", { hour12: false, fractionalSecondDigits: 2 });
+		const tz = d.toLocaleTimeString("en-US", { timeZoneName: "shortOffset" }).split(" ").pop();
+		return `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")} ${time} ${tz}`;
+	} catch {
+		return ts;
+	}
+}
+
+function DetailField({
 	label,
 	value,
+	mono = true,
 	onClick,
 }: {
 	label: string;
 	value: string | number | null | undefined;
+	mono?: boolean;
 	onClick?: () => void;
 }) {
-	if (value === null || value === undefined) return null;
+	if (value === null || value === undefined || value === "") return null;
 	return (
-		<div className="flex items-baseline gap-2">
-			<span className="shrink-0 text-muted-foreground text-xs w-24">{label}</span>
+		<div className="flex items-baseline justify-between gap-3 py-1">
+			<span className="shrink-0 text-xs text-muted-foreground">{label}</span>
 			{onClick ? (
 				<button
 					type="button"
 					onClick={onClick}
-					className="font-mono text-xs break-all text-primary hover:underline"
+					className="text-right text-xs font-mono truncate max-w-[260px] text-primary hover:underline"
 				>
 					{String(value)}
 				</button>
 			) : (
-				<span className="font-mono text-xs break-all">{String(value)}</span>
+				<span
+					className={`text-right text-xs truncate max-w-[260px] ${mono ? "font-mono" : ""}`}
+					title={String(value)}
+				>
+					{String(value)}
+				</span>
 			)}
+		</div>
+	);
+}
+
+function SectionHeader({ children }: { children: React.ReactNode }) {
+	return (
+		<div className="pt-4 pb-1.5">
+			<span className="text-[11px] font-semibold text-foreground">{children}</span>
 		</div>
 	);
 }
@@ -91,71 +119,152 @@ export function LogDetailPanel({
 		}
 	}, [log]);
 
+	const httpMeta = meta
+		? {
+				method: meta.http_method as string | undefined,
+				status: meta.http_status as number | undefined,
+				path: meta.http_path as string | undefined,
+				duration: meta.duration_ms as number | undefined,
+				userAgent: meta.user_agent as string | undefined,
+			}
+		: null;
+
+	const hasHttp = httpMeta && (httpMeta.method || httpMeta.status);
+
 	return (
-		<div className="flex w-[380px] shrink-0 flex-col border-l border-border bg-card">
-			<div className="flex items-center justify-between border-b border-border px-4 py-2">
-				<div className="flex items-center gap-2">
-					<span className="text-xs font-medium">Log #{log.id}</span>
-					<LevelBadge level={log.level} />
+		<div className="flex w-[440px] shrink-0 flex-col border-l border-border bg-card">
+			{/* Header */}
+			<div className="flex items-center justify-between border-b border-border px-4 py-3">
+				<div className="flex items-center gap-2 min-w-0">
+					{hasHttp ? (
+						<span className="text-xs font-semibold font-mono truncate">
+							{httpMeta?.method} {httpMeta?.path || log.message}
+						</span>
+					) : (
+						<span className="text-xs font-semibold truncate">{log.message}</span>
+					)}
 				</div>
 				<button
 					type="button"
 					onClick={onClose}
-					className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+					className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
 					<X className="h-3.5 w-3.5" />
 				</button>
 			</div>
 
-			<div className="flex-1 overflow-y-auto p-4 space-y-4">
-				<div className="space-y-1.5">
-					<Field label="timestamp" value={log.timestamp} />
-					<Field label="level" value={log.level} />
-					<Field label="service" value={log.service} />
-					<Field label="host" value={log.host} />
-					<Field label="pid" value={log.pid} />
-					<Field
-						label="trace_id"
-						value={log.trace_id}
-						onClick={
-							log.trace_id && onNavigateTrace ? () => onNavigateTrace(log.trace_id!) : undefined
-						}
-					/>
-					<Field label="span_id" value={log.span_id} />
-					<Field label="project" value={log.project} />
-					<Field label="branch" value={log.branch} />
-					<Field label="version" value={log.version} />
-					<Field label="deployment_id" value={log.deployment_id} />
+			<div className="flex-1 overflow-y-auto px-4 pb-4">
+				{/* Event timeline */}
+				<div className="py-3 space-y-2">
+					<div className="flex items-center gap-2">
+						<Circle className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+						<span className="text-xs font-medium">Log recorded</span>
+						<span className="ml-auto text-[10px] text-muted-foreground font-mono tabular-nums">
+							{formatFullTimestamp(log.timestamp)}
+						</span>
+					</div>
+
+					{/* Request info if HTTP */}
+					{hasHttp && (
+						<div className="ml-1 border-l border-border/50 pl-4 space-y-1">
+							<DetailField label="Method" value={httpMeta?.method} />
+							<DetailField label="Status" value={httpMeta?.status} />
+							<DetailField label="Path" value={httpMeta?.path} />
+							{httpMeta?.userAgent && (
+								<DetailField label="User Agent" value={httpMeta.userAgent} />
+							)}
+						</div>
+					)}
+
+					{httpMeta?.duration != null && (
+						<div className="flex items-center gap-2">
+							<Circle className="h-2.5 w-2.5 shrink-0 fill-emerald-400 text-emerald-400" />
+							<span className="text-xs font-medium">
+								Completed in {Math.round(httpMeta.duration)}ms
+							</span>
+						</div>
+					)}
 				</div>
 
-				<div>
-					<span className="text-xs text-muted-foreground">message</span>
-					<p className="mt-1 rounded-md bg-muted/50 p-2 font-mono text-xs whitespace-pre-wrap break-all">
+				{/* Level + Message */}
+				<div className="border-t border-border/50 pt-3 space-y-2">
+					<div className="flex items-center gap-2">
+						<LevelBadge level={log.level} />
+						<span className="text-[10px] text-muted-foreground">#{log.id}</span>
+					</div>
+					<p className="rounded bg-muted/50 p-2.5 font-mono text-xs whitespace-pre-wrap break-all leading-relaxed">
 						{log.message}
 					</p>
 				</div>
 
-				{meta && (
-					<div>
-						<span className="text-xs text-muted-foreground">meta</span>
-						<div className="mt-1">
-							<JsonViewer data={meta} />
+				{/* Identification */}
+				{(log.service || log.host || log.pid) && (
+					<>
+						<SectionHeader>Identification</SectionHeader>
+						<div className="rounded border border-border/50 divide-y divide-border/30">
+							<div className="px-3">
+								<DetailField label="Service" value={log.service} />
+								<DetailField label="Host" value={log.host} />
+								<DetailField label="PID" value={log.pid} />
+							</div>
 						</div>
-					</div>
+					</>
 				)}
 
+				{/* Trace */}
+				{(log.trace_id || log.span_id) && (
+					<>
+						<SectionHeader>Trace</SectionHeader>
+						<div className="rounded border border-border/50 px-3">
+							<DetailField
+								label="Trace ID"
+								value={log.trace_id}
+								onClick={
+									log.trace_id && onNavigateTrace
+										? () => onNavigateTrace(log.trace_id!)
+										: undefined
+								}
+							/>
+							<DetailField label="Span ID" value={log.span_id} />
+						</div>
+					</>
+				)}
+
+				{/* Deployment Information */}
+				{(log.project || log.branch || log.version || log.deployment_id) && (
+					<>
+						<SectionHeader>Deployment Information</SectionHeader>
+						<div className="rounded border border-border/50 px-3">
+							<DetailField label="Project" value={log.project} />
+							<DetailField label="Branch" value={log.branch} />
+							<DetailField label="Version" value={log.version} />
+							<DetailField label="Deployment ID" value={log.deployment_id} />
+						</div>
+					</>
+				)}
+
+				{/* Metadata */}
+				{meta && Object.keys(meta).length > 0 && (
+					<>
+						<SectionHeader>Metadata</SectionHeader>
+						<JsonViewer data={meta} />
+					</>
+				)}
+
+				{/* Context logs */}
 				{contextLogs && (
-					<div>
-						<span className="text-xs text-muted-foreground">Context</span>
-						<div className="mt-1 rounded-md border border-border overflow-hidden divide-y divide-border/50">
+					<>
+						<SectionHeader>Context</SectionHeader>
+						<div className="rounded border border-border overflow-hidden divide-y divide-border/30">
 							{contextLogs.map((l) => (
 								<LogRow key={l.id} log={l} selected={l.id === log.id} />
 							))}
 						</div>
-					</div>
+					</>
 				)}
 			</div>
 
+			{/* Footer actions */}
 			<div className="flex items-center gap-1 border-t border-border px-3 py-2">
 				<button
 					type="button"
@@ -183,7 +292,7 @@ export function LogDetailPanel({
 					className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 				>
 					{copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-					{copied ? "Copied" : "Copy"}
+					{copied ? "Copied" : "Copy JSON"}
 				</button>
 			</div>
 		</div>

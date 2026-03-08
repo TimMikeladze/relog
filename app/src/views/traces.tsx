@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPost } from "@/api/client";
+import { useStream } from "@/hooks/use-stream";
 import { TimelineStrip } from "@/components/timeline-strip";
 import { LevelBadge } from "@/components/level-badge";
 import type { Filters, LogRecord, QueryResult } from "@/types";
 
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, Circle, Pause, Play, Radio, Trash2 } from "lucide-react";
 
 interface TraceRow {
 	trace_id: string;
@@ -31,6 +32,96 @@ function levelPriority(level: string): number {
 	);
 }
 
+function buildSpans(logs: LogRecord[]): SpanBar[] {
+	const spans: SpanBar[] = [];
+	const baseTime = logs.length > 0 ? new Date(logs[0].timestamp).getTime() : 0;
+
+	const wideEvents = logs.filter((l) => {
+		try {
+			const meta = typeof l.meta === "string" ? JSON.parse(l.meta || "{}") : l.meta || {};
+			return meta.event === true || meta.duration_ms != null;
+		} catch {
+			return false;
+		}
+	});
+
+	if (wideEvents.length > 0) {
+		for (const ev of wideEvents) {
+			const meta = typeof ev.meta === "string" ? JSON.parse(ev.meta || "{}") : ev.meta || {};
+			const durationMs = Number(meta.duration_ms) || 1;
+			spans.push({
+				name: ev.message,
+				service: ev.service || "unknown",
+				start: Math.max(0, new Date(ev.timestamp).getTime() - baseTime - durationMs),
+				duration: durationMs,
+				level: ev.level,
+			});
+		}
+	} else {
+		const spanGroups = new Map<string, LogRecord[]>();
+		for (const l of logs) {
+			const key = l.span_id || l.service || "unknown";
+			if (!spanGroups.has(key)) spanGroups.set(key, []);
+			spanGroups.get(key)!.push(l);
+		}
+		for (const [key, group] of spanGroups) {
+			const start = new Date(group[0].timestamp).getTime() - baseTime;
+			const end = new Date(group[group.length - 1].timestamp).getTime() - baseTime;
+			const maxLevel = group.reduce(
+				(max, l) => (levelPriority(l.level) > levelPriority(max) ? l.level : max),
+				"info",
+			);
+			spans.push({
+				name: key,
+				service: group[0].service || "unknown",
+				start,
+				duration: Math.max(end - start, 1),
+				level: maxLevel,
+			});
+		}
+	}
+
+	return spans;
+}
+
+function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
+	const groups = new Map<string, LogRecord[]>();
+	for (const log of logs) {
+		if (!log.trace_id) continue;
+		if (!groups.has(log.trace_id)) groups.set(log.trace_id, []);
+		groups.get(log.trace_id)!.push(log);
+	}
+
+	const rows: TraceRow[] = [];
+	for (const [traceId, group] of groups) {
+		group.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+		const spanIds = new Set(group.map((l) => l.span_id || String(l.id)));
+		const maxLevel = group.reduce(
+			(max, l) => (levelPriority(l.level) > levelPriority(max) ? l.level : max),
+			"info",
+		);
+		let durationMs = 0;
+		for (const l of group) {
+			try {
+				const meta = typeof l.meta === "string" ? JSON.parse(l.meta || "{}") : l.meta || {};
+				if (meta.duration_ms != null) durationMs = Math.max(durationMs, Number(meta.duration_ms));
+			} catch {}
+		}
+		const services = [...new Set(group.map((l) => l.service).filter(Boolean))].join(",");
+		rows.push({
+			trace_id: traceId,
+			first_ts: group[0].timestamp,
+			span_count: spanIds.size,
+			duration_ms: durationMs,
+			max_level: maxLevel,
+			services,
+		});
+	}
+
+	rows.sort((a, b) => new Date(b.first_ts).getTime() - new Date(a.first_ts).getTime());
+	return rows;
+}
+
 export function TracesView({
 	filters,
 	enabled,
@@ -45,9 +136,30 @@ export function TracesView({
 	const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
 	const [traceLogs, setTraceLogs] = useState<LogRecord[]>([]);
 	const [traceSpans, setTraceSpans] = useState<SpanBar[]>([]);
+	const [live, setLive] = useState(false);
+
+	const stream = useStream(filters, enabled && live);
+
+	const liveTraces = useMemo(() => logsToTraceRows(stream.logs), [stream.logs]);
+	const liveTraceLogs = useMemo(() => {
+		if (!live || !expandedTrace) return [];
+		return stream.logs
+			.filter((l) => l.trace_id === expandedTrace)
+			.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+	}, [live, expandedTrace, stream.logs]);
+	const liveTraceSpans = useMemo(() => buildSpans(liveTraceLogs), [liveTraceLogs]);
+
+	const [refreshKey, setRefreshKey] = useState(0);
+	const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
 	useEffect(() => {
-		if (!enabled) return;
+		if (!live) return;
+		intervalRef.current = setInterval(() => setRefreshKey((k) => k + 1), 10_000);
+		return () => clearInterval(intervalRef.current);
+	}, [live]);
+
+	useEffect(() => {
+		if (!enabled || live) return;
 		setLoading(true);
 
 		let where = "WHERE trace_id IS NOT NULL AND trace_id != ''";
@@ -113,7 +225,7 @@ export function TracesView({
 			})
 			.catch((err) => console.error("Traces query failed:", err))
 			.finally(() => setLoading(false));
-	}, [enabled, filters]);
+	}, [enabled, live, filters]);
 
 	const expandTrace = useCallback(
 		async (traceId: string) => {
@@ -123,69 +235,20 @@ export function TracesView({
 			}
 			setExpandedTrace(traceId);
 
+			if (live) return; // live mode uses liveTraceLogs/liveTraceSpans via useMemo
+
 			const sql = `SELECT * FROM logs WHERE trace_id = '${traceId}' ORDER BY created_at ASC LIMIT 200`;
 			try {
 				const res = await apiPost<QueryResult>("/query", { sql });
 				const logs = res.rows as unknown as LogRecord[];
 				setTraceLogs(logs);
-
-				// Build spans from wide events (meta.event = true or meta.duration_ms exists)
-				const spans: SpanBar[] = [];
-				const baseTime = logs.length > 0 ? new Date(logs[0].timestamp).getTime() : 0;
-
-				const wideEvents = logs.filter((l) => {
-					try {
-						const meta = typeof l.meta === "string" ? JSON.parse(l.meta || "{}") : l.meta || {};
-						return meta.event === true || meta.duration_ms != null;
-					} catch {
-						return false;
-					}
-				});
-
-				if (wideEvents.length > 0) {
-					for (const ev of wideEvents) {
-						const meta = typeof ev.meta === "string" ? JSON.parse(ev.meta || "{}") : ev.meta || {};
-						const durationMs = Number(meta.duration_ms) || 1;
-						spans.push({
-							name: ev.message,
-							service: ev.service || "unknown",
-							start: Math.max(0, new Date(ev.timestamp).getTime() - baseTime - durationMs),
-							duration: durationMs,
-							level: ev.level,
-						});
-					}
-				} else {
-					// Group by span_id or service
-					const spanGroups = new Map<string, LogRecord[]>();
-					for (const l of logs) {
-						const key = l.span_id || l.service || "unknown";
-						if (!spanGroups.has(key)) spanGroups.set(key, []);
-						spanGroups.get(key)!.push(l);
-					}
-					for (const [key, group] of spanGroups) {
-						const start = new Date(group[0].timestamp).getTime() - baseTime;
-						const end = new Date(group[group.length - 1].timestamp).getTime() - baseTime;
-						const maxLevel = group.reduce(
-							(max, l) => (levelPriority(l.level) > levelPriority(max) ? l.level : max),
-							"info",
-						);
-						spans.push({
-							name: key,
-							service: group[0].service || "unknown",
-							start,
-							duration: Math.max(end - start, 1),
-							level: maxLevel,
-						});
-					}
-				}
-
-				setTraceSpans(spans);
+				setTraceSpans(buildSpans(logs));
 			} catch {
 				setTraceLogs([]);
 				setTraceSpans([]);
 			}
 		},
-		[expandedTrace],
+		[expandedTrace, live],
 	);
 
 	const statusDot = (level: string) => {
@@ -198,27 +261,108 @@ export function TracesView({
 		return colors[level] || colors.info;
 	};
 
+	const displayTraces = live ? liveTraces : traces;
+	const displayTraceLogs = live ? liveTraceLogs : traceLogs;
+	const displayTraceSpans = live ? liveTraceSpans : traceSpans;
+
 	return (
 		<div className="flex flex-1 flex-col overflow-hidden">
 			<TimelineStrip
-				from={filters.from || "1h"}
-				to={filters.to}
+				from={live ? "15m" : filters.from || "1h"}
+				to={live ? undefined : filters.to}
 				filters={filters as Record<string, string | undefined>}
-				onTimeRangeSelect={(from, to) => onUpdateFilters({ from, to })}
+				refreshKey={live ? refreshKey : undefined}
+				onTimeRangeSelect={live ? undefined : (from, to) => onUpdateFilters({ from, to })}
 			/>
+			<div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-1.5">
+				<button
+					type="button"
+					onClick={() => setLive((prev) => !prev)}
+					className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
+						live
+							? "bg-emerald-500/15 text-emerald-500"
+							: "text-muted-foreground hover:bg-muted hover:text-foreground"
+					}`}
+				>
+					<Radio className="h-3 w-3" />
+					Live
+				</button>
+
+				{live && (
+					<>
+						<div className="h-3 w-px bg-border" />
+						<div className="flex items-center gap-1.5">
+							<Circle
+								className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
+							/>
+							<span className="text-[10px] text-muted-foreground">
+								{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
+							</span>
+						</div>
+						<span className="text-[10px] text-muted-foreground tabular-nums">
+							{liveTraces.length} traces / {stream.logs.length.toLocaleString()} events
+						</span>
+					</>
+				)}
+
+				{!live && loading && (
+					<span className="text-[10px] text-muted-foreground">Loading...</span>
+				)}
+				{!live && !loading && (
+					<span className="text-[10px] text-muted-foreground">
+						{traces.length} traces
+					</span>
+				)}
+
+				<div className="flex-1" />
+
+				{live && (
+					<>
+						<button
+							type="button"
+							onClick={stream.clear}
+							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						>
+							<Trash2 className="h-3 w-3" />
+							Clear
+						</button>
+						<button
+							type="button"
+							onClick={stream.paused ? stream.resume : stream.pause}
+							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						>
+							{stream.paused ? (
+								<>
+									<Play className="h-3 w-3" />
+									Resume
+								</>
+							) : (
+								<>
+									<Pause className="h-3 w-3" />
+									Pause
+								</>
+							)}
+						</button>
+					</>
+				)}
+			</div>
 			<div className="flex-1 overflow-y-auto">
-				{loading && (
+				{!live && loading && (
 					<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
 						Loading traces...
 					</div>
 				)}
-				{!loading && traces.length === 0 && (
+				{!loading && displayTraces.length === 0 && (
 					<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
-						No traces found. Logs need a trace_id to appear here.
+						{live
+							? stream.connected
+								? "Waiting for traces..."
+								: "Not connected"
+							: "No traces found. Logs need a trace_id to appear here."}
 					</div>
 				)}
 				<div className="divide-y divide-border/50">
-					{traces.map((t) => (
+					{displayTraces.map((t) => (
 						<div key={t.trace_id}>
 							<button
 								type="button"
@@ -245,15 +389,15 @@ export function TracesView({
 							{expandedTrace === t.trace_id && (
 								<div className="border-t border-border/50 bg-muted/20 px-4 py-4 space-y-4">
 									{/* Waterfall */}
-									{traceSpans.length > 0 && (
+									{displayTraceSpans.length > 0 && (
 										<div>
 											<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
 												Waterfall
 											</div>
 											<div className="space-y-1">
-												{traceSpans.map((span, i) => {
+												{displayTraceSpans.map((span, i) => {
 													const maxEnd = Math.max(
-														...traceSpans.map((s) => s.start + s.duration),
+														...displayTraceSpans.map((s) => s.start + s.duration),
 														1,
 													);
 													const leftPct = (span.start / maxEnd) * 100;
@@ -289,10 +433,10 @@ export function TracesView({
 									{/* Trace logs */}
 									<div>
 										<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-											Logs ({traceLogs.length})
+											Logs ({displayTraceLogs.length})
 										</div>
 										<div className="rounded-md border border-border overflow-hidden divide-y divide-border/50">
-											{traceLogs.map((l) => (
+											{displayTraceLogs.map((l) => (
 												<div
 													key={l.id}
 													className="flex items-center gap-3 px-3 py-1 font-mono text-xs"

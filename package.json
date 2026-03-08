@@ -56,7 +56,11 @@
 	},
 	"scripts": {
 		"build": "bunup",
-		"dev": "bunup --watch",
+		"dev": "bunup --watch & bun --watch src/cli.ts start & sleep 2 && bun run src/cli.ts seed --count 0 --rate 5 & (cd app && bun run dev) & wait",
+		"dev:build": "bunup --watch",
+		"dev:server": "bun --watch src/cli.ts start",
+		"dev:seed": "bun run src/cli.ts seed --count 0 --rate 5",
+		"dev:app": "cd app && bun run dev",
 		"format": "oxfmt",
 		"lint": "oxlint",
 		"prepare": "bun simple-git-hooks",
