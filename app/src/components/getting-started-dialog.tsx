@@ -23,7 +23,9 @@ function ConnectForm() {
 							type="text"
 							value={urlInput}
 							onChange={(e) => setUrlInput(e.target.value)}
-							onKeyDown={(e) => { if (e.key === "Enter") handleConnect(); }}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleConnect();
+							}}
 							placeholder="http://localhost:3485"
 							className="h-7 flex-1 min-w-0 rounded-l-md border border-r-0 border-border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring font-mono"
 						/>
@@ -31,7 +33,9 @@ function ConnectForm() {
 							type="password"
 							value={keyInput}
 							onChange={(e) => setKeyInput(e.target.value)}
-							onKeyDown={(e) => { if (e.key === "Enter") handleConnect(); }}
+							onKeyDown={(e) => {
+								if (e.key === "Enter") handleConnect();
+							}}
 							placeholder="API key..."
 							className="h-7 w-28 border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 						/>
@@ -48,7 +52,15 @@ function ConnectForm() {
 			{connected && (
 				<div className="flex items-center gap-2">
 					<span className="flex-1 truncate text-xs text-emerald-400">Connected to {serverUrl}</span>
-					{key && <button type="button" onClick={logout} className="text-xs text-muted-foreground hover:text-foreground cursor-pointer shrink-0">logout</button>}
+					{key && (
+						<button
+							type="button"
+							onClick={logout}
+							className="text-xs text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+						>
+							logout
+						</button>
+					)}
 				</div>
 			)}
 			{error && <p className="text-xs text-destructive">{error}</p>}
@@ -140,25 +152,13 @@ function CodeBlock({ code, lang = "bash" }: { code: string; lang?: BundledLangua
 				aria-label="Copy code"
 				className="absolute right-2 top-2 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted hover:text-foreground cursor-pointer"
 			>
-				{copied ? (
-					<Check className="h-3 w-3 text-emerald-400" />
-				) : (
-					<Copy className="h-3 w-3" />
-				)}
+				{copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
 			</button>
 		</div>
 	);
 }
 
-function Step({
-	n,
-	title,
-	children,
-}: {
-	n: number;
-	title: string;
-	children: React.ReactNode;
-}) {
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
 	return (
 		<div className="space-y-2">
 			<div className="flex items-center gap-2">
@@ -228,7 +228,7 @@ export function GettingStartedDialog({ onClose }: { onClose: () => void }) {
 						</Step>
 					)}
 
-				<Step n={sendLogsStep} title="send logs with the TypeScript client">
+					<Step n={sendLogsStep} title="send logs with the TypeScript client">
 						<div className="space-y-2">
 							<CodeBlock
 								lang="typescript"
@@ -264,8 +264,8 @@ log.error("Something went wrong", { code: 500 });`}
 						<div className="space-y-2">
 							<p className="text-xs text-muted-foreground">
 								Add this to your Claude Desktop{" "}
-								<code className="font-mono">claude_desktop_config.json</code> to query logs
-								directly from Claude.
+								<code className="font-mono">claude_desktop_config.json</code> to query logs directly
+								from Claude.
 							</p>
 							<CodeBlock
 								lang="json"
