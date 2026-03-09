@@ -11,7 +11,9 @@ const LEVEL_COLORS: Record<LogLevel, (s: string) => string> = {
 };
 
 // Save original console methods so printLogRecord always bypasses any overrides
-export const originalConsole: { [K in "log" | "warn" | "error" | "debug" | "info" | "trace"]: (...args: unknown[]) => void } = {
+export const originalConsole: {
+	[K in "log" | "warn" | "error" | "debug" | "info" | "trace"]: (...args: unknown[]) => void;
+} = {
 	log: console.log.bind(console),
 	warn: console.warn.bind(console),
 	error: console.error.bind(console),
