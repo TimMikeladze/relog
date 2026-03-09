@@ -201,9 +201,11 @@ export class BrowserLogger {
 	private boundMeta: Record<string, unknown>;
 	private errorCleanup: (() => void) | null = null;
 	private consoleCleanup: (() => void) | null = null;
+	private isChild: boolean;
 
-	constructor(options: BrowserLoggerOptions = {}) {
-		this.transport = new BrowserTransport({
+	constructor(options: BrowserLoggerOptions = {}, parentTransport?: BrowserTransport) {
+		this.isChild = !!parentTransport;
+		this.transport = parentTransport ?? new BrowserTransport({
 			endpoint: options.endpoint,
 			flushInterval: options.flushInterval,
 			batchSize: options.batchSize,
@@ -311,23 +313,25 @@ export class BrowserLogger {
 	destroy(): void {
 		this.errorCleanup?.();
 		this.consoleCleanup?.();
-		this.transport.destroy();
+		if (!this.isChild) {
+			this.transport.destroy();
+		}
 	}
 
 	child(meta: Record<string, unknown>): BrowserLogger {
-		const child = new BrowserLogger({
-			level: this.level,
-			service: this.service,
-			project: this.project,
-			version: this.version,
-			deploymentId: this.deploymentId,
-			meta: { ...this.boundMeta, ...meta },
-			captureErrors: false,
-			captureConsole: false,
-		});
-		// Share transport with parent
-		(child as unknown as { transport: BrowserTransport }).transport = this.transport;
-		return child;
+		return new BrowserLogger(
+			{
+				level: this.level,
+				service: this.service,
+				project: this.project,
+				version: this.version,
+				deploymentId: this.deploymentId,
+				meta: { ...this.boundMeta, ...meta },
+				captureErrors: false,
+				captureConsole: false,
+			},
+			this.transport,
+		);
 	}
 
 	private hookErrors(): void {

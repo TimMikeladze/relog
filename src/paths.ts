@@ -13,6 +13,10 @@ export function getDefaultDbPath(): string {
 	return join(getDataDir(), "relog.db");
 }
 
+export function getAggregatesPath(): string {
+	return join(getDataDir(), "aggregates.json");
+}
+
 export function getAppDistPath(): string | null {
 	// Production: app files are copied to dist/app/ alongside the compiled cli.js
 	const prod = join(import.meta.dir, "app");

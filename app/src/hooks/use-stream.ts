@@ -35,7 +35,9 @@ export function useStream(filters: Filters, enabled: boolean) {
 		fetch(url.toString(), { headers, signal: controller.signal })
 			.then(async (res) => {
 				if (!res.ok || !res.body) {
-					throw new Error(`Stream failed: ${res.status}`);
+					const err = new Error(`Stream failed: ${res.status}`);
+					(err as { status?: number }).status = res.status;
+					throw err;
 				}
 				setConnected(true);
 				backoffRef.current = 1000;
@@ -70,6 +72,9 @@ export function useStream(filters: Filters, enabled: boolean) {
 			.catch((err) => {
 				if (err.name === "AbortError") return;
 				setConnected(false);
+				// Don't retry on auth errors — would loop forever
+				const status = (err as { status?: number }).status;
+				if (status === 401 || status === 403) return;
 				const delay = backoffRef.current;
 				backoffRef.current = Math.min(delay * 2, MAX_BACKOFF);
 				reconnectTimerRef.current = setTimeout(connect, delay);
@@ -77,6 +82,7 @@ export function useStream(filters: Filters, enabled: boolean) {
 	}, [filters, paused, enabled]);
 
 	useEffect(() => {
+		setLogs([]);
 		connect();
 		return () => {
 			abortRef.current?.abort();

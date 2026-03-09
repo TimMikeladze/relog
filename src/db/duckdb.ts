@@ -47,19 +47,22 @@ export class DuckDBReader {
 			await conn.run(`ATTACH '${escapeString(this.sqlitePath)}' AS hot (TYPE sqlite, READ_ONLY);`);
 
 			if (this.archive) {
+				await conn.run("INSTALL aws; LOAD aws;");
 				await conn.run("INSTALL httpfs; LOAD httpfs;");
 
 				const endpoint = this.archive.endpoint.replace(/^https?:\/\//, "");
-				await conn.run(`SET s3_endpoint = '${escapeString(endpoint)}';`);
-				await conn.run(`SET s3_access_key_id = '${escapeString(this.archive.accessKeyId)}';`);
-				await conn.run(
-					`SET s3_secret_access_key = '${escapeString(this.archive.secretAccessKey)}';`,
-				);
-				await conn.run(`SET s3_region = '${escapeString(this.archive.region ?? "us-east-1")}';`);
-				await conn.run("SET s3_url_style = 'path';");
-				await conn.run(
-					`SET s3_use_ssl = ${this.archive.endpoint.startsWith("https") ? "true" : "false"};`,
-				);
+				const useSsl = this.archive.endpoint.startsWith("https");
+				await conn.run(`
+					CREATE SECRET relog_s3 (
+						TYPE S3,
+						KEY_ID '${escapeString(this.archive.accessKeyId)}',
+						SECRET '${escapeString(this.archive.secretAccessKey)}',
+						ENDPOINT '${escapeString(endpoint)}',
+						URL_STYLE '${this.archive.urlStyle ?? "path"}',
+						USE_SSL ${useSsl},
+						REGION '${escapeString(this.archive.region ?? "us-east-1")}'
+					);
+				`);
 
 				await this.createLogsView(conn);
 			} else {
@@ -89,7 +92,7 @@ export class DuckDBReader {
 				SELECT * FROM hot.logs
 				UNION ALL
 				SELECT id, timestamp, level, message, meta, service, host, pid,
-					trace_id, span_id, project, branch, created_at
+					trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at
 				FROM read_parquet('${parquetPath}', hive_partitioning=false, union_by_name=true)
 		`);
 	}
@@ -172,14 +175,18 @@ export class DuckDBReader {
 			params.push(`%${escapeLike(opts.grep)}%`);
 		}
 		if (opts.from) {
+			const ts = Math.floor(Number(opts.from));
+			if (!Number.isFinite(ts)) throw new Error("Invalid 'from' timestamp");
 			conditions.push("created_at >= ?");
 			// Use BigInt for timestamp params — DuckDB reads created_at as BIGINT
 			// from SQLite, and JS number params are interpreted as INT32
-			params.push(BigInt(Math.floor(Number(opts.from))));
+			params.push(BigInt(ts));
 		}
 		if (opts.to) {
+			const ts = Math.floor(Number(opts.to));
+			if (!Number.isFinite(ts)) throw new Error("Invalid 'to' timestamp");
 			conditions.push("created_at <= ?");
-			params.push(BigInt(Math.floor(Number(opts.to))));
+			params.push(BigInt(ts));
 		}
 
 		const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";

@@ -12,7 +12,7 @@ export function useLogs(filters: Filters, enabled: boolean) {
 	const [error, setError] = useState<string | null>(null);
 	const [hasMore, setHasMore] = useState(true);
 	const offsetRef = useRef(0);
-	const filtersRef = useRef(filters);
+	const abortRef = useRef<AbortController | null>(null);
 
 	const buildParams = useCallback(
 		(offset: number): Record<string, string> => {
@@ -36,28 +36,67 @@ export function useLogs(filters: Filters, enabled: boolean) {
 	);
 
 	// Initial fetch (resets on filter change)
-	const fetchInitial = useCallback(async () => {
+	useEffect(() => {
+		if (!enabled) return;
+
+		abortRef.current?.abort();
+		const controller = new AbortController();
+		abortRef.current = controller;
+
 		setLoading(true);
 		setError(null);
 		offsetRef.current = 0;
-		try {
-			const res = await apiGet<LogsResponse>("/logs", buildParams(0));
-			setRows(res.rows);
-			setTotal(res.total);
-			setHasMore(res.rows.length < res.total);
-			offsetRef.current = res.rows.length;
-			filtersRef.current = filters;
-		} catch (err) {
-			setError(err instanceof Error ? err.message : "Failed to fetch logs");
-		} finally {
-			setLoading(false);
-		}
-	}, [buildParams, filters]);
 
-	useEffect(() => {
+		apiGet<LogsResponse>("/logs", buildParams(0), controller.signal)
+			.then((res) => {
+				if (controller.signal.aborted) return;
+				setRows(res.rows);
+				setTotal(res.total);
+				setHasMore(res.rows.length < res.total);
+				offsetRef.current = res.rows.length;
+			})
+			.catch((err) => {
+				if (controller.signal.aborted) return;
+				setError(err instanceof Error ? err.message : "Failed to fetch logs");
+			})
+			.finally(() => {
+				if (controller.signal.aborted) return;
+				setLoading(false);
+			});
+
+		return () => {
+			controller.abort();
+		};
+	}, [buildParams, enabled]);
+
+	const refetch = useCallback(() => {
 		if (!enabled) return;
-		fetchInitial();
-	}, [fetchInitial, enabled]);
+
+		abortRef.current?.abort();
+		const controller = new AbortController();
+		abortRef.current = controller;
+
+		setLoading(true);
+		setError(null);
+		offsetRef.current = 0;
+
+		apiGet<LogsResponse>("/logs", buildParams(0), controller.signal)
+			.then((res) => {
+				if (controller.signal.aborted) return;
+				setRows(res.rows);
+				setTotal(res.total);
+				setHasMore(res.rows.length < res.total);
+				offsetRef.current = res.rows.length;
+			})
+			.catch((err) => {
+				if (controller.signal.aborted) return;
+				setError(err instanceof Error ? err.message : "Failed to fetch logs");
+			})
+			.finally(() => {
+				if (controller.signal.aborted) return;
+				setLoading(false);
+			});
+	}, [buildParams, enabled]);
 
 	// Load more (append)
 	const loadMore = useCallback(async () => {
@@ -80,5 +119,5 @@ export function useLogs(filters: Filters, enabled: boolean) {
 		}
 	}, [buildParams, loadingMore, loading, hasMore]);
 
-	return { rows, total, loading, loadingMore, error, hasMore, loadMore, refetch: fetchInitial };
+	return { rows, total, loading, loadingMore, error, hasMore, loadMore, refetch };
 }

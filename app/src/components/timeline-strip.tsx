@@ -1,11 +1,12 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import {
-	AreaChart,
-	Area,
+	LineChart,
+	Line,
 	BarChart,
 	Bar,
 	XAxis,
 	YAxis,
+	CartesianGrid,
 	ResponsiveContainer,
 	ReferenceArea,
 } from "recharts";
@@ -23,7 +24,7 @@ export interface TimelineBucket {
 	total: number;
 }
 
-export type ChartType = "area" | "bar";
+export type ChartType = "line" | "bar";
 
 interface TimelineStripProps {
 	from?: string;
@@ -40,12 +41,12 @@ interface TimelineStripProps {
 }
 
 export const LEVEL_COLORS: Record<string, string> = {
-	fatal: "oklch(0.65 0.24 350)",
-	error: "oklch(0.6 0.22 25)",
-	warn: "oklch(0.75 0.18 85)",
-	info: "oklch(0.65 0.17 160)",
-	debug: "oklch(0.55 0.14 250)",
-	trace: "oklch(0.45 0.03 260)",
+	fatal: "oklch(0.75 0.20 340)",
+	error: "oklch(0.72 0.20 25)",
+	warn: "oklch(0.85 0.16 85)",
+	info: "oklch(0.80 0.15 170)",
+	debug: "oklch(0.75 0.14 260)",
+	trace: "oklch(0.70 0.06 270)",
 };
 
 export const LEVELS_ORDER = ["fatal", "error", "warn", "info", "debug", "trace"] as const;
@@ -96,7 +97,7 @@ export function TimelineStrip({
 	buckets,
 	height = 120,
 	bare = false,
-	chartType = "area",
+	chartType = "line",
 	normalized = false,
 	onTimeRangeSelect,
 	onHoverBucket,
@@ -144,23 +145,7 @@ export function TimelineStrip({
 			.catch(() => {});
 	}, [timeRange, filters, refreshKey, buckets]);
 
-	// Compute normalized data when needed
-	const chartData = useMemo(() => {
-		if (!normalized) return data;
-		return data.map((bucket) => {
-			if (bucket.total === 0) return bucket;
-			const scale = 100 / bucket.total;
-			return {
-				...bucket,
-				fatal: bucket.fatal * scale,
-				error: bucket.error * scale,
-				warn: bucket.warn * scale,
-				info: bucket.info * scale,
-				debug: bucket.debug * scale,
-				trace: bucket.trace * scale,
-			};
-		});
-	}, [data, normalized]);
+	const chartData = data;
 
 	const handleMouseDown = useCallback(
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -286,77 +271,38 @@ export function TimelineStrip({
 					{chartType === "bar" ? (
 						<BarChart
 							data={chartData}
+							stackOffset={normalized ? "expand" : undefined}
 							margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
 							{...mouseHandlers}
 						>
+							<CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.4} />
 							<XAxis {...xAxisProps} />
-							<YAxis hide domain={normalized ? [0, 100] : undefined} />
+							<YAxis hide />
 							{refArea}
-							<Bar dataKey="fatal" stackId="1" fill={LEVEL_COLORS.fatal} fillOpacity={1} />
-							<Bar dataKey="error" stackId="1" fill={LEVEL_COLORS.error} fillOpacity={1} />
-							<Bar dataKey="warn" stackId="1" fill={LEVEL_COLORS.warn} fillOpacity={1} />
-							<Bar dataKey="info" stackId="1" fill={LEVEL_COLORS.info} fillOpacity={1} />
-							<Bar dataKey="debug" stackId="1" fill={LEVEL_COLORS.debug} fillOpacity={1} />
-							<Bar dataKey="trace" stackId="1" fill={LEVEL_COLORS.trace} fillOpacity={1} />
+							<Bar dataKey="fatal" stackId="1" fill={LEVEL_COLORS.fatal} fillOpacity={0.55} stroke={LEVEL_COLORS.fatal} strokeOpacity={0.5} strokeWidth={1} />
+							<Bar dataKey="error" stackId="1" fill={LEVEL_COLORS.error} fillOpacity={0.55} stroke={LEVEL_COLORS.error} strokeOpacity={0.5} strokeWidth={1} />
+							<Bar dataKey="warn" stackId="1" fill={LEVEL_COLORS.warn} fillOpacity={0.55} stroke={LEVEL_COLORS.warn} strokeOpacity={0.5} strokeWidth={1} />
+							<Bar dataKey="info" stackId="1" fill={LEVEL_COLORS.info} fillOpacity={0.55} stroke={LEVEL_COLORS.info} strokeOpacity={0.5} strokeWidth={1} />
+							<Bar dataKey="debug" stackId="1" fill={LEVEL_COLORS.debug} fillOpacity={0.55} stroke={LEVEL_COLORS.debug} strokeOpacity={0.5} strokeWidth={1} />
+							<Bar dataKey="trace" stackId="1" fill={LEVEL_COLORS.trace} fillOpacity={0.55} stroke={LEVEL_COLORS.trace} strokeOpacity={0.5} strokeWidth={1} />
 						</BarChart>
 					) : (
-						<AreaChart
+						<LineChart
 							data={chartData}
 							margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
 							{...mouseHandlers}
 						>
+							<CartesianGrid vertical={false} strokeDasharray="3 3" stroke="var(--color-border)" strokeOpacity={0.4} />
 							<XAxis {...xAxisProps} />
-							<YAxis hide domain={normalized ? [0, 100] : undefined} />
+							<YAxis hide />
 							{refArea}
-							<Area
-								type="monotone"
-								dataKey="fatal"
-								stackId="1"
-								fill={LEVEL_COLORS.fatal}
-								stroke="none"
-								fillOpacity={1}
-							/>
-							<Area
-								type="monotone"
-								dataKey="error"
-								stackId="1"
-								fill={LEVEL_COLORS.error}
-								stroke="none"
-								fillOpacity={1}
-							/>
-							<Area
-								type="monotone"
-								dataKey="warn"
-								stackId="1"
-								fill={LEVEL_COLORS.warn}
-								stroke="none"
-								fillOpacity={1}
-							/>
-							<Area
-								type="monotone"
-								dataKey="info"
-								stackId="1"
-								fill={LEVEL_COLORS.info}
-								stroke="none"
-								fillOpacity={1}
-							/>
-							<Area
-								type="monotone"
-								dataKey="debug"
-								stackId="1"
-								fill={LEVEL_COLORS.debug}
-								stroke="none"
-								fillOpacity={1}
-							/>
-							<Area
-								type="monotone"
-								dataKey="trace"
-								stackId="1"
-								fill={LEVEL_COLORS.trace}
-								stroke="none"
-								fillOpacity={1}
-							/>
-						</AreaChart>
+							<Line type="monotone" dataKey="fatal" stroke={LEVEL_COLORS.fatal} strokeWidth={2.5} strokeOpacity={0.85} dot={false} fill="none" />
+							<Line type="monotone" dataKey="error" stroke={LEVEL_COLORS.error} strokeWidth={2.5} strokeOpacity={0.85} dot={false} fill="none" />
+							<Line type="monotone" dataKey="warn" stroke={LEVEL_COLORS.warn} strokeWidth={2.5} strokeOpacity={0.85} dot={false} fill="none" />
+							<Line type="monotone" dataKey="info" stroke={LEVEL_COLORS.info} strokeWidth={2.5} strokeOpacity={0.85} dot={false} fill="none" />
+							<Line type="monotone" dataKey="debug" stroke={LEVEL_COLORS.debug} strokeWidth={2.5} strokeOpacity={0.85} dot={false} fill="none" />
+							<Line type="monotone" dataKey="trace" stroke={LEVEL_COLORS.trace} strokeWidth={2.5} strokeOpacity={0.85} dot={false} fill="none" />
+						</LineChart>
 					)}
 				</ResponsiveContainer>
 			</div>

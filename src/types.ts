@@ -127,6 +127,8 @@ export interface ArchiveConfig {
 	secretAccessKey: string;
 	prefix?: string;
 	region?: string;
+	/** S3 URL style: 'path' for MinIO/self-hosted, 'vhost' for AWS S3. Default: 'path'. */
+	urlStyle?: "path" | "vhost";
 }
 
 export interface RetryConfig {

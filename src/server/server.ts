@@ -1,9 +1,10 @@
 import { join } from "node:path";
 import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
+import { getAggregatesPath } from "../paths.ts";
 import type { ServerConfig } from "../types.ts";
 import { type AuthKeys, type AuthResult, checkRole } from "./middleware/auth.ts";
-import { handleArchive } from "./routes/archive.ts";
+import { ArchiveGuard, handleArchive } from "./routes/archive.ts";
 import { handleHealth } from "./routes/health.ts";
 import { handleIngest } from "./routes/ingest.ts";
 import { handleLogs } from "./routes/logs.ts";
@@ -21,20 +22,33 @@ class RateLimiter {
 	private windowMs: number;
 	private maxRequests: number;
 	private requests: number[] = [];
+	private head = 0;
 
 	constructor(windowMs: number, maxRequests: number) {
 		this.windowMs = windowMs;
 		this.maxRequests = maxRequests;
 	}
 
+	private evict(now: number): void {
+		const cutoff = now - this.windowMs;
+		while (this.head < this.requests.length && this.requests[this.head]! < cutoff) {
+			this.head++;
+		}
+		// Compact when over half the array is dead entries
+		if (this.head > this.requests.length / 2) {
+			this.requests = this.requests.slice(this.head);
+			this.head = 0;
+		}
+	}
+
+	private get active(): number {
+		return this.requests.length - this.head;
+	}
+
 	check(): boolean {
 		const now = Date.now();
-		const cutoff = now - this.windowMs;
-		// Remove expired entries
-		while (this.requests.length > 0 && this.requests[0]! < cutoff) {
-			this.requests.shift();
-		}
-		if (this.requests.length >= this.maxRequests) {
+		this.evict(now);
+		if (this.active >= this.maxRequests) {
 			return false;
 		}
 		this.requests.push(now);
@@ -42,12 +56,8 @@ class RateLimiter {
 	}
 
 	get remaining(): number {
-		const now = Date.now();
-		const cutoff = now - this.windowMs;
-		while (this.requests.length > 0 && this.requests[0]! < cutoff) {
-			this.requests.shift();
-		}
-		return Math.max(0, this.maxRequests - this.requests.length);
+		this.evict(Date.now());
+		return Math.max(0, this.maxRequests - this.active);
 	}
 }
 
@@ -94,9 +104,10 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const maxBody = config.maxBodySize ?? DEFAULT_MAX_BODY;
 	const maxBatchSize = config.maxBatchSize ?? 1000;
 	const streamManager = new StreamManager(db, config.streamDebounceMs);
-	const aggregatesManager = new AggregatesManager();
+	const aggregatesManager = new AggregatesManager(getAggregatesPath());
 	await aggregatesManager.init();
 	const ingestLimiter = new RateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
+	const archiveGuard = new ArchiveGuard();
 
 	const duckdb = new DuckDBReader(config.dbPath, config.archive);
 	await duckdb.init();
@@ -174,7 +185,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				} else if (method === "POST" && path === "/archive") {
 					auth = checkRole(request, "admin", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handleArchive(request, db, config.archive, duckdb);
+					response = await handleArchive(request, db, config.archive, duckdb, archiveGuard);
 				} else if (method === "POST" && path === "/prune") {
 					auth = checkRole(request, "admin", keys, prefixLen);
 					if (auth.error) return auth.error;
@@ -216,7 +227,8 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				}
 
 				return response;
-			} catch {
+			} catch (err) {
+				console.error("[relog.dev] Unhandled request error:", err);
 				return Response.json({ error: "Internal server error" }, { status: 500, headers: cors });
 			}
 		},

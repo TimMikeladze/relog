@@ -46,6 +46,7 @@ export const startCommand: Command = command({
 		s3SecretKey: string("s3-secret-key").desc("S3 secret key"),
 		s3Prefix: string("s3-prefix").desc("S3 path prefix").default("logs"),
 		s3Region: string("s3-region").desc("S3 region").default("us-east-1"),
+		s3UrlStyle: string("s3-url-style").desc("S3 URL style: 'path' for MinIO/Tigris, 'vhost' for AWS S3").default("path"),
 		noUi: boolean("no-ui").desc("Disable serving the web UI"),
 		noOpen: boolean("no-open").desc("Serve the web UI but skip opening it in the browser"),
 	},
@@ -96,6 +97,7 @@ export const startCommand: Command = command({
 				secretAccessKey: opts.s3SecretKey,
 				prefix: opts.s3Prefix,
 				region: opts.s3Region,
+				urlStyle: opts.s3UrlStyle as "path" | "vhost",
 			};
 		}
 

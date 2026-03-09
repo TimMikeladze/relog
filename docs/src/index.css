@@ -59,3 +59,59 @@ body {
 	-webkit-text-fill-color: transparent;
 	background-clip: text;
 }
+
+/* Architecture diagram: vertical on mobile, horizontal on desktop */
+.arch-flow {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0;
+}
+.arch-stage {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+}
+.arch-label {
+	margin-bottom: 2px;
+}
+.arch-arrow {
+	flex-direction: column;
+	padding: 3px 0;
+}
+.arch-arrow-line {
+	width: 1px;
+	height: 14px;
+	border-width: 0 0 0 1px;
+}
+.arch-arrow-head {
+	transform: rotate(0deg);
+}
+
+@media (min-width: 768px) {
+	.arch-flow {
+		flex-direction: row;
+		justify-content: center;
+		gap: 0;
+	}
+	.arch-stage {
+		flex-direction: column;
+		align-items: center;
+	}
+	.arch-nodes {
+		flex-direction: column !important;
+	}
+	.arch-arrow {
+		flex-direction: row;
+		padding: 0 4px;
+	}
+	.arch-arrow-line {
+		width: 16px;
+		height: 1px;
+		border-width: 1px 0 0 0;
+	}
+	.arch-arrow-head {
+		transform: rotate(-90deg);
+	}
+}

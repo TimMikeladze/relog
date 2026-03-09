@@ -22,6 +22,7 @@ export function HoverStats({ bucket }: { bucket: TimelineBucket | null }) {
 							className="inline-block h-1.5 w-1.5 rounded-sm"
 							style={{ backgroundColor: LEVEL_COLORS[level] }}
 						/>
+						<span className="uppercase text-muted-foreground">{level}</span>
 						<span className="tabular-nums text-foreground">{count.toLocaleString()}</span>
 					</div>
 				);
@@ -57,7 +58,7 @@ export function TimelineChart({
 	children,
 }: TimelineChartProps) {
 	const [chartType, setChartType] = useState<ChartType>(
-		() => (localStorage.getItem("relog:chartType") as ChartType) || "area",
+		() => (localStorage.getItem("relog:chartType") as ChartType) || "line",
 	);
 	const [normalized, setNormalized] = useState(
 		() => localStorage.getItem("relog:normalized") === "true",
@@ -66,7 +67,7 @@ export function TimelineChart({
 
 	const toggleChartType = useCallback(() => {
 		setChartType((prev) => {
-			const next = prev === "area" ? "bar" : "area";
+			const next = prev === "line" ? "bar" : "line";
 			localStorage.setItem("relog:chartType", next);
 			return next;
 		});
@@ -100,13 +101,13 @@ export function TimelineChart({
 				<div className="flex items-center rounded-md border border-border">
 					<button
 						type="button"
-						onClick={chartType !== "area" ? toggleChartType : undefined}
+						onClick={chartType !== "line" ? toggleChartType : undefined}
 						className={`flex items-center gap-1 rounded-l-md px-1.5 py-0.5 text-[10px] transition-colors ${
-							chartType === "area"
+							chartType === "line"
 								? "bg-muted text-foreground"
 								: "text-muted-foreground hover:text-foreground"
 						}`}
-						title="Area chart"
+						title="Line chart"
 					>
 						<TrendingUp className="h-3 w-3" />
 					</button>

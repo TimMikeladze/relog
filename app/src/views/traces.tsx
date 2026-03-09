@@ -282,10 +282,10 @@ export function TracesView({
 
 	const statusDot = (level: string) => {
 		const colors: Record<string, string> = {
-			fatal: "bg-fuchsia-400",
-			error: "bg-red-400",
-			warn: "bg-amber-400",
-			info: "bg-emerald-400",
+			fatal: "bg-pink-400/75",
+			error: "bg-rose-400/75",
+			warn: "bg-amber-300/75",
+			info: "bg-cyan-400/75",
 		};
 		return colors[level] || colors.info;
 	};

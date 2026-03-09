@@ -1,10 +1,10 @@
 const levelColors: Record<string, string> = {
-	trace: "bg-zinc-400",
-	debug: "bg-blue-400",
-	info: "bg-emerald-400",
-	warn: "bg-amber-400",
-	error: "bg-red-400",
-	fatal: "bg-fuchsia-400",
+	trace: "bg-zinc-400/75",
+	debug: "bg-indigo-400/75",
+	info: "bg-cyan-400/75",
+	warn: "bg-amber-300/75",
+	error: "bg-rose-400/75",
+	fatal: "bg-pink-400/75",
 };
 
 interface LevelCount {

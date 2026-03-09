@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { motion, useInView, AnimatePresence } from "motion/react";
 import { createHighlighter, type Highlighter } from "shiki";
 
 let highlighterPromise: Promise<Highlighter> | null = null;
@@ -13,15 +14,193 @@ function getHighlighter() {
 	return highlighterPromise;
 }
 
+// ─── Reveal ──────────────────────────────────────────────────────────
+function Reveal({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+	const ref = useRef(null);
+	const inView = useInView(ref, { once: true, margin: "-60px" });
+	return (
+		<motion.div ref={ref} initial={{ opacity: 0, y: 20 }} animate={inView ? { opacity: 1, y: 0 } : {}} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1], delay }} className={className}>
+			{children}
+		</motion.div>
+	);
+}
+
+// ─── Streamlined app components ──────────────────────────────────────
+// These mirror the actual relog app's visual style (log-row.tsx, level-badge.tsx)
+
+type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+const LEVEL_BORDERS: Record<string, string> = {
+	trace: "border-l-zinc-400/40",
+	debug: "border-l-blue-400/40",
+	info: "border-l-emerald-400/60",
+	warn: "border-l-amber-400/70",
+	error: "border-l-red-400/80",
+	fatal: "border-l-fuchsia-400/80",
+};
+
+const LEVEL_TEXT: Record<string, string> = {
+	trace: "text-zinc-500",
+	debug: "text-blue-400",
+	info: "text-emerald-400",
+	warn: "text-amber-400",
+	error: "text-red-400",
+	fatal: "text-fuchsia-400",
+};
+
+interface MockLog {
+	timestamp: string;
+	level: LogLevel;
+	service: string;
+	message: string;
+	trace_id?: string;
+	meta?: Record<string, unknown>;
+}
+
+function LogRow({ log, animate, selected, onClick }: { log: MockLog; animate?: boolean; selected?: boolean; onClick?: () => void }) {
+	const inner = (
+		<div
+			onClick={onClick}
+			className={`flex w-full items-center border-l-2 text-left text-xs transition-colors cursor-pointer ${selected ? "bg-white/[0.05]" : "hover:bg-white/[0.03]"} ${LEVEL_BORDERS[log.level] ?? "border-l-transparent"}`}
+		>
+			<span className="shrink-0 px-3 py-[5px] text-muted/50 tabular-nums w-[90px] font-mono text-[11px]">{log.timestamp}</span>
+			<span className={`shrink-0 w-[48px] py-[5px] text-[10px] font-semibold uppercase tracking-wider ${LEVEL_TEXT[log.level] ?? "text-muted"}`}>{log.level}</span>
+			<span className="shrink-0 w-[80px] py-[5px] truncate text-muted/60 font-mono text-[11px]">{log.service}</span>
+			<span className="min-w-0 flex-1 py-[5px] pr-3 truncate font-mono text-[12px] text-dim">{log.message}</span>
+		</div>
+	);
+
+	if (animate) {
+		return (
+			<motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.3, ease: "easeOut" }}>
+				{inner}
+			</motion.div>
+		);
+	}
+	return inner;
+}
+
+function LogDetail({ log }: { log: MockLog }) {
+	return (
+		<motion.div
+			initial={{ height: 0, opacity: 0 }}
+			animate={{ height: "auto", opacity: 1 }}
+			exit={{ height: 0, opacity: 0 }}
+			transition={{ duration: 0.2 }}
+			className="overflow-hidden"
+		>
+			<div className="mx-2 mb-1 rounded-md border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] font-mono">
+				<div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+					<span className="text-muted/50">timestamp</span>
+					<span className="text-dim">{log.timestamp}</span>
+					<span className="text-muted/50">level</span>
+					<span className={LEVEL_TEXT[log.level] ?? "text-muted"}>{log.level}</span>
+					<span className="text-muted/50">service</span>
+					<span className="text-dim">{log.service}</span>
+					<span className="text-muted/50">message</span>
+					<span className="text-dim">{log.message}</span>
+					{log.trace_id && (
+						<>
+							<span className="text-muted/50">trace_id</span>
+							<span className="text-cyan">{log.trace_id}</span>
+						</>
+					)}
+					{log.meta && Object.entries(log.meta).map(([k, v]) => (
+						<>
+							<span key={`k-${k}`} className="text-muted/50">{k}</span>
+							<span key={`v-${k}`} className="text-dim">{String(v)}</span>
+						</>
+					))}
+				</div>
+			</div>
+		</motion.div>
+	);
+}
+
+const LEVEL_BAR_COLORS: Record<string, string> = {
+	fatal: "#e879a0",
+	error: "#f87171",
+	warn: "#fbbf24",
+	info: "#34d399",
+	debug: "#60a5fa",
+	trace: "#71717a",
+};
+
+function MiniChart({ logs }: { logs: MockLog[] }) {
+	const bucketCount = 20;
+	const buckets: Record<string, number>[] = Array.from({ length: bucketCount }, () => ({
+		info: 0, warn: 0, error: 0, debug: 0, trace: 0, fatal: 0,
+	}));
+	logs.forEach((log, i) => {
+		const bi = Math.min(Math.floor((i / MOCK_LOGS.length) * bucketCount), bucketCount - 1);
+		buckets[bi][log.level] = (buckets[bi][log.level] ?? 0) + 1;
+	});
+
+	const levels = ["trace", "debug", "info", "warn", "error", "fatal"];
+	const maxTotal = Math.max(...buckets.map(b => levels.reduce((a, l) => a + (b[l] ?? 0), 0)), 1);
+	const gap = 2;
+
+	return (
+		<div className="flex items-end gap-[2px] h-[48px] px-3 py-2">
+			{buckets.map((bucket, bi) => {
+				const total = levels.reduce((a, l) => a + (bucket[l] ?? 0), 0);
+				const heightPct = total > 0 ? (total / maxTotal) * 100 : 0;
+				return (
+					<motion.div
+						key={bi}
+						className="flex-1 flex flex-col justify-end rounded-[2px] overflow-hidden"
+						style={{ height: `${Math.max(heightPct, heightPct > 0 ? 12 : 0)}%`, transformOrigin: "bottom" }}
+						initial={{ scaleY: 0 }}
+						animate={{ scaleY: 1 }}
+						transition={{ delay: 0.05 + bi * 0.02, duration: 0.25, ease: "easeOut" }}
+					>
+						{levels.map((level) => {
+							const count = bucket[level] ?? 0;
+							if (count === 0) return null;
+							const pct = (count / total) * 100;
+							return (
+								<div
+									key={level}
+									style={{
+										height: `${pct}%`,
+										backgroundColor: LEVEL_BAR_COLORS[level],
+										minHeight: 2,
+										marginTop: gap > 0 ? 0 : undefined,
+									}}
+								/>
+							);
+						})}
+					</motion.div>
+				);
+			})}
+		</div>
+	);
+}
+
+// ─── App ─────────────────────────────────────────────────────────────
 function App() {
 	return (
-		<div className="min-h-screen hero-glow dot-pattern">
+		<div className="min-h-screen bg-bg">
+			<div className="fixed inset-0 z-0 pointer-events-none">
+				<div className="absolute -top-[200px] left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-accent/[0.03] rounded-full blur-[100px]" />
+			</div>
 			<Header />
-			<main className="max-w-5xl mx-auto px-5 sm:px-8 pt-20 sm:pt-24 pb-10">
+			<main className="relative z-10">
+				{/* 1. Hook: problem + promise */}
 				<Hero />
+				{/* 2. Show don't tell: immediate proof it works */}
+				<LivePreview />
+				{/* 3. Friction removal: ready to start? Here's how */}
 				<Examples />
+				{/* 4. Product polish: see the real app */}
+				<AppScreenshots />
+				{/* 5. Reduce complexity anxiety: "it's simple" */}
+				<Architecture />
+				{/* 6. Unique differentiators: why relog, not alternatives */}
+				<ValueProps />
+				{/* 7. Reassurance checklist: yes, it does that too */}
 				<Features />
-				<AppPreview />
+				{/* 8. Overcome final objections */}
 				<FAQ />
 				<Footer />
 			</main>
@@ -29,777 +208,769 @@ function App() {
 	);
 }
 
+// ─── Header ──────────────────────────────────────────────────────────
 function Header() {
 	return (
-		<header className="fixed top-0 left-0 right-0 z-50 bg-bg/70 backdrop-blur-xl border-b border-border/50">
-			<div className="max-w-5xl mx-auto px-5 sm:px-8 h-14 flex items-center justify-between">
-				<a href="/" className="text-fg font-semibold tracking-tight">
-					relog.dev
-				</a>
-				<nav className="flex items-center gap-5 text-[13px]">
-					<a
-						href="https://github.com/TimMikeladze/relog"
-						className="text-muted hover:text-fg transition-colors flex items-center gap-1.5"
-					>
+		<motion.header
+			initial={{ opacity: 0, y: -16 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.5 }}
+			className="fixed top-0 left-0 right-0 z-50 bg-bg/70 backdrop-blur-2xl border-b border-white/[0.06]"
+		>
+			<div className="max-w-5xl mx-auto px-5 sm:px-8 h-12 flex items-center justify-between">
+				<a href="/" className="text-fg font-semibold tracking-tight text-[14px]">relog.dev</a>
+				<nav className="flex items-center gap-1">
+					<a href="https://github.com/TimMikeladze/relog" className="text-muted hover:text-fg transition-colors flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-white/[0.04] text-[12px]">
 						<GitHubIcon />
 						GitHub
 					</a>
-					<a
-						href="https://app.relog.dev"
-						className="text-bg bg-fg rounded-md px-3 py-1 font-medium hover:bg-fg/85 transition-colors flex items-center gap-1.5"
-					>
-						<ExternalLinkIcon />
+					<a href="https://app.relog.dev" className="text-bg bg-fg rounded-md px-3 py-1 text-[12px] font-medium hover:bg-fg/85 transition-colors">
 						Open App
 					</a>
 				</nav>
 			</div>
-		</header>
+		</motion.header>
 	);
 }
 
+// ─── Hero ────────────────────────────────────────────────────────────
 function Hero() {
 	return (
-		<section className="mb-14 sm:mb-18">
-			<p className="text-muted text-[13px] tracking-wide mb-4">Open source &middot; MIT</p>
-			<h1 className="text-[2.5rem] sm:text-5xl lg:text-[3.5rem] font-bold tracking-[-0.035em] leading-[1.08] mb-4">
+		<section className="pt-24 sm:pt-28 pb-6 max-w-5xl mx-auto px-5 sm:px-8">
+			<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="mb-4">
+				<span className="inline-flex items-center gap-1.5 text-[11px] tracking-wide text-muted border border-white/[0.06] rounded-full px-2.5 py-0.5">
+					<span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+					Open Source &middot; MIT
+				</span>
+			</motion.div>
+
+			<motion.h1 initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] }} className="text-[2.25rem] sm:text-[3rem] lg:text-[3.5rem] font-bold tracking-[-0.04em] leading-[1.08] mb-3">
 				Structured logging
 				<br />
-				<span className="gradient-agent">for the agentic era.</span>
-			</h1>
-			<p className="text-dim text-[15px] sm:text-base leading-[1.7] mb-6 max-w-lg">
-				Self-hosted log server backed by SQLite. Ship structured logs from any app, query with SQL,
-				stream in real-time, and let AI agents analyze everything via MCP.
-			</p>
-			<CodeBlock lang="bash" code={`bunx relog.dev start`} />
+				<span className="bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">for the agentic era.</span>
+			</motion.h1>
+
+			<motion.p initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.35, ease: [0.22, 1, 0.36, 1] }} className="text-dim text-[15px] leading-[1.7] mb-6 max-w-lg">
+				Self-hosted log server backed by Bun, SQLite, DuckDB, and object storage. Ship structured logs, query with SQL, stream in real-time, and let AI agents analyze everything via MCP.
+			</motion.p>
+
+			<motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.5 }}>
+				<div className="inline-flex bg-bg-code border border-white/[0.06] rounded-lg px-4 py-2 font-mono text-[13px] items-center gap-2.5">
+					<span className="text-muted select-none">$</span>
+					<span className="text-fg">bunx relog.dev start</span>
+					<CopyButton text="bunx relog.dev start" />
+				</div>
+			</motion.div>
 		</section>
 	);
 }
 
-function AppPreview() {
+function CopyButton({ text }: { text: string }) {
+	const [copied, setCopied] = useState(false);
+	return (
+		<button
+			onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+			className="text-muted hover:text-fg transition-colors ml-1 cursor-pointer"
+		>
+			{copied ? (
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
+			) : (
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+			)}
+		</button>
+	);
+}
+
+// ─── Live app preview (using streamlined app components) ─────────────
+const MOCK_LOGS: MockLog[] = [
+	{ timestamp: "14:22:31", level: "info", service: "api", message: "GET /health 200 — 1ms", meta: { method: "GET", path: "/health", status: 200, duration_ms: 1 } },
+	{ timestamp: "14:22:31", level: "info", service: "api", message: "POST /api/events 201 — 9ms batch=4", meta: { method: "POST", path: "/api/events", batch_size: 4, duration_ms: 9 } },
+	{ timestamp: "14:22:32", level: "debug", service: "cache", message: "cache.hit key=config:global ttl=600s", meta: { key: "config:global", ttl: 600, action: "hit" } },
+	{ timestamp: "14:22:33", level: "info", service: "worker", message: "job.complete email_digest count=142", meta: { job: "email_digest", count: 142, duration_ms: 890 } },
+	{ timestamp: "14:22:33", level: "info", service: "api", message: "GET /api/teams 200 — 14ms", meta: { method: "GET", path: "/api/teams", status: 200, duration_ms: 14 } },
+	{ timestamp: "14:22:34", level: "info", service: "api", message: "POST /api/events 201 — 12ms batch=8", meta: { method: "POST", path: "/api/events", batch_size: 8, duration_ms: 12 } },
+	{ timestamp: "14:22:35", level: "debug", service: "cache", message: "cache.miss key=tenant:acme:limits ttl=60s", meta: { key: "tenant:acme:limits", ttl: 60, action: "miss" } },
+	{ timestamp: "14:22:36", level: "info", service: "api", message: "GET /api/users/u_42 200 — 8ms", trace_id: "tr_a1b2c3d4", meta: { method: "GET", path: "/api/users/u_42", status: 200, duration_ms: 8 } },
+	{ timestamp: "14:22:37", level: "warn", service: "db", message: "connection_pool near capacity used=48/50", meta: { used: 48, max: 50, waiting: 3 } },
+	{ timestamp: "14:22:37", level: "info", service: "api", message: "POST /webhooks/stripe 200 — 34ms", trace_id: "tr_e5f6a7b8", meta: { method: "POST", path: "/webhooks/stripe", event: "invoice.paid", duration_ms: 34 } },
+	{ timestamp: "14:22:38", level: "info", service: "api", message: "GET /api/projects 200 — 11ms", meta: { method: "GET", path: "/api/projects", status: 200, duration_ms: 11 } },
+	{ timestamp: "14:22:39", level: "debug", service: "cache", message: "cache.miss key=user:u_293:prefs ttl=300s", meta: { key: "user:u_293:prefs", ttl: 300, action: "miss" } },
+	{ timestamp: "14:22:40", level: "info", service: "auth", message: "token.refresh user=u_88 method=jwt", trace_id: "tr_c9d0e1f2", meta: { user_id: "u_88", method: "jwt", expires_in: 3600 } },
+	{ timestamp: "14:22:41", level: "info", service: "api", message: "GET /api/logs 200 — 18ms rows=50", meta: { method: "GET", path: "/api/logs", rows: 50, duration_ms: 18 } },
+	{ timestamp: "14:22:41", level: "info", service: "worker", message: "job.process webhook_delivery queued=7", meta: { job: "webhook_delivery", queued: 7 } },
+	{ timestamp: "14:22:42", level: "error", service: "payments", message: "stripe.charge.failed card_declined user=u_293", trace_id: "tr_7c3b5e8f", meta: { error: "card_declined", user_id: "u_293", amount: 4999, currency: "usd" } },
+	{ timestamp: "14:22:43", level: "info", service: "api", message: "POST /users 201 — 42ms", trace_id: "tr_8f2a1b3c", meta: { method: "POST", path: "/users", status: 201, duration_ms: 42 } },
+	{ timestamp: "14:22:43", level: "info", service: "api", message: "GET /health 200 — 1ms", meta: { method: "GET", path: "/health", status: 200, duration_ms: 1 } },
+	{ timestamp: "14:22:44", level: "info", service: "worker", message: "job.process email_verification queued=3", meta: { job: "email_verification", queued: 3 } },
+	{ timestamp: "14:22:45", level: "warn", service: "api", message: "rate_limit_near tenant=acme count=980/1000", trace_id: "tr_9d4e2f1a", meta: { tenant: "acme", count: 980, limit: 1000 } },
+	{ timestamp: "14:22:46", level: "info", service: "api", message: "PATCH /api/teams/t_5 200 — 22ms", trace_id: "tr_3a4b5c6d", meta: { method: "PATCH", path: "/api/teams/t_5", status: 200, duration_ms: 22 } },
+	{ timestamp: "14:22:46", level: "debug", service: "cache", message: "cache.evict key=report:daily:2024-03-08", meta: { key: "report:daily:2024-03-08", reason: "ttl_expired" } },
+	{ timestamp: "14:22:47", level: "info", service: "api", message: "POST /ingest 200 — 3ms batch=24", meta: { method: "POST", path: "/ingest", batch_size: 24, duration_ms: 3 } },
+	{ timestamp: "14:22:47", level: "info", service: "api", message: "GET /api/settings 200 — 5ms", meta: { method: "GET", path: "/api/settings", status: 200, duration_ms: 5 } },
+	{ timestamp: "14:22:48", level: "warn", service: "db", message: "slow_query duration=1204ms table=events", trace_id: "tr_2a8f4c1e", meta: { duration_ms: 1204, table: "events", query: "SELECT * FROM events WHERE..." } },
+	{ timestamp: "14:22:49", level: "info", service: "auth", message: "session.created user=u_42 method=oauth", trace_id: "tr_5b7d9e3a", meta: { user_id: "u_42", method: "oauth", provider: "github" } },
+	{ timestamp: "14:22:49", level: "info", service: "api", message: "GET /api/dashboard 200 — 89ms", meta: { method: "GET", path: "/api/dashboard", status: 200, duration_ms: 89 } },
+	{ timestamp: "14:22:50", level: "debug", service: "cache", message: "cache.set key=dashboard:u_42 ttl=30s", meta: { key: "dashboard:u_42", ttl: 30, size_bytes: 4200 } },
+	{ timestamp: "14:22:51", level: "info", service: "worker", message: "job.process invoice_generate queued=1", meta: { job: "invoice_generate", queued: 1, priority: "high" } },
+	{ timestamp: "14:22:51", level: "info", service: "api", message: "POST /api/events 201 — 6ms batch=12", meta: { method: "POST", path: "/api/events", batch_size: 12, duration_ms: 6 } },
+	{ timestamp: "14:22:52", level: "error", service: "api", message: "unhandled_rejection TypeError: Cannot read null", trace_id: "tr_1f6c8a2d", meta: { error_type: "TypeError", stack: "at Object.handler (/src/routes/users.ts:42:15)" } },
+	{ timestamp: "14:22:53", level: "info", service: "api", message: "DELETE /sessions/s_88 200 — 6ms", meta: { method: "DELETE", path: "/sessions/s_88", status: 200, duration_ms: 6 } },
+	{ timestamp: "14:22:53", level: "info", service: "api", message: "GET /api/logs/stream 200 — SSE", meta: { method: "GET", path: "/api/logs/stream", type: "sse", filters: "level=error" } },
+	{ timestamp: "14:22:54", level: "debug", service: "cache", message: "cache.set key=user:u_42:profile ttl=300s", meta: { key: "user:u_42:profile", ttl: 300, size_bytes: 1240 } },
+	{ timestamp: "14:22:55", level: "info", service: "api", message: "GET /api/search?q=payment 200 — 156ms", trace_id: "tr_d7e8f9a0", meta: { method: "GET", query: "payment", results: 23, duration_ms: 156 } },
+	{ timestamp: "14:22:55", level: "info", service: "api", message: "GET /health 200 — 1ms", meta: { method: "GET", path: "/health", status: 200, duration_ms: 1 } },
+	{ timestamp: "14:22:56", level: "info", service: "api", message: "POST /api/logs/export 200 — 2104ms", trace_id: "tr_b1c2d3e4", meta: { method: "POST", format: "csv", rows: 15420, duration_ms: 2104 } },
+	{ timestamp: "14:22:57", level: "warn", service: "api", message: "deprecated_endpoint GET /v1/logs use /v2/logs", meta: { endpoint: "/v1/logs", replacement: "/v2/logs", caller: "sdk-python/0.3.1" } },
+	{ timestamp: "14:22:57", level: "info", service: "api", message: "POST /ingest 200 — 2ms batch=6", meta: { method: "POST", path: "/ingest", batch_size: 6, duration_ms: 2 } },
+	{ timestamp: "14:22:58", level: "info", service: "cron", message: "archive.complete rows=8420 size=2.4MB", meta: { rows: 8420, size_mb: 2.4, format: "parquet", destination: "s3://logs/2024-03-08/" } },
+	{ timestamp: "14:22:59", level: "debug", service: "cache", message: "cache.hit key=user:u_88:session ttl=3600s", meta: { key: "user:u_88:session", ttl: 3600, action: "hit" } },
+	{ timestamp: "14:22:59", level: "info", service: "api", message: "GET /api/traces/tr_8f2a 200 — 24ms", trace_id: "tr_8f2a1b3c", meta: { method: "GET", path: "/api/traces/tr_8f2a", spans: 4, duration_ms: 24 } },
+	{ timestamp: "14:23:00", level: "info", service: "api", message: "POST /api/events 201 — 8ms batch=16", meta: { method: "POST", path: "/api/events", batch_size: 16, duration_ms: 8 } },
+	{ timestamp: "14:23:01", level: "error", service: "worker", message: "job.failed send_notification timeout after 30s", trace_id: "tr_f4e3d2c1", meta: { job: "send_notification", error: "timeout", retry: 2 } },
+	{ timestamp: "14:23:01", level: "info", service: "api", message: "GET /api/stats 200 — 45ms", meta: { method: "GET", path: "/api/stats", duration_ms: 45 } },
+	{ timestamp: "14:23:02", level: "info", service: "api", message: "GET /health 200 — 1ms", meta: { method: "GET", path: "/health", status: 200, duration_ms: 1 } },
+	{ timestamp: "14:23:03", level: "info", service: "auth", message: "login.success user=u_155 method=password", trace_id: "tr_a9b8c7d6", meta: { user_id: "u_155", method: "password", ip: "203.0.113.42" } },
+	{ timestamp: "14:23:03", level: "warn", service: "api", message: "response_slow GET /api/reports duration=890ms", trace_id: "tr_e5d4c3b2", meta: { method: "GET", path: "/api/reports", duration_ms: 890, threshold_ms: 500 } },
+	{ timestamp: "14:23:04", level: "info", service: "api", message: "POST /ingest 200 — 4ms batch=31", meta: { method: "POST", path: "/ingest", batch_size: 31, duration_ms: 4 } },
+	{ timestamp: "14:23:04", level: "debug", service: "cache", message: "cache.miss key=report:weekly:2024-w10", meta: { key: "report:weekly:2024-w10", action: "miss" } },
+];
+
+function LivePreview() {
+	const [visible, setVisible] = useState<MockLog[]>([]);
+	const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+	const ref = useRef(null);
+	const inView = useInView(ref, { once: true, margin: "-40px" });
+
+	useEffect(() => {
+		if (!inView) return;
+		let count = 0;
+		const interval = setInterval(() => {
+			count++;
+			if (count > MOCK_LOGS.length) { clearInterval(interval); return; }
+			setVisible(MOCK_LOGS.slice(0, count));
+		}, 60);
+		return () => clearInterval(interval);
+	}, [inView]);
+
+	const toggleExpand = (i: number) => {
+		setExpandedIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(i)) next.delete(i);
+			else next.add(i);
+			return next;
+		});
+	};
+
+	return (
+		<section ref={ref} className="max-w-5xl mx-auto px-5 sm:px-8 pb-10">
+			<Reveal>
+				<div className="rounded-lg border border-white/[0.06] overflow-hidden bg-bg-card/40">
+					{/* Mini histogram chart */}
+					<div className="border-b border-white/[0.06]">
+						<MiniChart logs={visible} />
+					</div>
+					{/* Column headers — matches app's log-table.tsx */}
+					<div className="flex items-center border-b border-white/[0.06] text-[10px] font-medium uppercase tracking-wider text-muted/40 border-l-2 border-l-transparent">
+						<span className="shrink-0 px-3 py-1.5 w-[90px]">Time</span>
+						<span className="shrink-0 w-[48px] py-1.5">Level</span>
+						<span className="shrink-0 w-[80px] py-1.5">Service</span>
+						<span className="min-w-0 flex-1 py-1.5 pr-3">Message</span>
+					</div>
+					{/* Log rows */}
+					<div className="max-h-[340px] overflow-y-auto relative">
+						{visible.map((log, i) => (
+							<div key={i}>
+								<LogRow log={log} animate selected={expandedIds.has(i)} onClick={() => toggleExpand(i)} />
+								<AnimatePresence>
+									{expandedIds.has(i) && <LogDetail log={log} />}
+								</AnimatePresence>
+							</div>
+						))}
+					</div>
+				</div>
+			</Reveal>
+		</section>
+	);
+}
+
+// ─── App screenshots ─────────────────────────────────────────────────
+function AppScreenshots() {
+	const [active, setActive] = useState(0);
+
 	const views = [
-		{ label: "Explore", color: "bg-accent", desc: "Browse & filter logs in real-time" },
-		{ label: "Traces", color: "bg-cyan", desc: "Distributed trace visualization" },
-		{ label: "Query", color: "bg-emerald", desc: "SQL query interface" },
-		{ label: "Dashboard", color: "bg-amber", desc: "Volume & level analytics" },
+		{ label: "Explore", desc: "Browse & filter logs in real-time", img: "/screenshots/explore.png" },
+		{ label: "Traces", desc: "Distributed trace visualization", img: "/screenshots/traces.png" },
+		{ label: "Query", desc: "SQL query interface", img: "/screenshots/query.png" },
+		{ label: "Dashboard", desc: "Volume & level analytics", img: "/screenshots/dashboard.png" },
 	];
 
 	return (
-		<section className="mb-14 sm:mb-18">
-			{/* Main preview — large placeholder */}
-			<div className="rounded-xl border border-border overflow-hidden mb-3">
-				{/* Browser chrome */}
-				<div className="flex items-center gap-1.5 px-4 h-9 bg-bg-card border-b border-border">
-					<span className="w-2.5 h-2.5 rounded-full bg-border" />
-					<span className="w-2.5 h-2.5 rounded-full bg-border" />
-					<span className="w-2.5 h-2.5 rounded-full bg-border" />
-					<span className="ml-3 text-[11px] text-muted/50 bg-bg rounded px-3 py-0.5 flex-1 max-w-48">
-						app.relog.dev
-					</span>
+		<section className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
+			<Reveal>
+				<h2 className="text-lg font-semibold tracking-tight mb-4">The app</h2>
+			</Reveal>
+
+			<Reveal delay={0.1}>
+				{/* View tabs */}
+				<div className="flex items-center gap-1 mb-3">
+					{views.map((v, i) => (
+						<button
+							key={v.label}
+							onClick={() => setActive(i)}
+							className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-all cursor-pointer ${active === i ? "text-fg bg-white/[0.08]" : "text-muted hover:text-dim hover:bg-white/[0.03]"}`}
+						>
+							{v.label}
+						</button>
+					))}
 				</div>
-				{/* Mock app shell */}
-				<div className="bg-bg-code h-72 sm:h-96 flex">
-					{/* Sidebar */}
-					<div className="w-44 border-r border-border p-3 shrink-0 hidden sm:block">
-						<div className="h-2 w-16 rounded bg-border/60 mb-4" />
-						{["Explore", "Traces", "Query", "Dashboard"].map((v, i) => (
-							<div
-								key={v}
-								className={`flex items-center gap-2 px-2 py-1.5 rounded-md mb-0.5 ${i === 0 ? "bg-white/[0.06]" : ""}`}
-							>
-								<span className={`w-1.5 h-1.5 rounded-full ${views[i]!.color} opacity-70`} />
-								<span className="text-[11px] text-dim">{v}</span>
+
+				{/* Main screenshot */}
+				<AnimatePresence mode="wait">
+					<motion.div
+						key={active}
+						initial={{ opacity: 0 }}
+						animate={{ opacity: 1 }}
+						exit={{ opacity: 0 }}
+						transition={{ duration: 0.2 }}
+						className="rounded-lg border border-white/[0.06] overflow-hidden"
+					>
+						{/* Browser chrome */}
+						<div className="flex items-center gap-1.5 px-3 h-8 bg-white/[0.02] border-b border-white/[0.06]">
+							<span className="w-2 h-2 rounded-full bg-white/[0.08]" />
+							<span className="w-2 h-2 rounded-full bg-white/[0.08]" />
+							<span className="w-2 h-2 rounded-full bg-white/[0.08]" />
+							<span className="ml-2 text-[10px] text-muted/40 bg-white/[0.03] rounded px-2 py-0.5 flex-1 max-w-40 border border-white/[0.04]">
+								app.relog.dev
+							</span>
+						</div>
+
+						{/* Screenshot placeholder — replace src with actual screenshots */}
+						<div className="bg-bg-code aspect-[16/9] sm:aspect-[2/1] flex items-center justify-center relative">
+							<img
+								src={views[active]!.img}
+								alt={`relog.dev ${views[active]!.label} view`}
+								className="w-full h-full object-cover object-top"
+								onError={(e) => {
+									// Hide broken image, show placeholder
+									(e.target as HTMLImageElement).style.display = "none";
+									(e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+								}}
+							/>
+							{/* Fallback placeholder when image not found */}
+							<div className="hidden absolute inset-0 flex flex-col items-center justify-center text-muted/30">
+								<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="mb-2">
+									<rect x="2" y="3" width="20" height="14" rx="2" />
+									<line x1="8" y1="21" x2="16" y2="21" />
+									<line x1="12" y1="17" x2="12" y2="21" />
+								</svg>
+								<span className="text-[11px]">{views[active]!.label} — {views[active]!.desc}</span>
+								<span className="text-[10px] mt-1">Place screenshot at /public{views[active]!.img}</span>
 							</div>
-						))}
-						<div className="mt-4 pt-4 border-t border-border space-y-2">
-							{["Level", "Service", "Project"].map((f) => (
-								<div key={f} className="px-2">
-									<div className="text-[10px] text-muted/50 mb-1">{f}</div>
-									<div className="h-5 rounded bg-border/40 w-full" />
+						</div>
+					</motion.div>
+				</AnimatePresence>
+
+				{/* Thumbnail strip */}
+				<div className="grid grid-cols-4 gap-2 mt-2">
+					{views.map((v, i) => (
+						<button
+							key={v.label}
+							onClick={() => setActive(i)}
+							className={`rounded-md border overflow-hidden cursor-pointer transition-all ${active === i ? "border-white/[0.15] ring-1 ring-accent/30" : "border-white/[0.04] opacity-60 hover:opacity-80"}`}
+						>
+							<div className="bg-bg-code aspect-[16/9] flex items-center justify-center relative">
+								<img
+									src={v.img}
+									alt={`${v.label} thumbnail`}
+									className="w-full h-full object-cover object-top"
+									onError={(e) => {
+										(e.target as HTMLImageElement).style.display = "none";
+										(e.target as HTMLImageElement).nextElementSibling?.classList.remove("hidden");
+									}}
+								/>
+								<div className="hidden absolute inset-0 flex items-center justify-center">
+									<span className="text-[10px] text-muted/30">{v.label}</span>
 								</div>
+							</div>
+						</button>
+					))}
+				</div>
+			</Reveal>
+		</section>
+	);
+}
+
+// ─── Architecture flow diagram (horizontal on desktop, vertical on mobile) ──
+function ArchNode({ label, sub, color, delay, inView }: { label: string; sub?: string; color: string; delay: number; inView: boolean }) {
+	return (
+		<motion.div
+			initial={{ opacity: 0, y: 6 }}
+			animate={inView ? { opacity: 1, y: 0 } : {}}
+			transition={{ delay, duration: 0.3 }}
+			className="rounded-md border bg-white/[0.03] px-2.5 py-1.5 text-center"
+			style={{ borderColor: `${color}40` }}
+		>
+			<div className="text-[11px] font-semibold text-fg leading-tight">{label}</div>
+			{sub && <div className="text-[9px] text-muted/50 leading-tight">{sub}</div>}
+		</motion.div>
+	);
+}
+
+function ArchArrow({ dashed, label, delay, inView }: { dashed?: boolean; label?: string; delay: number; inView: boolean }) {
+	return (
+		<motion.div
+			initial={{ opacity: 0 }}
+			animate={inView ? { opacity: 1 } : {}}
+			transition={{ delay, duration: 0.25 }}
+			className="flex items-center justify-center arch-arrow"
+		>
+			<div
+				className="arch-arrow-line"
+				style={{
+					borderColor: "rgba(255,255,255,0.12)",
+					borderStyle: dashed ? "dashed" : "solid",
+				}}
+			/>
+			{label && <span className="text-[8px] text-amber-400/50 italic shrink-0">{label}</span>}
+			<svg className="arch-arrow-head text-white/15 shrink-0" width="6" height="5" viewBox="0 0 6 5">
+				<path d="M0 0 L3 5 L6 0" fill="none" stroke="currentColor" strokeWidth="1" />
+			</svg>
+		</motion.div>
+	);
+}
+
+function ArchLabel({ text, color, delay, inView }: { text: string; color: string; delay: number; inView: boolean }) {
+	return (
+		<motion.div
+			initial={{ opacity: 0 }}
+			animate={inView ? { opacity: 0.4 } : {}}
+			transition={{ delay, duration: 0.25 }}
+			className="text-[8px] font-semibold uppercase tracking-[0.12em] arch-label"
+			style={{ color }}
+		>
+			{text}
+		</motion.div>
+	);
+}
+
+function ArchitectureDiagram({ inView }: { inView: boolean }) {
+	return (
+		<div className="arch-flow">
+			{/* Column/Row 1: Ingest */}
+			<div className="arch-stage">
+				<ArchLabel text="Ingest" color="#6ee7b7" delay={0.05} inView={inView} />
+				<div className="flex gap-1.5 arch-nodes">
+					<ArchNode label="TypeScript" sub="SDK" color="#6ee7b7" delay={0.1} inView={inView} />
+					<ArchNode label="Python" sub="SDK" color="#6ee7b7" delay={0.13} inView={inView} />
+					<ArchNode label="Browser" sub="SDK" color="#6ee7b7" delay={0.16} inView={inView} />
+				</div>
+			</div>
+
+			<ArchArrow delay={0.2} inView={inView} />
+
+			{/* Column/Row 2: Server */}
+			<div className="arch-stage">
+				<ArchNode label="Bun + Hono" sub="server" color="#818cf8" delay={0.25} inView={inView} />
+			</div>
+
+			<ArchArrow delay={0.3} inView={inView} />
+
+			{/* Column/Row 3: Storage */}
+			<div className="arch-stage">
+				<ArchLabel text="Storage" color="#fcd34d" delay={0.33} inView={inView} />
+				<div className="flex items-center gap-1.5 arch-nodes">
+					<ArchNode label="SQLite" sub="WAL mode" color="#fcd34d" delay={0.35} inView={inView} />
+					<ArchArrow dashed label="archive" delay={0.38} inView={inView} />
+					<ArchNode label="S3 / R2" sub="Parquet" color="#fcd34d" delay={0.4} inView={inView} />
+				</div>
+			</div>
+
+			<ArchArrow delay={0.45} inView={inView} />
+
+			{/* Column/Row 4: Query */}
+			<div className="arch-stage">
+				<ArchNode label="DuckDB" sub="query engine" color="#67e8f9" delay={0.5} inView={inView} />
+			</div>
+
+			<ArchArrow delay={0.55} inView={inView} />
+
+			{/* Column/Row 5: Consume */}
+			<div className="arch-stage">
+				<ArchLabel text="Consume" color="#a1a1aa" delay={0.58} inView={inView} />
+				<div className="flex gap-1.5 arch-nodes flex-wrap justify-center">
+					<ArchNode label="Web UI" color="#a1a1aa" delay={0.6} inView={inView} />
+					<ArchNode label="CLI" color="#a1a1aa" delay={0.63} inView={inView} />
+					<ArchNode label="MCP" sub="AI agents" color="#a1a1aa" delay={0.66} inView={inView} />
+					<ArchNode label="SQL" color="#a1a1aa" delay={0.69} inView={inView} />
+				</div>
+			</div>
+		</div>
+	);
+}
+
+// ─── Architecture — reduce complexity anxiety ───────────────────────
+function Architecture() {
+	const ref = useRef(null);
+	const inView = useInView(ref, { once: true, margin: "-60px" });
+
+	return (
+		<section ref={ref} className="max-w-5xl mx-auto px-5 sm:px-8 py-14">
+			<Reveal>
+				<h2 className="text-lg font-semibold tracking-tight mb-2">Three moving parts</h2>
+				<p className="text-[13px] text-muted mb-6">Bun server writes to SQLite in WAL mode. Old logs get archived to S3 as Parquet files. DuckDB queries both hot (SQLite) and cold (S3) data transparently.</p>
+			</Reveal>
+
+			<Reveal delay={0.1}>
+				<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 sm:p-5">
+					<ArchitectureDiagram inView={inView} />
+				</div>
+			</Reveal>
+		</section>
+	);
+}
+
+// ─── Value props — unique differentiators ────────────────────────────
+function ValueProps() {
+	const ref = useRef(null);
+	const inView = useInView(ref, { once: true, margin: "-60px" });
+
+	return (
+		<section ref={ref} className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
+			<Reveal>
+				<h2 className="text-lg font-semibold tracking-tight mb-2">What makes it different</h2>
+				<p className="text-[13px] text-muted mb-6">Not just another logger. Wide events, tail sampling, and AI-native from day one.</p>
+			</Reveal>
+
+			<div className="grid sm:grid-cols-3 gap-3">
+				{/* Wide events */}
+				<Reveal delay={0.1}>
+					<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 h-full">
+						<h3 className="text-[13px] font-medium text-fg mb-3">Wide events</h3>
+						<div className="space-y-2">
+							{[
+								"ev = log.event(\"http_request\")",
+								"ev.request(req)",
+								"ev.set(\"user_id\", user.id)",
+								"ev.response(res)",
+								"ev.end()",
+							].map((step, i) => (
+								<motion.div
+									key={i}
+									initial={{ opacity: 0, x: -8 }}
+									animate={inView ? { opacity: 1, x: 0 } : {}}
+									transition={{ delay: 0.3 + i * 0.05, duration: 0.3 }}
+									className="flex items-center gap-2"
+								>
+									<span className="w-1 h-1 rounded-full bg-cyan shrink-0" />
+									<code className="text-[11px] font-mono text-dim">{step}</code>
+								</motion.div>
+							))}
+						</div>
+						<div className="mt-3 pt-3 border-t border-white/[0.04] text-[11px] text-muted">
+							One structured record per request instead of scattered log lines.
+						</div>
+					</div>
+				</Reveal>
+
+				{/* Tail sampling */}
+				<Reveal delay={0.15}>
+					<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 h-full">
+						<h3 className="text-[13px] font-medium text-fg mb-3">Tail sampling</h3>
+						<div className="space-y-1.5">
+							{[
+								{ label: "Error event", badge: "KEEP", kept: true, color: "text-red-400" },
+								{ label: "Slow request (1.2s)", badge: "KEEP", kept: true, color: "text-amber-400" },
+								{ label: "VIP user (.keep())", badge: "KEEP", kept: true, color: "text-emerald-400" },
+								{ label: "Normal GET /health", badge: "5%", kept: false, color: "text-muted" },
+								{ label: "Normal POST /users", badge: "5%", kept: false, color: "text-muted" },
+							].map((s, i) => (
+								<motion.div
+									key={i}
+									initial={{ opacity: 0, x: -8 }}
+									animate={inView ? { opacity: 1, x: 0 } : {}}
+									transition={{ delay: 0.4 + i * 0.05, duration: 0.3 }}
+									className={`flex items-center gap-2 text-[12px] ${s.kept ? "" : "opacity-50"}`}
+								>
+									<span className={`${s.color} font-mono flex-1`}>{s.label}</span>
+									<span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${s.kept ? "bg-emerald-400/15 text-emerald-400" : "bg-white/[0.04] text-muted"}`}>
+										{s.badge}
+									</span>
+								</motion.div>
+							))}
+						</div>
+						<div className="mt-3 pt-3 border-t border-white/[0.04] text-[11px] text-muted">
+							Decide after the event completes. Important events always kept.
+						</div>
+					</div>
+				</Reveal>
+
+				{/* MCP */}
+				<Reveal delay={0.2}>
+					<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 h-full">
+						<h3 className="text-[13px] font-medium text-fg mb-3">MCP server</h3>
+						<p className="text-[12px] text-muted mb-3">AI agents query your logs via tool use. Works with Claude Code, Cursor, and any MCP client.</p>
+						<div className="space-y-1.5">
+							{[
+								{ tool: "search_logs", desc: "Full-text search" },
+								{ tool: "query_logs", desc: "SQL SELECT" },
+								{ tool: "get_stats", desc: "Volume stats" },
+								{ tool: "tail_logs", desc: "Recent entries" },
+								{ tool: "get_context", desc: "Trace context" },
+							].map((t, i) => (
+								<motion.div
+									key={t.tool}
+									initial={{ opacity: 0, x: -8 }}
+									animate={inView ? { opacity: 1, x: 0 } : {}}
+									transition={{ delay: 0.5 + i * 0.05, duration: 0.3 }}
+									className="flex items-center gap-2"
+								>
+									<code className="text-[11px] font-mono text-accent">{t.tool}</code>
+									<span className="text-[10px] text-muted">{t.desc}</span>
+								</motion.div>
 							))}
 						</div>
 					</div>
-					{/* Main area */}
-					<div className="flex-1 flex flex-col min-w-0">
-						{/* Toolbar */}
-						<div className="flex items-center gap-2 px-4 h-10 border-b border-border shrink-0">
-							<div className="h-5 rounded bg-border/50 w-48" />
-							<div className="ml-auto h-5 rounded bg-border/30 w-16" />
-							<div className="h-5 rounded bg-border/30 w-16" />
-						</div>
-						{/* Log rows */}
-						<div className="flex-1 overflow-hidden">
-							{Array.from({ length: 10 }).map((_, i) => {
-								const levels = [
-									"info",
-									"info",
-									"warn",
-									"info",
-									"error",
-									"info",
-									"debug",
-									"info",
-									"warn",
-									"info",
-								];
-								const colors: Record<string, string> = {
-									info: "bg-accent",
-									warn: "bg-amber",
-									error: "bg-rose",
-									debug: "bg-muted",
-								};
-								const level = levels[i]!;
-								const widths = [32, 48, 40, 52, 36, 44, 28, 56, 38, 42];
-								return (
-									<div
-										key={i}
-										className={`flex items-center gap-3 px-4 h-8 border-b border-border/40 ${i === 2 ? "bg-white/[0.03]" : ""}`}
-									>
-										<div className="text-[10px] text-muted/40 w-20 shrink-0">
-											{`0${i + 1}:${String((i * 7) % 60).padStart(2, "0")}:${String((i * 13) % 60).padStart(2, "0")}`}
-										</div>
-										<span
-											className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${colors[level]} text-bg shrink-0`}
-										>
-											{level}
-										</span>
-										<div
-											className="h-1.5 rounded bg-border/60"
-											style={{ width: `${widths[i]}%` }}
-										/>
-									</div>
-								);
-							})}
-						</div>
-					</div>
-				</div>
-			</div>
-
-			{/* Smaller view previews */}
-			<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-				{views.map((v) => (
-					<div key={v.label} className="rounded-lg border border-border overflow-hidden">
-						<div className="flex items-center gap-1.5 px-3 h-7 bg-bg-card border-b border-border">
-							<span className={`w-1.5 h-1.5 rounded-full ${v.color}`} />
-							<span className="text-[10px] text-dim">{v.label}</span>
-						</div>
-						<div className="bg-bg-code h-20 p-2 space-y-1.5">
-							<div className="h-1.5 rounded bg-border/60 w-3/4" />
-							<div className="h-1.5 rounded bg-border/40 w-1/2" />
-							<div className="h-1.5 rounded bg-border/50 w-5/6" />
-							<div className="h-1.5 rounded bg-border/30 w-2/3" />
-						</div>
-						<div className="px-3 py-2 bg-bg-card border-t border-border">
-							<p className="text-[10px] text-muted/60">{v.desc}</p>
-						</div>
-					</div>
-				))}
+				</Reveal>
 			</div>
 		</section>
 	);
 }
 
+// ─── Features ────────────────────────────────────────────────────────
 function Features() {
-	const features = [
+	const categories: { title: string; color: string; items: { label: string; desc: string }[] }[] = [
 		{
-			color: "bg-accent",
-			label: "Zero-dependency server",
-			desc: "Single SQLite file, no Redis, no Postgres, no external infra",
+			title: "Ingestion",
+			color: "bg-emerald-400",
+			items: [
+				{ label: "TypeScript SDK", desc: "Batching, retries, child loggers, flush on shutdown" },
+				{ label: "Python SDK", desc: "Context managers, wide events, structured logging" },
+				{ label: "Browser SDK", desc: "Console capture, error tracking, session IDs" },
+				{ label: "Next.js integration", desc: "Console capture, error handler, browser proxy route" },
+				{ label: "Wide events", desc: "One event per request — .request(), .response(), .end()" },
+				{ label: "Tail sampling", desc: "Sample normal traffic, keep errors and slow requests" },
+			],
 		},
 		{
-			color: "bg-cyan",
-			label: "AI agent integration",
-			desc: "Built-in MCP server for Claude Code, Cursor, and any MCP client",
+			title: "Storage & Query",
+			color: "bg-amber-400",
+			items: [
+				{ label: "SQLite + WAL mode", desc: "Single file, no external database to manage" },
+				{ label: "S3 + Parquet archival", desc: "Archive old logs, query cold data with DuckDB" },
+				{ label: "SQL queries", desc: "Full SELECT against your logs with DuckDB" },
+				{ label: "Full-text search", desc: "Fast substring search across messages and meta" },
+				{ label: "Real-time tail", desc: "SSE streaming with server-side level and service filters" },
+				{ label: "Distributed tracing", desc: "trace_id and span_id propagation and grouping" },
+			],
 		},
 		{
-			color: "bg-emerald",
-			label: "Query with SQL",
-			desc: "Run arbitrary SELECT statements directly against your logs",
-		},
-		{
-			color: "bg-cyan",
-			label: "Wide events",
-			desc: "Build one event per request with all context, auto-capture from req/res, emit at the end",
-		},
-		{
-			color: "bg-amber",
-			label: "Tail sampling",
-			desc: "Keep all errors and slow requests, sample the rest — decided after the event completes",
-		},
-		{
-			color: "bg-emerald",
-			label: "Deployment context",
-			desc: "First-class version and deployment_id fields, filterable across all endpoints",
-		},
-		{
-			color: "bg-rose",
-			label: "Drop-in Next.js support",
-			desc: "Console capture, request tracing, error tracking, browser proxy",
-		},
-		{
-			color: "bg-amber",
-			label: "Distributed tracing",
-			desc: "Propagate trace_id and span_id across every service",
-		},
-		{
-			color: "bg-accent",
-			label: "Real-time tail",
-			desc: "Stream logs via SSE with server-side level, service, and project filters",
-		},
-		{
-			color: "bg-emerald",
-			label: "S3 + Parquet archival",
-			desc: "Archive to S3 and query hot + cold logs with DuckDB",
-		},
-		{
-			color: "bg-rose",
-			label: "Browser logging",
-			desc: "Client-side SDK with session tracking, error capture, and proxy delivery",
-		},
-		{
-			color: "bg-cyan",
-			label: "Role-based auth",
-			desc: "Three tiers — ingest, read, admin — with Bearer token auth on every route",
-		},
-		{
-			color: "bg-amber",
-			label: "Full CLI toolkit",
-			desc: "Tail, search, query, stats, export, and prune from the terminal",
+			title: "Platform",
+			color: "bg-blue-400",
+			items: [
+				{ label: "Web UI", desc: "Explore, traces, query, and dashboard views" },
+				{ label: "CLI", desc: "tail, search, query, export, stats from terminal" },
+				{ label: "MCP server", desc: "AI agents search and query logs via tool use" },
+				{ label: "Role-based auth", desc: "Ingest, read, admin tiers with Bearer tokens" },
+				{ label: "Deployment context", desc: "First-class version, branch, and deployment_id" },
+				{ label: "Zero config", desc: "bunx relog.dev start — single command, no setup" },
+			],
 		},
 	];
 
 	return (
-		<section className="mb-14 sm:mb-18">
-			<div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-4">
-				{features.map((f) => (
-					<div key={f.label} className="flex items-start gap-3">
-						<span className={`mt-[7px] block w-1.5 h-1.5 rounded-full ${f.color} shrink-0`} />
+		<section className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
+			<Reveal>
+				<h2 className="text-lg font-semibold tracking-tight mb-6">Everything you need</h2>
+			</Reveal>
+			<div className="grid sm:grid-cols-3 gap-6">
+				{categories.map((cat, ci) => (
+					<Reveal key={cat.title} delay={ci * 0.08}>
 						<div>
-							<p className="text-sm font-medium text-fg">{f.label}</p>
-							<p className="text-[13px] text-muted">{f.desc}</p>
+							<div className="flex items-center gap-2 mb-3">
+								<span className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />
+								<span className="text-[12px] font-semibold uppercase tracking-wider text-muted/60">{cat.title}</span>
+							</div>
+							<div className="space-y-2.5">
+								{cat.items.map((f) => (
+									<div key={f.label}>
+										<p className="text-[13px] font-medium text-fg">{f.label}</p>
+										<p className="text-[12px] text-muted leading-relaxed">{f.desc}</p>
+									</div>
+								))}
+							</div>
 						</div>
-					</div>
+					</Reveal>
 				))}
 			</div>
 		</section>
 	);
 }
 
+// ─── Examples ────────────────────────────────────────────────────────
 function Examples() {
 	const [tab, setTab] = useState(0);
 
 	const tabs = [
-		{
-			label: "SDK",
-			color: "bg-accent",
-			title: "Client SDK",
-			desc: "Ship structured logs from any TypeScript app with automatic batching, retries, and child loggers for distributed tracing.",
-		},
-		{
-			label: "Wide Events",
-			color: "bg-cyan",
-			title: "Wide Events",
-			desc: "Build one rich event per request — attach context as you go, auto-capture HTTP details, and emit everything at the end with tail sampling.",
-		},
-		{
-			label: "Sampling",
-			color: "bg-amber",
-			title: "Tail Sampling",
-			desc: "Decide what to keep after the event completes. Errors and slow requests are always kept. Normal traffic is sampled at the rate you set.",
-		},
-		{
-			label: "Next.js",
-			color: "bg-rose",
-			title: "Next.js Integration",
-			desc: "Drop-in instrumentation that captures console output, tracks errors, logs every request with trace IDs, and proxies browser logs.",
-		},
-		{
-			label: "Browser",
-			color: "bg-cyan",
-			title: "Browser Logging",
-			desc: "Client-side SDK that captures console output and errors. Use your ingest key directly, or optionally proxy through your backend to keep keys server-side.",
-		},
-		{
-			label: "Auth",
-			color: "bg-amber",
-			title: "Authentication",
-			desc: "Three hierarchical roles — ingest (write), read (query), admin (all) — with Bearer token auth on every route.",
-		},
-		{
-			label: "MCP",
-			color: "bg-emerald",
-			title: "MCP Server",
-			desc: "Let Claude Code, Cursor, and any MCP client search, query, and analyze your logs through natural tool use.",
-		},
-		{
-			label: "Archive",
-			color: "bg-emerald",
-			title: "S3 Archival",
-			desc: "Archive old logs to S3 as Parquet files. DuckDB transparently queries both hot (SQLite) and cold (S3) storage.",
-		},
-		{
-			label: "CLI",
-			color: "bg-accent",
-			title: "CLI Toolkit",
-			desc: "Tail, search, query, export, and manage logs from the terminal. Real-time streaming with server-side filters.",
-		},
-		{
-			label: "Python",
-			color: "bg-accent",
-			title: "Python SDK",
-			desc: "Ship structured logs from any Python app. Covers basic logging, child loggers, wide events with explicit end(), and the context manager for automatic cleanup.",
-		},
+		{ label: "SDK", title: "Client SDK", desc: "Structured logs with automatic batching, retries, and child loggers." },
+		{ label: "Wide Events", title: "Wide Events", desc: "One rich event per request with tail sampling." },
+		{ label: "Sampling", title: "Tail Sampling", desc: "Errors always kept. Normal traffic sampled." },
+		{ label: "Next.js", title: "Next.js", desc: "Console capture, error tracking, browser proxy." },
+		{ label: "Browser", title: "Browser", desc: "Client-side SDK with console and error capture." },
+		{ label: "Auth", title: "Auth", desc: "Three roles — ingest, read, admin." },
+		{ label: "MCP", title: "MCP Server", desc: "AI agents search and query your logs." },
+		{ label: "Archive", title: "S3 Archival", desc: "Parquet files, DuckDB hot + cold queries." },
+		{ label: "CLI", title: "CLI", desc: "Tail, search, query, export from terminal." },
+		{ label: "Python", title: "Python SDK", desc: "Structured logs, wide events, context manager." },
 	];
 
 	const examples = [
-		{
-			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/client";
-
-const log = createLogger({
-  url: "http://localhost:3485",
-  service: "api",
-});
-
-// Structured key-value pairs on every log
-log.info("server started", { port: 3000 });
-log.warn("slow query", { duration_ms: 1200, table: "users" });
-log.error(new Error("connection failed"));
-
-// Child loggers inherit + extend context — perfect for tracing
-const reqLog = log.child({
-  traceId: "abc-123",
-  method: "POST",
-  path: "/users",
-});
-reqLog.info("request started");
-reqLog.info("auth passed", { userId: "u_42" });
-reqLog.error(new Error("validation failed"));
-
-// Flush before shutdown to ensure delivery
-await log.flush();`,
-		},
-		{
-			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/client";
-
-const log = createLogger({
-  url: "http://localhost:3485",
-  service: "api",
-  sampleRate: 0.05,       // keep 5% of normal traffic
-  slowThresholdMs: 500,   // always keep slow events
-});
-
-// One event per request — accumulate context, emit once
-const ev = log.event("http_request");
-
-// Auto-extract method, path, headers, user-agent
-ev.request(req);
-
-// Add context as the request progresses
-const user = await authenticate(req);
-ev.set("user_id", user.id);
-ev.set("org_id", user.orgId);
-
-// Force-keep VIP traffic regardless of sample rate
-if (user.tier === "enterprise") ev.keep();
-
-try {
-  const result = await handleRequest(req);
-  ev.set("result_count", result.items.length);
-  ev.response(res); // auto-extracts status, content-length
-} catch (err) {
-  ev.error(err); // errors always bypass sampling
-}
-
-// Sampling decision + emit happens here
-// Duration is tracked automatically from event creation
-ev.end();`,
-		},
-		{
-			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/client";
-
-const log = createLogger({
-  url: "http://localhost:3485",
-  service: "api",
-  version: "1.2.3",
-  deploymentId: "deploy-abc",
-  sampleRate: 0.05,       // keep 5% of normal events
-  slowThresholdMs: 500,   // always keep events > 500ms
-});
-
-// Errors are ALWAYS kept — no config needed
-log.event("http_request")
-  .request(req)
-  .error(new Error("DB timeout"))  // forces keep
-  .end();                          // always emitted
-
-// Slow events are kept automatically
-log.event("http_request")
-  .request(req)
-  .end(); // kept if duration > slowThresholdMs
-
-// Force-keep for VIP traffic
-const ev = log.event("http_request");
-ev.request(req);
-if (user.tier === "enterprise") ev.keep();
-ev.end(); // always emitted
-
-// Sampled events include sample_rate in metadata
-// so you can extrapolate: 5 events at 5% = ~100 actual`,
-		},
-		{
-			lang: "typescript",
-			code: `// instrumentation.ts — captures console + errors
-import { createLogger } from "relog.dev/next";
-
-const relog = createLogger({
-  url: "http://localhost:3485",
-  service: "my-nextjs-app",
-});
-
-export async function register() {
-  await relog.register();
-}
-
-// Automatic error tracking for all routes
-export const onRequestError = relog.onRequestError;
-
-// app/api/relog/route.ts — proxy for browser logs
-import { createBrowserProxy } from "relog.dev/next";
-
-export const POST = createBrowserProxy({
-  url: process.env.RELOG_URL,
-  auth: process.env.RELOG_AUTH,
-  service: "my-nextjs-app",
-});
-
-// proxy.ts — logs every request with trace IDs
-import { relogProxy } from "relog.dev/next";
-
-export const proxy = relogProxy();`,
-		},
-		{
-			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/browser";
-
-// Use your ingest key directly — it can only write logs
-const log = createLogger({
-  url: "https://logs.example.com",
-  auth: "ik_prod_abc123",  // ingest key (write-only)
-  service: "web-app",
-  captureConsole: true,     // forward console.log/warn/error
-  captureErrors: true,      // catch uncaught exceptions
-});
-
-log.info("page loaded", {
-  route: location.pathname,
-  referrer: document.referrer,
-});
-
-// Or proxy through your backend to keep keys server-side
-const proxied = createLogger({
-  endpoint: "/api/relog",   // your server-side proxy route
-  service: "web-app",
-});`,
-		},
-		{
-			lang: "bash",
-			code: `# Start server with three auth tiers
-bunx relog.dev start \
-  --ingest-key ik_prod_abc123 \
-  --read-key rk_prod_xyz789 \
-  --admin-key ak_prod_secret456
-
-# Ingest: write-only access for your applications
-curl -X POST http://localhost:3485/ingest \
-  -H "Authorization: Bearer ik_prod_abc123" \
-  -H "Content-Type: application/json" \
-  -d '[{"level":"info","message":"deployed","service":"api"}]'
-
-# Read: query, search, stream — for dashboards and agents
-curl http://localhost:3485/logs/search?q=deployed \
-  -H "Authorization: Bearer rk_prod_xyz789"
-
-# Admin: full access including prune, export, config
-curl -X POST http://localhost:3485/logs/prune?keep_days=30 \
-  -H "Authorization: Bearer ak_prod_secret456"`,
-		},
-		{
-			lang: "jsonc",
-			code: `// Add to ~/.claude/settings.json (Claude Code)
-// or configure in your MCP client of choice
-{
-  "mcpServers": {
-    "relog.dev": {
-      "command": "npx",
-      "args": [
-        "relog.dev", "mcp",
-        "--url", "http://localhost:3485",
-        "--auth", "rk_your_read_key"
-      ]
-    }
-  }
-}
-
-// Available tools for AI agents:
-//   search_logs  — full-text search with filters
-//   query_logs   — run arbitrary SQL SELECT
-//   get_stats    — log volume by level, service
-//   tail_logs    — most recent entries
-//   get_context  — surrounding logs by trace_id`,
-		},
-		{
-			lang: "bash",
-			code: `# Archive logs older than 7 days to S3 as Parquet
-bunx relog.dev archive --keep-days 7
-
-# Start server with S3 for unified hot + cold queries
-bunx relog.dev start \
-  --s3-endpoint https://s3.amazonaws.com \
-  --s3-bucket my-logs \
-  --s3-access-key AKIA... \
-  --s3-secret-key ...
-
-# DuckDB merges SQLite (hot) + S3 Parquet (cold)
-# — queries and search work across both storages
-
-# Works with any S3-compatible storage:
-#   AWS S3, Cloudflare R2, MinIO, Backblaze B2`,
-		},
-		{
-			lang: "bash",
-			code: `# Stream logs in real-time with filters
-bunx relog.dev tail --level error --service api
-
-# Full-text search with time ranges
-bunx relog.dev search --grep "payment failed" --from 1h
-
-# Run SQL directly against your logs
-bunx relog.dev query --sql \
-  "SELECT service, level, COUNT(*) as n
-   FROM logs
-   WHERE timestamp > datetime('now', '-1 hour')
-   GROUP BY service, level
-   ORDER BY n DESC"
-
-# Export for external analysis
-bunx relog.dev export --format csv --from 7d
-
-# View log volume stats
-bunx relog.dev stats --from 24h`,
-		},
-		{
-			lang: "python",
-			code: `from relog import create_logger
-
-log = create_logger(
-    url="http://localhost:3485",
-    service="api",
-    sample_rate=0.05,       # keep 5% of normal traffic
-    slow_threshold_ms=500,  # always keep slow events
-)
-
-# Structured key-value pairs on every log
-log.info("server started", {"port": 3000})
-log.warn("slow query", {"duration_ms": 1200, "table": "users"})
-log.error(ValueError("connection failed"))
-
-# Child loggers inherit + extend context — perfect for tracing
-req_log = log.child(trace_id="abc-123", meta={"path": "/users"})
-req_log.info("request started")
-req_log.info("auth passed", {"user_id": "u_42"})
-
-# Wide events — explicit style
-ev = log.event("http_request")
-ev.request(method="POST", url="/users")
-ev.set("user_id", "u_42")
-try:
-    result = handle_request(request)
-    ev.set("result_count", len(result.items))
-    ev.response(status=200)
-except Exception as e:
-    ev.error(e)  # errors always bypass sampling
-ev.end()         # sampling decision + emit
-
-# Wide events — context manager (auto end + exception capture)
-with log.event("db_query") as ev:
-    ev.set("table", "orders")
-    rows = db.execute("SELECT * FROM orders WHERE user_id = ?", [user_id])
-    ev.set("row_count", len(rows))
-
-# Flush before shutdown to ensure delivery
-log.flush()`,
-		},
+		{ lang: "typescript", code: `import { createLogger } from "relog.dev/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n});\n\nlog.info("server started", { port: 3000 });\nlog.warn("slow query", { duration_ms: 1200, table: "users" });\nlog.error(new Error("connection failed"));\n\nconst reqLog = log.child({\n  traceId: "abc-123",\n  method: "POST",\n  path: "/users",\n});\nreqLog.info("request started");\nreqLog.info("auth passed", { userId: "u_42" });\n\nawait log.flush();` },
+		{ lang: "typescript", code: `import { createLogger } from "relog.dev/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n  sampleRate: 0.05,\n  slowThresholdMs: 500,\n});\n\nconst ev = log.event("http_request");\nev.request(req);\n\nconst user = await authenticate(req);\nev.set("user_id", user.id);\nif (user.tier === "enterprise") ev.keep();\n\ntry {\n  const result = await handleRequest(req);\n  ev.set("result_count", result.items.length);\n  ev.response(res);\n} catch (err) {\n  ev.error(err);\n}\n\nev.end();` },
+		{ lang: "typescript", code: `import { createLogger } from "relog.dev/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n  sampleRate: 0.05,\n  slowThresholdMs: 500,\n});\n\n// Errors always kept\nlog.event("http_request")\n  .request(req)\n  .error(new Error("DB timeout"))\n  .end();\n\n// Slow events kept automatically\nlog.event("http_request")\n  .request(req)\n  .end();\n\n// Force-keep VIP traffic\nconst ev = log.event("http_request");\nev.request(req);\nif (user.tier === "enterprise") ev.keep();\nev.end();` },
+		{ lang: "typescript", code: `// instrumentation.ts\nimport { createLogger } from "relog.dev/next";\n\nconst relog = createLogger({\n  url: "http://localhost:3485",\n  service: "my-nextjs-app",\n});\n\nexport async function register() {\n  await relog.register();\n}\n\nexport const onRequestError = relog.onRequestError;\n\n// app/api/relog/route.ts\nimport { createBrowserProxy } from "relog.dev/next";\n\nexport const POST = createBrowserProxy({\n  url: process.env.RELOG_URL,\n  auth: process.env.RELOG_AUTH,\n  service: "my-nextjs-app",\n});` },
+		{ lang: "typescript", code: `import { createLogger } from "relog.dev/browser";\n\nconst log = createLogger({\n  url: "https://logs.example.com",\n  auth: "ik_prod_abc123",\n  service: "web-app",\n  captureConsole: true,\n  captureErrors: true,\n});\n\nlog.info("page loaded", {\n  route: location.pathname,\n  referrer: document.referrer,\n});\n\n// Or proxy through your backend\nconst proxied = createLogger({\n  endpoint: "/api/relog",\n  service: "web-app",\n});` },
+		{ lang: "bash", code: `# Start with three auth tiers\nbunx relog.dev start \\\n  --ingest-key ik_prod_abc123 \\\n  --read-key rk_prod_xyz789 \\\n  --admin-key ak_prod_secret456\n\n# Ingest: write-only\ncurl -X POST http://localhost:3485/ingest \\\n  -H "Authorization: Bearer ik_prod_abc123" \\\n  -H "Content-Type: application/json" \\\n  -d '[{"level":"info","message":"deployed","service":"api"}]'\n\n# Read: query, search, stream\ncurl http://localhost:3485/logs/search?q=deployed \\\n  -H "Authorization: Bearer rk_prod_xyz789"` },
+		{ lang: "jsonc", code: `// ~/.claude/settings.json\n{\n  "mcpServers": {\n    "relog.dev": {\n      "command": "npx",\n      "args": [\n        "relog.dev", "mcp",\n        "--url", "http://localhost:3485",\n        "--auth", "rk_your_read_key"\n      ]\n    }\n  }\n}\n\n// Tools: search_logs, query_logs,\n// get_stats, tail_logs, get_context` },
+		{ lang: "bash", code: `# Archive to S3 as Parquet\nbunx relog.dev archive --keep-days 7\n\n# Start with S3 for hot + cold queries\nbunx relog.dev start \\\n  --s3-endpoint https://s3.amazonaws.com \\\n  --s3-bucket my-logs \\\n  --s3-access-key AKIA... \\\n  --s3-secret-key ...\n\n# DuckDB merges SQLite + S3 Parquet\n# Works with AWS S3, R2, MinIO, B2` },
+		{ lang: "bash", code: `# Stream logs in real-time\nbunx relog.dev tail --level error --service api\n\n# Full-text search\nbunx relog.dev search --grep "payment failed" --from 1h\n\n# Run SQL\nbunx relog.dev query --sql \\\n  "SELECT service, level, COUNT(*) as n\n   FROM logs\n   WHERE timestamp > datetime('now', '-1 hour')\n   GROUP BY service, level\n   ORDER BY n DESC"\n\n# Export and stats\nbunx relog.dev export --format csv --from 7d\nbunx relog.dev stats --from 24h` },
+		{ lang: "python", code: `from relog import create_logger\n\nlog = create_logger(\n    url="http://localhost:3485",\n    service="api",\n    sample_rate=0.05,\n    slow_threshold_ms=500,\n)\n\nlog.info("server started", {"port": 3000})\nlog.warn("slow query", {"duration_ms": 1200})\nlog.error(ValueError("connection failed"))\n\nreq_log = log.child(trace_id="abc-123")\nreq_log.info("request started")\n\nev = log.event("http_request")\nev.request(method="POST", url="/users")\nev.set("user_id", "u_42")\ntry:\n    result = handle_request(request)\n    ev.response(status=200)\nexcept Exception as e:\n    ev.error(e)\nev.end()\n\nwith log.event("db_query") as ev:\n    ev.set("table", "orders")\n    rows = db.execute("SELECT * FROM orders")\n    ev.set("row_count", len(rows))\n\nlog.flush()` },
 	];
 
 	return (
-		<section className="mb-14 sm:mb-18">
-			<div className="flex items-center gap-1 mb-3 overflow-x-auto tabs-scroll pb-1 -mx-5 px-5 sm:mx-0 sm:px-0">
-				{tabs.map((t, i) => (
-					<button
-						key={t.label}
-						onClick={() => setTab(i)}
-						className={`inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-							tab === i ? "text-fg bg-white/[0.06]" : "text-muted hover:text-dim"
-						}`}
-					>
-						<span
-							className={`block w-1.5 h-1.5 rounded-full ${t.color} ${tab === i ? "opacity-100" : "opacity-30"}`}
-						/>
-						{t.label}
-					</button>
-				))}
-			</div>
-			<div className="mb-3">
-				<p className="text-sm font-medium text-fg">{tabs[tab]!.title}</p>
-				<p className="text-[13px] text-muted leading-relaxed mt-1">{tabs[tab]!.desc}</p>
-			</div>
-			<CodeBlock lang={examples[tab]!.lang} code={examples[tab]!.code} />
+		<section className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
+			<Reveal>
+				<h2 className="text-lg font-semibold tracking-tight mb-4">Get started</h2>
+			</Reveal>
+
+			<Reveal delay={0.1}>
+				<div className="flex items-center gap-0.5 mb-3 overflow-x-auto tabs-scroll pb-1 -mx-5 px-5 sm:mx-0 sm:px-0">
+					{tabs.map((t, i) => (
+						<button
+							key={t.label}
+							onClick={() => setTab(i)}
+							className={`px-2.5 py-1 text-[12px] font-medium rounded-md transition-all cursor-pointer whitespace-nowrap ${tab === i ? "text-fg bg-white/[0.08]" : "text-muted hover:text-dim hover:bg-white/[0.03]"}`}
+						>
+							{t.label}
+						</button>
+					))}
+				</div>
+
+				<AnimatePresence mode="wait">
+					<motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }} className="mb-3">
+						<span className="text-[13px] font-medium text-fg">{tabs[tab]!.title}</span>
+						<span className="text-[12px] text-muted ml-2">{tabs[tab]!.desc}</span>
+					</motion.div>
+				</AnimatePresence>
+
+				<AnimatePresence mode="wait">
+					<motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+						<CodeBlock lang={examples[tab]!.lang} code={examples[tab]!.code} />
+					</motion.div>
+				</AnimatePresence>
+			</Reveal>
 		</section>
 	);
 }
 
+// ─── Code block ──────────────────────────────────────────────────────
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
 	const [html, setHtml] = useState("");
 
 	useEffect(() => {
 		getHighlighter().then((h) => {
-			setHtml(
-				h.codeToHtml(code, {
-					lang: lang === "json" && code.startsWith("//") ? "jsonc" : lang,
-					theme: "github-dark-default",
-				}),
-			);
+			setHtml(h.codeToHtml(code, { lang: lang === "json" && code.startsWith("//") ? "jsonc" : lang, theme: "github-dark-default" }));
 		});
 	}, [code, lang]);
 
+	if (html) {
+		return (
+			<div className="rounded-lg border border-white/[0.06] overflow-hidden">
+				{/* shiki output from static code strings defined in this file */}
+				<div className="[&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_pre]:leading-[1.7] [&_pre]:!bg-bg-code [&_code]:font-mono" dangerouslySetInnerHTML={{ __html: html }} />
+			</div>
+		);
+	}
+
 	return (
-		<div className="rounded-lg border border-border overflow-hidden">
-			{html ? (
-				<div
-					className="[&_pre]:p-4 [&_pre]:sm:p-5 [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_pre]:sm:text-[13px] [&_pre]:leading-[1.7] [&_pre]:!bg-bg-code [&_code]:font-mono"
-					dangerouslySetInnerHTML={{ __html: html }}
-				/>
-			) : (
-				<pre className="p-4 sm:p-5 overflow-x-auto bg-bg-code text-[12px] sm:text-[13px] leading-[1.7]">
-					<code className="text-fg/70 font-mono">{code}</code>
-				</pre>
-			)}
+		<div className="rounded-lg border border-white/[0.06] overflow-hidden">
+			<pre className="p-4 overflow-x-auto bg-bg-code text-[12px] leading-[1.7]"><code className="text-fg/70 font-mono">{code}</code></pre>
 		</div>
 	);
 }
 
+// ─── FAQ ─────────────────────────────────────────────────────────────
 function FAQ() {
+	const [open, setOpen] = useState<number | null>(null);
+
 	const faqs = [
-		{
-			q: "Why not Datadog / Logtail / Axiom?",
-			a: "Free, self-hosted, MIT licensed. No per-GB fees, no third-party data sharing.",
-		},
-		{
-			q: "How does storage work?",
-			a: "Single SQLite file with WAL mode. Indexed by level, service, project, branch, trace ID, and timestamp.",
-		},
-		{
-			q: "What does the MCP server do?",
-			a: "Lets AI agents like Claude Code and Cursor search, query, and analyze your logs through tool use.",
-		},
-		{
-			q: "How does archival work?",
-			a: "Archive old logs to S3 as Parquet files with a single CLI command. DuckDB transparently queries both hot logs in SQLite and cold logs in S3, so search and SQL work across your entire history without loading everything into memory.",
-		},
-		{
-			q: "What are wide events?",
-			a: "Instead of scattering log lines through a request, build one event with all context and emit it at the end. Use .request(req) and .response(res) to auto-extract HTTP context. You get a single record with every key-value pair plus automatic duration tracking and level escalation.",
-		},
-		{
-			q: "How does tail sampling work?",
-			a: "Set a sampleRate (0–1) on the logger. The decision happens after the event completes, so errors, slow requests, and .keep()-marked events are always kept. Only normal, fast events are sampled. Sampled events include the sample_rate in metadata so you can extrapolate totals in queries.",
-		},
-		{
-			q: "Does it support authentication?",
-			a: "Three hierarchical roles: ingest, read, admin. Bearer token auth on all endpoints.",
-		},
+		{ q: "Why not Datadog / Logtail / Axiom?", a: "Free, self-hosted, MIT licensed. No per-GB pricing, no vendor lock-in, no third-party data sharing. Your logs stay on your infrastructure." },
+		{ q: "How does storage work?", a: "Single SQLite file with WAL mode for concurrent reads/writes. Indexed by level, service, project, branch, trace_id, and timestamp. No external databases needed." },
+		{ q: "How does archival work?", a: "The archive command converts old logs to Parquet files on S3/R2/MinIO. DuckDB transparently queries both hot data (SQLite) and cold data (S3 Parquet) so you get unlimited retention without growing your local database." },
+		{ q: "What are wide events?", a: "Instead of scattering log lines throughout a request, build one event per unit of work. Call .request(req) to auto-extract HTTP context, .set() to add fields, and .end() to emit a single record with all context plus duration_ms. Supports TC39 'using' for auto-emit on scope exit." },
+		{ q: "How does tail sampling work?", a: "Set sampleRate (0–1) on the logger. The keep/drop decision happens after the event completes so it has full context. Errors are always kept. Events slower than slowThresholdMs are always kept. Call .keep() to force-keep VIP traffic. Sampled events include sample_rate in metadata for extrapolation." },
+		{ q: "What does the MCP server do?", a: "AI agents (Claude Code, Cursor, etc.) query your logs via Model Context Protocol tool use. Five tools: search_logs (filter by level/service/time), query_logs (SQL), get_stats (volume/health), tail_logs (recent entries), and get_log_context (surrounding logs for a given ID)." },
+		{ q: "How does authentication work?", a: "Three roles with hierarchical access: ingest (write-only), read (query/stream/search), admin (all + prune/config). Bearer token auth with multiple keys per role — comma-separated flags or individually named env vars. Ideal for Docker/k8s with separate secrets per app." },
+		{ q: "How does the Next.js integration work?", a: "Two files: instrumentation.ts and middleware.ts. All console.log/warn/error calls are captured automatically, every HTTP request is logged with method/path/status/duration, and unhandled errors in server components and route handlers are tracked. Includes a browser proxy route for client-side logging." },
+		{ q: "What about browser logging?", a: "The browser SDK (relog.dev/browser) batches logs via fetch or sendBeacon, captures console output and unhandled errors, and adds session IDs. Deliver directly to the server or proxy through your backend to keep API keys off the client." },
+		{ q: "What SQL can I run?", a: "Any read-only SELECT, EXPLAIN, or safe PRAGMA against the logs table via DuckDB. The CLI, HTTP API, MCP server, and Web UI all support SQL queries. Common columns: id, timestamp, level, message, service, project, branch, trace_id, meta (JSON)." },
+		{ q: "How do child loggers work?", a: "log.child({ traceId, requestId, ... }) creates a logger that inherits the parent's transport, service, level, and metadata. All additional fields are merged. Useful for per-request context in HTTP handlers." },
+		{ q: "How do I export logs?", a: "CLI: relog.dev export --format json|csv|ndjson --from 7d --output logs.json. HTTP API: GET /logs with filters. Supports time ranges, level/service/project filters, and configurable limits." },
+		{ q: "Can I prune old logs?", a: "relog.dev prune --keep-days 30 or --before <ISO timestamp>. Prompts for confirmation unless --yes is passed. Combine with archival to move old data to S3 before pruning." },
+		{ q: "What about Python?", a: "Full Python SDK (pip install relog) with snake_case conventions, context managers for wide events (with log.event('name') as ev), automatic exception capture, and the same batching/retry/sampling features as the TypeScript SDK." },
 	];
 
 	return (
-		<section className="mb-14 sm:mb-18">
-			<div className="grid sm:grid-cols-2 gap-x-16 gap-y-4">
-				{faqs.map((f) => (
-					<div key={f.q}>
-						<p className="text-sm font-medium text-fg mb-1">{f.q}</p>
-						<p className="text-[13px] text-muted leading-relaxed">{f.a}</p>
-					</div>
+		<section className="max-w-3xl mx-auto px-5 sm:px-8 pb-14">
+			<Reveal>
+				<h2 className="text-lg font-semibold tracking-tight mb-4">FAQ</h2>
+			</Reveal>
+			<div className="space-y-1">
+				{faqs.map((f, i) => (
+					<Reveal key={f.q} delay={i * 0.03}>
+						<button onClick={() => setOpen(open === i ? null : i)} className="w-full text-left rounded-lg border border-white/[0.04] hover:bg-white/[0.02] transition-colors cursor-pointer">
+							<div className="flex items-center justify-between px-4 py-3">
+								<span className="text-[13px] font-medium text-fg pr-3">{f.q}</span>
+								<motion.span animate={{ rotate: open === i ? 45 : 0 }} transition={{ duration: 0.15 }} className="text-muted shrink-0 text-sm">+</motion.span>
+							</div>
+							<AnimatePresence>
+								{open === i && (
+									<motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
+										<p className="px-4 pb-3 text-[12px] text-muted leading-relaxed">{f.a}</p>
+									</motion.div>
+								)}
+							</AnimatePresence>
+						</button>
+					</Reveal>
 				))}
 			</div>
 		</section>
 	);
 }
 
+// ─── Footer ──────────────────────────────────────────────────────────
 function Footer() {
 	return (
-		<footer className="border-t border-border pt-6">
-			<div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-muted">
+		<footer className="border-t border-white/[0.06]">
+			<div className="max-w-5xl mx-auto px-5 sm:px-8 py-6 flex flex-wrap items-center justify-between gap-3 text-[12px] text-muted">
+				<span className="text-muted/40">
+					Built by <a href="https://linesofcode.dev" className="text-muted/60 hover:text-fg transition-colors">linesofcode.dev</a>
+				</span>
 				<div className="flex items-center gap-4">
-					<a
-						href="https://github.com/TimMikeladze/relog"
-						className="hover:text-fg transition-colors"
-					>
-						GitHub
-					</a>
-					<a
-						href="https://www.npmjs.com/package/relog.dev"
-						className="hover:text-fg transition-colors"
-					>
-						npm
-					</a>
-					<a
-						href="https://github.com/TimMikeladze/relog/releases"
-						className="hover:text-fg transition-colors"
-					>
-						Releases
-					</a>
-				</div>
-				<div className="flex items-center gap-4">
-					<a href="https://x.com/linesofcode" className="hover:text-fg transition-colors">
-						X
-					</a>
-					<a
-						href="https://bsky.app/profile/linesofcode.bsky.social"
-						className="hover:text-fg transition-colors"
-					>
-						Bluesky
-					</a>
+					<a href="https://github.com/TimMikeladze/relog" className="hover:text-fg transition-colors">GitHub</a>
+					<a href="https://www.npmjs.com/package/relog.dev" className="hover:text-fg transition-colors">npm</a>
+					<a href="https://x.com/linesofcode" className="hover:text-fg transition-colors">X</a>
+					<a href="https://bsky.app/profile/linesofcode.bsky.social" className="hover:text-fg transition-colors">Bluesky</a>
+					<a href="https://linkedin.com/in/tim-mikeladze" className="hover:text-fg transition-colors">LinkedIn</a>
 				</div>
 			</div>
-			<p className="text-muted/30 text-xs mt-4 pb-4">&copy; {new Date().getFullYear()} relog.dev</p>
 		</footer>
 	);
 }
 
-function ExternalLinkIcon() {
-	return (
-		<svg
-			width="12"
-			height="12"
-			viewBox="0 0 12 12"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="1.5"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M5 2H2a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V7" />
-			<path d="M8 1h3v3" />
-			<path d="M11 1 6 6" />
-		</svg>
-	);
-}
-
+// ─── Icons ───────────────────────────────────────────────────────────
 function GitHubIcon() {
 	return (
-		<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+		<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
 			<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
 		</svg>
 	);

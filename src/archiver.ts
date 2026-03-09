@@ -3,7 +3,7 @@ import { parquetWriteBuffer } from "hyparquet-writer";
 import type { RelogDatabase } from "./db/database.ts";
 import type { ArchiveConfig, ArchiveResult, LogEntry, RetryConfig } from "./types.ts";
 
-interface Partition {
+export interface Partition {
 	project: string;
 	branch: string;
 	year: string;
@@ -16,7 +16,7 @@ function partitionKey(project: string, branch: string, date: string): string {
 	return `${project}/${branch}/${date}`;
 }
 
-function groupByPartition(logs: LogEntry[]): Partition[] {
+export function groupByPartition(logs: LogEntry[]): Partition[] {
 	const map = new Map<string, Partition>();
 
 	for (const log of logs) {
@@ -39,7 +39,7 @@ function groupByPartition(logs: LogEntry[]): Partition[] {
 	return Array.from(map.values());
 }
 
-function logsToParquet(logs: LogEntry[]): ArrayBuffer {
+export function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 	const ids: number[] = [];
 	const timestamps: string[] = [];
 	const levels: string[] = [];
@@ -52,6 +52,9 @@ function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 	const spanIds: (string | null)[] = [];
 	const projects: (string | null)[] = [];
 	const branches: (string | null)[] = [];
+	const versions: (string | null)[] = [];
+	const deploymentIds: (string | null)[] = [];
+	const keyPrefixes: (string | null)[] = [];
 	const createdAts: bigint[] = [];
 
 	for (const log of logs) {
@@ -67,6 +70,9 @@ function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 		spanIds.push(log.span_id ?? null);
 		projects.push(log.project ?? null);
 		branches.push(log.branch ?? null);
+		versions.push(log.version ?? null);
+		deploymentIds.push(log.deployment_id ?? null);
+		keyPrefixes.push(log.key_prefix ?? null);
 		createdAts.push(BigInt(log.created_at!));
 	}
 
@@ -84,6 +90,9 @@ function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 			{ name: "span_id", data: spanIds, type: "STRING", nullable: true },
 			{ name: "project", data: projects, type: "STRING", nullable: true },
 			{ name: "branch", data: branches, type: "STRING", nullable: true },
+			{ name: "version", data: versions, type: "STRING", nullable: true },
+			{ name: "deployment_id", data: deploymentIds, type: "STRING", nullable: true },
+			{ name: "key_prefix", data: keyPrefixes, type: "STRING", nullable: true },
 			{ name: "created_at", data: createdAts, type: "INT64" },
 		],
 		codec: "SNAPPY",

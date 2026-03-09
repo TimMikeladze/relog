@@ -3,11 +3,11 @@ import type { LogLevel } from "@/types";
 
 const levelColors: Record<LogLevel, string> = {
 	trace: "bg-zinc-500/15 text-zinc-500 dark:bg-zinc-400/15 dark:text-zinc-400",
-	debug: "bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-400",
-	info: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-400",
-	warn: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-400",
-	error: "bg-red-500/15 text-red-600 dark:bg-red-400/15 dark:text-red-400",
-	fatal: "bg-fuchsia-500/15 text-fuchsia-600 dark:bg-fuchsia-400/15 dark:text-fuchsia-400",
+	debug: "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-400",
+	info: "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-400",
+	warn: "bg-amber-500/15 text-amber-600 dark:bg-amber-300/15 dark:text-amber-300",
+	error: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-400",
+	fatal: "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-400",
 };
 
 export function LevelBadge({ level, className }: { level: LogLevel; className?: string }) {

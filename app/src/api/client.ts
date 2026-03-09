@@ -27,14 +27,14 @@ function headers(): Record<string, string> {
 	return h;
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, string>): Promise<T> {
+export async function apiGet<T>(path: string, params?: Record<string, string>, signal?: AbortSignal): Promise<T> {
 	const url = new URL(path, baseUrl);
 	if (params) {
 		for (const [k, v] of Object.entries(params)) {
 			if (v) url.searchParams.set(k, v);
 		}
 	}
-	const res = await fetch(url.toString(), { headers: headers() });
+	const res = await fetch(url.toString(), { headers: headers(), signal });
 	if (!res.ok) {
 		const body = await res.json().catch(() => ({}));
 		throw new ApiError(res.status, (body as { error?: string }).error ?? res.statusText);
@@ -81,9 +81,6 @@ export async function apiDelete(path: string): Promise<void> {
 
 export function streamUrl(params?: Record<string, string>): string {
 	const url = new URL("/stream", baseUrl);
-	if (authKey) {
-		url.searchParams.set("token", authKey);
-	}
 	if (params) {
 		for (const [k, v] of Object.entries(params)) {
 			if (v) url.searchParams.set(k, v);
