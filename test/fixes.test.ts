@@ -282,4 +282,3 @@ describe("RateLimiter correctness", () => {
 		expect(results.filter((s) => s === 429).length).toBe(3);
 	});
 });
-

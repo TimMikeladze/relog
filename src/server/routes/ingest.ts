@@ -116,7 +116,16 @@ export async function handleIngest(
 				{ status: 400 },
 			);
 		}
-		for (const field of ["service", "host", "trace_id", "span_id", "project", "branch", "version", "deployment_id"] as const) {
+		for (const field of [
+			"service",
+			"host",
+			"trace_id",
+			"span_id",
+			"project",
+			"branch",
+			"version",
+			"deployment_id",
+		] as const) {
 			if (typeof entry[field] === "string" && entry[field].length > MAX_STRING_FIELD_LENGTH) {
 				return Response.json(
 					{ error: `Invalid log entry: '${field}' exceeds ${MAX_STRING_FIELD_LENGTH} characters` },

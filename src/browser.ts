@@ -205,11 +205,13 @@ export class BrowserLogger {
 
 	constructor(options: BrowserLoggerOptions = {}, parentTransport?: BrowserTransport) {
 		this.isChild = !!parentTransport;
-		this.transport = parentTransport ?? new BrowserTransport({
-			endpoint: options.endpoint,
-			flushInterval: options.flushInterval,
-			batchSize: options.batchSize,
-		});
+		this.transport =
+			parentTransport ??
+			new BrowserTransport({
+				endpoint: options.endpoint,
+				flushInterval: options.flushInterval,
+				batchSize: options.batchSize,
+			});
 		this.level = options.level ?? "info";
 		this.service = options.service;
 		this.project = options.project;

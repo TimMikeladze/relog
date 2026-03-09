@@ -27,7 +27,11 @@ function headers(): Record<string, string> {
 	return h;
 }
 
-export async function apiGet<T>(path: string, params?: Record<string, string>, signal?: AbortSignal): Promise<T> {
+export async function apiGet<T>(
+	path: string,
+	params?: Record<string, string>,
+	signal?: AbortSignal,
+): Promise<T> {
 	const url = new URL(path, baseUrl);
 	if (params) {
 		for (const [k, v] of Object.entries(params)) {

@@ -1,5 +1,6 @@
+import { format } from "node:util";
 import { hostname } from "node:os";
-import { printLogRecord } from "./console.ts";
+import { originalConsole, printLogRecord } from "./console.ts";
 import { EventBuilder } from "./event.ts";
 import { inferGitBranch, inferGitProject } from "./git.ts";
 import { Transport } from "./transport.ts";
@@ -206,6 +207,33 @@ export class Logger {
 			{ ...this.boundMeta, ...meta },
 			{ sampleRate: this.sampleRate, slowThresholdMs: this.slowThresholdMs },
 		);
+	}
+
+	captureConsole(): void {
+		const logger = this;
+		console.log = (...args: unknown[]) => {
+			logger.info(format(...args), { source: "console" });
+		};
+		console.info = (...args: unknown[]) => {
+			logger.info(format(...args), { source: "console" });
+		};
+		console.warn = (...args: unknown[]) => {
+			logger.warn(format(...args), { source: "console" });
+		};
+		console.error = (...args: unknown[]) => {
+			logger.error(format(...args), { source: "console" });
+		};
+		console.debug = (...args: unknown[]) => {
+			logger.debug(format(...args), { source: "console" });
+		};
+	}
+
+	restoreConsole(): void {
+		console.log = originalConsole.log;
+		console.info = originalConsole.info;
+		console.warn = originalConsole.warn;
+		console.error = originalConsole.error;
+		console.debug = originalConsole.debug;
 	}
 
 	async flush(): Promise<void> {

@@ -10,6 +10,16 @@ const LEVEL_COLORS: Record<LogLevel, (s: string) => string> = {
 	fatal: pc.bgRed,
 };
 
+// Save original console methods so printLogRecord always bypasses any overrides
+export const originalConsole = {
+	log: console.log.bind(console),
+	warn: console.warn.bind(console),
+	error: console.error.bind(console),
+	debug: console.debug.bind(console),
+	info: console.info.bind(console),
+	trace: console.trace.bind(console),
+};
+
 export function formatLogRecord(record: LogRecord): string {
 	const time = record.timestamp.slice(11, 23);
 	const colorFn = LEVEL_COLORS[record.level];
@@ -33,10 +43,10 @@ export function formatLogRecord(record: LogRecord): string {
 export function printLogRecord(record: LogRecord): void {
 	const formatted = formatLogRecord(record);
 	if (record.level === "error" || record.level === "fatal") {
-		console.error(formatted);
+		originalConsole.error(formatted);
 	} else if (record.level === "warn") {
-		console.warn(formatted);
+		originalConsole.warn(formatted);
 	} else {
-		console.log(formatted);
+		originalConsole.log(formatted);
 	}
 }

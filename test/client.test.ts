@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { formatLogRecord } from "../src/console.ts";
+import { afterEach, describe, expect, test } from "bun:test";
+import { formatLogRecord, originalConsole } from "../src/console.ts";
 import { EventBuilder } from "../src/event.ts";
 import { createLogger, Logger } from "../src/logger.ts";
 import { Transport } from "../src/transport.ts";
@@ -1559,5 +1559,114 @@ describe("EventBuilder (wide events)", () => {
 		const output = formatLogRecord(record);
 		expect(output).toContain("http_request");
 		expect(output).toContain("142.5ms");
+	});
+});
+
+describe("captureConsole", () => {
+	afterEach(() => {
+		// Always restore so other tests aren't affected
+		console.log = originalConsole.log;
+		console.info = originalConsole.info;
+		console.warn = originalConsole.warn;
+		console.error = originalConsole.error;
+		console.debug = originalConsole.debug;
+	});
+
+	test("console.log routes through logger.info", () => {
+		const captured: { level: string; message: string; meta?: Record<string, unknown> }[] = [];
+		const log = createLogger({ console: false });
+		// Spy on the internal log by overriding info
+		const origInfo = log.info.bind(log);
+		log.info = (msg: string | Error, meta?: Record<string, unknown>) => {
+			captured.push({ level: "info", message: String(msg), meta });
+			origInfo(msg, meta);
+		};
+		log.captureConsole();
+
+		console.log("hello world");
+		expect(captured).toHaveLength(1);
+		expect(captured[0]!.message).toBe("hello world");
+		expect(captured[0]!.meta?.source).toBe("console");
+	});
+
+	test("console.warn routes through logger.warn", () => {
+		const captured: { level: string; message: string }[] = [];
+		const log = createLogger({ console: false });
+		const origWarn = log.warn.bind(log);
+		log.warn = (msg: string | Error, meta?: Record<string, unknown>) => {
+			captured.push({ level: "warn", message: String(msg) });
+			origWarn(msg, meta);
+		};
+		log.captureConsole();
+
+		console.warn("watch out");
+		expect(captured).toHaveLength(1);
+		expect(captured[0]!.message).toBe("watch out");
+	});
+
+	test("console.error routes through logger.error", () => {
+		const captured: { level: string; message: string }[] = [];
+		const log = createLogger({ console: false });
+		const origError = log.error.bind(log);
+		log.error = (msg: string | Error, meta?: Record<string, unknown>) => {
+			captured.push({ level: "error", message: String(msg) });
+			origError(msg, meta);
+		};
+		log.captureConsole();
+
+		console.error("something broke");
+		expect(captured).toHaveLength(1);
+		expect(captured[0]!.message).toBe("something broke");
+	});
+
+	test("console.debug routes through logger.debug", () => {
+		const captured: { level: string; message: string }[] = [];
+		const log = createLogger({ console: false, level: "debug" });
+		const origDebug = log.debug.bind(log);
+		log.debug = (msg: string | Error, meta?: Record<string, unknown>) => {
+			captured.push({ level: "debug", message: String(msg) });
+			origDebug(msg, meta);
+		};
+		log.captureConsole();
+
+		console.debug("dbg info");
+		expect(captured).toHaveLength(1);
+		expect(captured[0]!.message).toBe("dbg info");
+	});
+
+	test("console.log with multiple args uses util.format", () => {
+		const captured: string[] = [];
+		const log = createLogger({ console: false });
+		const origInfo = log.info.bind(log);
+		log.info = (msg: string | Error, meta?: Record<string, unknown>) => {
+			captured.push(String(msg));
+			origInfo(msg, meta);
+		};
+		log.captureConsole();
+
+		console.log("count: %d, name: %s", 42, "tim");
+		expect(captured[0]).toBe("count: 42, name: tim");
+	});
+
+	test("restoreConsole brings back original methods", () => {
+		const log = createLogger({ console: false });
+		const savedLog = console.log;
+		log.captureConsole();
+
+		expect(console.log).not.toBe(savedLog);
+		log.restoreConsole();
+		expect(console.log).toBe(originalConsole.log);
+	});
+
+	test("no infinite recursion when console is enabled", () => {
+		const log = createLogger({ console: true });
+		log.captureConsole();
+
+		// This would stack overflow if printLogRecord used the overridden console
+		console.log("recursion guard");
+		console.warn("warn recursion");
+		console.error("error recursion");
+
+		log.restoreConsole();
 	});
 });

@@ -16,12 +16,17 @@ const MINIO_BUCKET = process.env.MINIO_BUCKET;
 const HAS_MINIO = !!(MINIO_ENDPOINT && MINIO_ACCESS_KEY && MINIO_SECRET_KEY && MINIO_BUCKET);
 
 function tmpPath(prefix: string, ext: string): string {
-	return join(tmpdir(), `relog-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+	return join(
+		tmpdir(),
+		`relog-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`,
+	);
 }
 
 function cleanupDb(path: string): void {
 	for (const suffix of ["", "-wal", "-shm"]) {
-		try { unlinkSync(path + suffix); } catch {}
+		try {
+			unlinkSync(path + suffix);
+		} catch {}
 	}
 }
 
@@ -73,7 +78,9 @@ describe("groupByPartition", () => {
 	});
 
 	test("uses _default for missing project/branch", () => {
-		const logs = makeLogs([{ project: undefined as unknown as string, branch: undefined as unknown as string }]);
+		const logs = makeLogs([
+			{ project: undefined as unknown as string, branch: undefined as unknown as string },
+		]);
 		const partitions = groupByPartition(logs);
 		expect(partitions[0]!.project).toBe("_default");
 		expect(partitions[0]!.branch).toBe("_default");
@@ -122,24 +129,28 @@ describe("Parquet round-trip", () => {
 		} finally {
 			conn.closeSync();
 			instance.closeSync();
-			try { unlinkSync(parquetPath); } catch {}
+			try {
+				unlinkSync(parquetPath);
+			} catch {}
 		}
 	});
 
 	test("nullable columns survive as NULL", async () => {
-		const logs = makeLogs([{
-			service: undefined as unknown as string,
-			host: undefined as unknown as string,
-			pid: undefined as unknown as number,
-			trace_id: undefined as unknown as string,
-			span_id: undefined as unknown as string,
-			project: undefined as unknown as string,
-			branch: undefined as unknown as string,
-			version: undefined as unknown as string,
-			deployment_id: undefined as unknown as string,
-			key_prefix: undefined as unknown as string,
-			meta: undefined as unknown as Record<string, unknown>,
-		}]);
+		const logs = makeLogs([
+			{
+				service: undefined as unknown as string,
+				host: undefined as unknown as string,
+				pid: undefined as unknown as number,
+				trace_id: undefined as unknown as string,
+				span_id: undefined as unknown as string,
+				project: undefined as unknown as string,
+				branch: undefined as unknown as string,
+				version: undefined as unknown as string,
+				deployment_id: undefined as unknown as string,
+				key_prefix: undefined as unknown as string,
+				meta: undefined as unknown as Record<string, unknown>,
+			},
+		]);
 		const buffer = logsToParquet(logs);
 
 		const parquetPath = tmpPath("nulls", ".parquet");
@@ -167,7 +178,9 @@ describe("Parquet round-trip", () => {
 		} finally {
 			conn.closeSync();
 			instance.closeSync();
-			try { unlinkSync(parquetPath); } catch {}
+			try {
+				unlinkSync(parquetPath);
+			} catch {}
 		}
 	});
 
@@ -199,7 +212,9 @@ describe("Parquet round-trip", () => {
 		} finally {
 			conn.closeSync();
 			instance.closeSync();
-			try { unlinkSync(parquetPath); } catch {}
+			try {
+				unlinkSync(parquetPath);
+			} catch {}
 		}
 	});
 });
@@ -222,7 +237,9 @@ describe("DuckDB UNION ALL view (SQLite + Parquet)", () => {
 	afterAll(() => {
 		db.close();
 		cleanupDb(dbPath);
-		try { rmSync(parquetDir, { recursive: true }); } catch {}
+		try {
+			rmSync(parquetDir, { recursive: true });
+		} catch {}
 	});
 
 	test("DuckDB view combines hot SQLite rows with cold Parquet data", async () => {
@@ -384,7 +401,11 @@ describe("Database archive helpers", () => {
 	test("getLogsForArchive returns logs older than cutoff", () => {
 		const now = Date.now();
 		db.insert([
-			{ level: "info", message: "old log", timestamp: new Date(now - 86_400_000 * 10).toISOString() },
+			{
+				level: "info",
+				message: "old log",
+				timestamp: new Date(now - 86_400_000 * 10).toISOString(),
+			},
 			{ level: "info", message: "recent log", timestamp: new Date(now).toISOString() },
 		]);
 
@@ -408,15 +429,18 @@ describe("Database archive helpers", () => {
 	test("full archive pipeline: getLogsForArchive → logsToParquet → deleteByIds", () => {
 		const now = Date.now();
 		// Insert logs that are "archivable"
-		db.insert([
-			{
-				level: "error",
-				message: "pipeline test log",
-				version: "pipe-v1",
-				deployment_id: "pipe-deploy",
-				timestamp: new Date(now - 86_400_000 * 30).toISOString(),
-			},
-		], "sk-pipe");
+		db.insert(
+			[
+				{
+					level: "error",
+					message: "pipeline test log",
+					version: "pipe-v1",
+					deployment_id: "pipe-deploy",
+					timestamp: new Date(now - 86_400_000 * 30).toISOString(),
+				},
+			],
+			"sk-pipe",
+		);
 
 		const cutoff = now - 86_400_000 * 20;
 		const toArchive = db.getLogsForArchive(cutoff);
@@ -486,28 +510,31 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 		const oldTimestamp = new Date(now - 86_400_000 * 10).toISOString();
 
 		// Insert logs that are old enough to archive
-		db.insert([
-			{
-				level: "info",
-				message: "s3 archive test 1",
-				service: "test-svc",
-				project: "s3-proj",
-				branch: "main",
-				version: "s3-v1",
-				deployment_id: "s3-deploy",
-				timestamp: oldTimestamp,
-				meta: { source: "test" },
-			},
-			{
-				level: "error",
-				message: "s3 archive test 2",
-				service: "test-svc",
-				project: "s3-proj",
-				branch: "main",
-				version: "s3-v2",
-				timestamp: oldTimestamp,
-			},
-		], "sk-s3t");
+		db.insert(
+			[
+				{
+					level: "info",
+					message: "s3 archive test 1",
+					service: "test-svc",
+					project: "s3-proj",
+					branch: "main",
+					version: "s3-v1",
+					deployment_id: "s3-deploy",
+					timestamp: oldTimestamp,
+					meta: { source: "test" },
+				},
+				{
+					level: "error",
+					message: "s3 archive test 2",
+					service: "test-svc",
+					project: "s3-proj",
+					branch: "main",
+					version: "s3-v2",
+					timestamp: oldTimestamp,
+				},
+			],
+			"sk-s3t",
+		);
 
 		// Insert a recent log that should NOT be archived
 		db.insert([
