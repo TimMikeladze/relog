@@ -27,6 +27,10 @@ jobs:
         working-directory: app
         run: bun install --frozen-lockfile
 
+      - name: Install docs dependencies
+        working-directory: docs
+        run: bun install --frozen-lockfile
+
       - name: Build
         run: bun run build
 
@@ -34,6 +38,10 @@ jobs:
         run: bun run type-check
 
       - name: Lint
+        run: bun run lint
+
+      - name: Lint app
+        working-directory: app
         run: bun run lint
 
       - name: Setup Minio
@@ -60,9 +68,7 @@ jobs:
 
       - name: Build docs
         working-directory: docs
-        run: |
-          bun install --frozen-lockfile
-          bun run build
+        run: bun run build
 
   python:
     name: Python
@@ -106,6 +112,13 @@ jobs:
 
       - name: Install JS dependencies
         run: bun install --frozen-lockfile
+
+      - name: Install app dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
