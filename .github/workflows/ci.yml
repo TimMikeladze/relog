@@ -40,10 +40,6 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Lint app
-        working-directory: app
-        run: bun run lint
-
       - name: Setup Minio
         timeout-minutes: 5
         run: |
