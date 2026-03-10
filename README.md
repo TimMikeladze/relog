@@ -447,28 +447,28 @@ Start the log server.
 relog.dev start --port 3485 --admin-key mykey --cors true
 ```
 
-| Option                | Default             | Description                                                                          |
-| --------------------- | ------------------- | ------------------------------------------------------------------------------------ |
-| `--port`              | `3485`              | Port to listen on                                                                    |
-| `--db`                | `~/.relog/relog.db` | SQLite database file path                                                            |
-| `--ingest-key`        | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars |
-| `--read-key`          | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars     |
-| `--admin-key`         | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
-| `--key-prefix-length` | `6`                 | Number of API key characters stored per log for auditing (0 to disable)              |
-| `--cors`              | `false`             | Enable CORS headers                                                                  |
+| Option                | Default             | Description                                                                               |
+| --------------------- | ------------------- | ----------------------------------------------------------------------------------------- |
+| `--port`              | `3485`              | Port to listen on                                                                         |
+| `--db`                | `~/.relog/relog.db` | SQLite database file path                                                                 |
+| `--ingest-key`        | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars      |
+| `--read-key`          | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars          |
+| `--admin-key`         | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars        |
+| `--key-prefix-length` | `6`                 | Number of API key characters stored per log for auditing (0 to disable)                   |
+| `--cors`              | `false`             | Enable CORS headers                                                                       |
 | `--max-db-size`       | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes |
-| `--max-age-days`      | `30`                | Auto-prune logs older than N days                                                    |
-| `--prune-interval`    | `60`                | How often to check auto-prune thresholds, in seconds                                 |
-| `--no-prune`          | `false`             | Disable automatic pruning entirely                                                   |
-| `--s3-endpoint`       | —                   | S3/MinIO endpoint for archiving and reading archived data                            |
-| `--s3-bucket`         | —                   | S3 bucket name                                                                       |
-| `--s3-access-key`     | —                   | S3 access key ID                                                                     |
-| `--s3-secret-key`     | —                   | S3 secret access key                                                                 |
-| `--s3-prefix`         | `logs`              | S3 key prefix for archived Parquet files                                             |
-| `--s3-region`         | `us-east-1`         | S3 region                                                                            |
-| `--s3-url-style`      | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                           |
-| `--no-ui`             | `false`             | Disable serving the web UI                                                           |
-| `--no-open`           | `false`             | Serve the web UI but skip auto-opening it in the browser                             |
+| `--max-age-days`      | `30`                | Auto-prune logs older than N days                                                         |
+| `--prune-interval`    | `60`                | How often to check auto-prune thresholds, in seconds                                      |
+| `--no-prune`          | `false`             | Disable automatic pruning entirely                                                        |
+| `--s3-endpoint`       | —                   | S3/MinIO endpoint for archiving and reading archived data                                 |
+| `--s3-bucket`         | —                   | S3 bucket name                                                                            |
+| `--s3-access-key`     | —                   | S3 access key ID                                                                          |
+| `--s3-secret-key`     | —                   | S3 secret access key                                                                      |
+| `--s3-prefix`         | `logs`              | S3 key prefix for archived Parquet files                                                  |
+| `--s3-region`         | `us-east-1`         | S3 region                                                                                 |
+| `--s3-url-style`      | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                                 |
+| `--no-ui`             | `false`             | Disable serving the web UI                                                                |
+| `--no-open`           | `false`             | Serve the web UI but skip auto-opening it in the browser                                  |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
@@ -874,21 +874,21 @@ Child loggers share the parent's transport and inherit all bound metadata.
 
 ## HTTP API
 
-| Method   | Path               | Role    | Description                               |
-| -------- | ------------------ | ------- | ----------------------------------------- |
-| `POST`   | `/ingest`          | ingest  | Send log records (single object or array) |
-| `GET`    | `/logs`            | read    | Search logs with query params             |
-| `GET`    | `/stream`          | read    | SSE stream of new logs                    |
-| `POST`   | `/query`           | read    | Run read-only SQL                         |
-| `POST`   | `/query/stream`    | read    | Streaming SQL query results (NDJSON)      |
-| `POST`   | `/histogram`       | read    | Time-bucketed log counts                  |
-| `POST`   | `/prune`           | admin   | Delete logs before timestamp              |
-| `GET`    | `/aggregates`      | read    | List saved aggregates                     |
-| `GET`    | `/aggregates/:id`  | read    | Get a single aggregate                    |
-| `POST`   | `/aggregates`      | admin   | Create a saved aggregate                  |
-| `PUT`    | `/aggregates/:id`  | admin   | Update a saved aggregate                  |
-| `DELETE` | `/aggregates/:id`  | admin   | Delete a saved aggregate                  |
-| `GET`    | `/health`          | —       | Server health (no auth required)          |
+| Method   | Path              | Role   | Description                               |
+| -------- | ----------------- | ------ | ----------------------------------------- |
+| `POST`   | `/ingest`         | ingest | Send log records (single object or array) |
+| `GET`    | `/logs`           | read   | Search logs with query params             |
+| `GET`    | `/stream`         | read   | SSE stream of new logs                    |
+| `POST`   | `/query`          | read   | Run read-only SQL                         |
+| `POST`   | `/query/stream`   | read   | Streaming SQL query results (NDJSON)      |
+| `POST`   | `/histogram`      | read   | Time-bucketed log counts                  |
+| `POST`   | `/prune`          | admin  | Delete logs before timestamp              |
+| `GET`    | `/aggregates`     | read   | List saved aggregates                     |
+| `GET`    | `/aggregates/:id` | read   | Get a single aggregate                    |
+| `POST`   | `/aggregates`     | admin  | Create a saved aggregate                  |
+| `PUT`    | `/aggregates/:id` | admin  | Update a saved aggregate                  |
+| `DELETE` | `/aggregates/:id` | admin  | Delete a saved aggregate                  |
+| `GET`    | `/health`         | —      | Server health (no auth required)          |
 
 All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, `/histogram`, and `admin` for `/prune` and write operations on `/aggregates`.
 
@@ -999,15 +999,15 @@ curl -X POST http://localhost:3485/histogram \
   -d '{ "from": 1700000000000, "to": 1700086400000, "filters": { "level": "error" } }'
 ```
 
-| Field              | Required | Description                                          |
-| ------------------ | -------- | ---------------------------------------------------- |
-| `from`             | yes      | Start time (epoch ms)                                |
-| `to`               | yes      | End time (epoch ms)                                  |
-| `buckets`          | no       | Number of time buckets (1–1000, auto if omitted)     |
-| `filters.level`    | no       | Filter by log level                                  |
-| `filters.service`  | no       | Filter by service                                    |
-| `filters.project`  | no       | Filter by project                                    |
-| `filters.branch`   | no       | Filter by branch                                     |
+| Field             | Required | Description                                      |
+| ----------------- | -------- | ------------------------------------------------ |
+| `from`            | yes      | Start time (epoch ms)                            |
+| `to`              | yes      | End time (epoch ms)                              |
+| `buckets`         | no       | Number of time buckets (1–1000, auto if omitted) |
+| `filters.level`   | no       | Filter by log level                              |
+| `filters.service` | no       | Filter by service                                |
+| `filters.project` | no       | Filter by project                                |
+| `filters.branch`  | no       | Filter by branch                                 |
 
 ### `POST /prune`
 
@@ -1022,6 +1022,7 @@ Delete logs before a timestamp (epoch milliseconds).
 Saved log filters for dashboards and quick views. Stored as JSON on disk.
 
 **Create:**
+
 ```bash
 curl -X POST http://localhost:3485/aggregates \
   -H "Content-Type: application/json" \
@@ -1140,11 +1141,11 @@ Pass `--no-prune` to disable automatic pruning entirely.
 
 A plain `relog.dev start` automatically prunes with these defaults:
 
-| Threshold        | Default | Description                              |
-| ---------------- | ------- | ---------------------------------------- |
-| `--max-db-size`  | `500mb` | Delete oldest logs when DB exceeds 500MB |
-| `--max-age-days` | `30`    | Delete logs older than 30 days           |
-| `--prune-interval` | `60`  | Check thresholds every 60 seconds        |
+| Threshold          | Default | Description                              |
+| ------------------ | ------- | ---------------------------------------- |
+| `--max-db-size`    | `500mb` | Delete oldest logs when DB exceeds 500MB |
+| `--max-age-days`   | `30`    | Delete logs older than 30 days           |
+| `--prune-interval` | `60`    | Check thresholds every 60 seconds        |
 
 ### Examples
 

@@ -29,7 +29,9 @@ export const startCommand: Command = command({
 		maxDbSize: string("max-db-size")
 			.desc("Auto-prune when DB exceeds this size (e.g. 500mb, 1gb)")
 			.default(DEFAULT_MAX_DB_SIZE),
-		maxAgeDays: number("max-age-days").desc("Auto-prune logs older than N days").default(DEFAULT_MAX_AGE_DAYS),
+		maxAgeDays: number("max-age-days")
+			.desc("Auto-prune logs older than N days")
+			.default(DEFAULT_MAX_AGE_DAYS),
 		pruneInterval: number("prune-interval")
 			.desc("Auto-prune check interval in seconds")
 			.default(60),

@@ -651,5 +651,4 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 			duckdb.close();
 		}
 	});
-
 });
