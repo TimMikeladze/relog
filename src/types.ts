@@ -137,8 +137,8 @@ export interface RetryConfig {
 	maxDelayMs: number;
 }
 
-export interface ArchiveResult {
-	archived: number;
+export interface ArchiveBatchResult {
+	succeededIds: number[];
 	failed: number;
 	partitions: number;
 	errors: string[];

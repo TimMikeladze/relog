@@ -2,19 +2,10 @@ import { type Command, boolean, command, number, string } from "@drizzle-team/br
 import { startServer } from "../server/server.ts";
 import { getAppDistPath, getDefaultDbPath } from "../paths.ts";
 import type { ArchiveConfig, AutoPruneConfig } from "../types.ts";
+import { parseSize } from "./shared.ts";
 
-function parseSize(s: string): number {
-	const match = s.match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)$/i);
-	if (!match) {
-		const n = Number(s);
-		if (Number.isNaN(n)) throw new Error(`Invalid size: ${s}`);
-		return n;
-	}
-	const value = Number.parseFloat(match[1]!);
-	const unit = match[2]!.toLowerCase();
-	const multipliers: Record<string, number> = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
-	return Math.floor(value * multipliers[unit]!);
-}
+const DEFAULT_MAX_DB_SIZE = "500mb";
+const DEFAULT_MAX_AGE_DAYS = 30;
 
 export const startCommand: Command = command({
 	name: "start",
@@ -35,11 +26,14 @@ export const startCommand: Command = command({
 			.desc("Number of key characters stored per log for auditing (0 to disable)")
 			.default(6),
 		cors: string().desc("Enable CORS headers").default("false"),
-		maxDbSize: string("max-db-size").desc("Auto-prune when DB exceeds this size (e.g. 500mb, 1gb)"),
-		maxAgeDays: number("max-age-days").desc("Auto-prune logs older than N days"),
+		maxDbSize: string("max-db-size")
+			.desc("Auto-prune when DB exceeds this size (e.g. 500mb, 1gb)")
+			.default(DEFAULT_MAX_DB_SIZE),
+		maxAgeDays: number("max-age-days").desc("Auto-prune logs older than N days").default(DEFAULT_MAX_AGE_DAYS),
 		pruneInterval: number("prune-interval")
 			.desc("Auto-prune check interval in seconds")
 			.default(60),
+		noPrune: boolean("no-prune").desc("Disable automatic pruning entirely"),
 		s3Endpoint: string("s3-endpoint").desc("S3/MinIO endpoint for reading archived data"),
 		s3Bucket: string("s3-bucket").desc("S3 bucket name for archived data"),
 		s3AccessKey: string("s3-access-key").desc("S3 access key"),
@@ -82,7 +76,7 @@ export const startCommand: Command = command({
 		const adminKeys = resolveKeys(opts.adminKey, "RELOG_ADMIN_KEY");
 
 		let autoPrune: AutoPruneConfig | undefined;
-		if (opts.maxDbSize || opts.maxAgeDays) {
+		if (!opts.noPrune) {
 			autoPrune = {
 				maxDbSize: opts.maxDbSize ? parseSize(opts.maxDbSize) : undefined,
 				maxAgeDays: opts.maxAgeDays,

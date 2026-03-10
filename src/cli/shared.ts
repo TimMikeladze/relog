@@ -25,6 +25,19 @@ export function buildParams(values: Record<string, string | number | undefined>)
 	return params;
 }
 
+export function parseSize(s: string): number {
+	const match = s.match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)$/i);
+	if (!match) {
+		const n = Number(s);
+		if (Number.isNaN(n)) throw new Error(`Invalid size: ${s}`);
+		return n;
+	}
+	const value = Number.parseFloat(match[1]!);
+	const unit = match[2]!.toLowerCase();
+	const multipliers: Record<string, number> = { b: 1, kb: 1024, mb: 1024 ** 2, gb: 1024 ** 3 };
+	return Math.floor(value * multipliers[unit]!);
+}
+
 export function escapeCsv(value: unknown): string {
 	const str = String(value ?? "");
 	if (str.includes(",") || str.includes('"') || str.includes("\n")) {

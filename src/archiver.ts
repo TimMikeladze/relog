@@ -1,7 +1,6 @@
 import { S3Client } from "bun";
 import { parquetWriteBuffer } from "hyparquet-writer";
-import type { RelogDatabase } from "./db/database.ts";
-import type { ArchiveConfig, ArchiveResult, LogEntry, RetryConfig } from "./types.ts";
+import type { ArchiveConfig, ArchiveBatchResult, LogEntry, RetryConfig } from "./types.ts";
 
 export interface Partition {
 	project: string;
@@ -125,12 +124,11 @@ async function retryUpload(fn: () => Promise<void>, retry: RetryConfig): Promise
 	throw lastError;
 }
 
-export async function archiveLogs(
-	db: RelogDatabase,
+export async function archiveLogBatch(
+	logs: LogEntry[],
 	config: ArchiveConfig,
-	beforeMs: number,
 	retry?: RetryConfig,
-): Promise<ArchiveResult> {
+): Promise<ArchiveBatchResult> {
 	const client = new S3Client({
 		endpoint: config.endpoint,
 		bucket: config.bucket,
@@ -141,46 +139,28 @@ export async function archiveLogs(
 
 	const prefix = config.prefix ?? "logs";
 	const retryConfig = retry ?? { maxRetries: 0, baseDelayMs: 1000, maxDelayMs: 30000 };
-	let totalArchived = 0;
-	let totalFailed = 0;
-	let totalPartitions = 0;
+	const partitions = groupByPartition(logs);
+	const succeededIds: number[] = [];
+	let failed = 0;
+	let partitionCount = 0;
 	const errors: string[] = [];
-	const batchSize = 10000;
-	const maxIterations = 1000;
 
-	for (let iteration = 0; iteration < maxIterations; iteration++) {
-		const logs = db.getLogsForArchive(beforeMs, batchSize);
-		if (logs.length === 0) break;
+	for (const partition of partitions) {
+		const buffer = logsToParquet(partition.logs);
+		const key = s3Key(prefix, partition);
 
-		const partitions = groupByPartition(logs);
-		const succeededIds: number[] = [];
-
-		for (const partition of partitions) {
-			const buffer = logsToParquet(partition.logs);
-			const key = s3Key(prefix, partition);
-
-			try {
-				await retryUpload(async () => {
-					await client.write(key, buffer, { type: "application/octet-stream" });
-				}, retryConfig);
-				totalPartitions++;
-				succeededIds.push(...partition.logs.map((l) => l.id!));
-			} catch (err) {
-				const msg = `Failed partition ${partition.project}/${partition.branch}/${partition.year}-${partition.month}-${partition.day}: ${err instanceof Error ? err.message : err}`;
-				errors.push(msg);
-				totalFailed += partition.logs.length;
-			}
+		try {
+			await retryUpload(async () => {
+				await client.write(key, buffer, { type: "application/octet-stream" });
+			}, retryConfig);
+			partitionCount++;
+			succeededIds.push(...partition.logs.map((l) => l.id!));
+		} catch (err) {
+			const msg = `Failed partition ${partition.project}/${partition.branch}/${partition.year}-${partition.month}-${partition.day}: ${err instanceof Error ? err.message : err}`;
+			errors.push(msg);
+			failed += partition.logs.length;
 		}
-
-		if (succeededIds.length > 0) {
-			db.deleteByIds(succeededIds);
-			totalArchived += succeededIds.length;
-		}
-
-		// Stop if no partitions succeeded in this batch — all remaining logs
-		// belong to failing partitions and retrying would loop forever.
-		if (succeededIds.length === 0) break;
 	}
 
-	return { archived: totalArchived, failed: totalFailed, partitions: totalPartitions, errors };
+	return { succeededIds, failed, partitions: partitionCount, errors };
 }

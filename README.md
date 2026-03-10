@@ -19,12 +19,15 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Next.js integration** — drop-in console capture, request logging, error tracking, and browser proxy
 - **MCP server** — AI agents (Claude Code, Cursor, etc.) can query logs via Model Context Protocol
 - **Export** — JSON, CSV, and NDJSON export formats
+- **S3 archival** — archive old logs to S3/MinIO as Parquet files, then query both hot (SQLite) and cold (S3) data seamlessly via DuckDB
+- **Auto-prune** — automatic database maintenance with configurable size and age limits; archives to S3 before deleting when configured
+- **Aggregates** — saved log filters with CRUD API for dashboards and quick views
 
 ## Architecture
 
 ```
 ┌─────────────────────┐         ┌──────────────────────────────────┐
-│   Your Application  │         │       relog.dev startr             │
+│   Your Application  │         │       relog.dev server             │
 │                     │         │                                  │
 │  ┌───────────────┐  │  HTTP   │  ┌────────┐    ┌─────────────┐  │
 │  │ relog.dev client│──┼────────┼─▶│ /ingest │───▶│             │  │
@@ -48,7 +51,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 
 ┌─────────────────────┐
 │   relog.dev CLI      │  HTTP
-│                     │────────▶  relog.dev startr
+│                     │────────▶  relog.dev server
 │  tail | search      │
 │  query | export     │
 │  stats | prune      │
@@ -126,7 +129,7 @@ Start the server:
 
 ```bash
 bunx relog.dev start
-# relog.dev startr listening on http://localhost:3485
+# relog.dev server listening on http://localhost:3485
 ```
 
 Send logs from your app:
@@ -453,6 +456,19 @@ relog.dev start --port 3485 --admin-key mykey --cors true
 | `--admin-key`         | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars   |
 | `--key-prefix-length` | `6`                 | Number of API key characters stored per log for auditing (0 to disable)              |
 | `--cors`              | `false`             | Enable CORS headers                                                                  |
+| `--max-db-size`       | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes |
+| `--max-age-days`      | `30`                | Auto-prune logs older than N days                                                    |
+| `--prune-interval`    | `60`                | How often to check auto-prune thresholds, in seconds                                 |
+| `--no-prune`          | `false`             | Disable automatic pruning entirely                                                   |
+| `--s3-endpoint`       | —                   | S3/MinIO endpoint for archiving and reading archived data                            |
+| `--s3-bucket`         | —                   | S3 bucket name                                                                       |
+| `--s3-access-key`     | —                   | S3 access key ID                                                                     |
+| `--s3-secret-key`     | —                   | S3 secret access key                                                                 |
+| `--s3-prefix`         | `logs`              | S3 key prefix for archived Parquet files                                             |
+| `--s3-region`         | `us-east-1`         | S3 region                                                                            |
+| `--s3-url-style`      | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                           |
+| `--no-ui`             | `false`             | Disable serving the web UI                                                           |
+| `--no-open`           | `false`             | Serve the web UI but skip auto-opening it in the browser                             |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
@@ -721,7 +737,7 @@ export default relogMiddleware(myMiddleware);
 
 | Option           | Type       | Default                                    | Description                             |
 | ---------------- | ---------- | ------------------------------------------ | --------------------------------------- |
-| `url`            | `string`   | `RELOG_URL` env or `http://localhost:3485` | relog.dev startr URL                    |
+| `url`            | `string`   | `RELOG_URL` env or `http://localhost:3485` | relog.dev server URL                    |
 | `service`        | `string`   | `"next"`                                   | Service name                            |
 | `auth`           | `string`   | `RELOG_AUTH` env                           | API key (sent as Bearer token)          |
 | `level`          | `LogLevel` | `"info"`                                   | Minimum log level                       |
@@ -858,17 +874,23 @@ Child loggers share the parent's transport and inherit all bound metadata.
 
 ## HTTP API
 
-| Method | Path            | Description                               |
-| ------ | --------------- | ----------------------------------------- |
-| `POST` | `/ingest`       | Send log records (single object or array) |
-| `GET`  | `/logs`         | Search logs with query params             |
-| `GET`  | `/stream`       | SSE stream of new logs                    |
-| `POST` | `/query`        | Run read-only SQL                         |
-| `POST` | `/query/stream` | Streaming SQL query results (NDJSON)      |
-| `POST` | `/prune`        | Delete logs before timestamp              |
-| `GET`  | `/health`       | Server health                             |
+| Method   | Path               | Role    | Description                               |
+| -------- | ------------------ | ------- | ----------------------------------------- |
+| `POST`   | `/ingest`          | ingest  | Send log records (single object or array) |
+| `GET`    | `/logs`            | read    | Search logs with query params             |
+| `GET`    | `/stream`          | read    | SSE stream of new logs                    |
+| `POST`   | `/query`           | read    | Run read-only SQL                         |
+| `POST`   | `/query/stream`    | read    | Streaming SQL query results (NDJSON)      |
+| `POST`   | `/histogram`       | read    | Time-bucketed log counts                  |
+| `POST`   | `/prune`           | admin   | Delete logs before timestamp              |
+| `GET`    | `/aggregates`      | read    | List saved aggregates                     |
+| `GET`    | `/aggregates/:id`  | read    | Get a single aggregate                    |
+| `POST`   | `/aggregates`      | admin   | Create a saved aggregate                  |
+| `PUT`    | `/aggregates/:id`  | admin   | Update a saved aggregate                  |
+| `DELETE` | `/aggregates/:id`  | admin   | Delete a saved aggregate                  |
+| `GET`    | `/health`          | —       | Server health (no auth required)          |
 
-All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, and `admin` for `/prune`, `/archive`.
+All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, `/histogram`, and `admin` for `/prune` and write operations on `/aggregates`.
 
 ### `POST /ingest`
 
@@ -967,6 +989,26 @@ Returns `{ rows, count, time_ms }`.
 
 Same as `/query` but streams results as NDJSON. Useful for large result sets.
 
+### `POST /histogram`
+
+Get time-bucketed log counts for charting. The bucket count adapts to the time range if not specified.
+
+```bash
+curl -X POST http://localhost:3485/histogram \
+  -H "Content-Type: application/json" \
+  -d '{ "from": 1700000000000, "to": 1700086400000, "filters": { "level": "error" } }'
+```
+
+| Field              | Required | Description                                          |
+| ------------------ | -------- | ---------------------------------------------------- |
+| `from`             | yes      | Start time (epoch ms)                                |
+| `to`               | yes      | End time (epoch ms)                                  |
+| `buckets`          | no       | Number of time buckets (1–1000, auto if omitted)     |
+| `filters.level`    | no       | Filter by log level                                  |
+| `filters.service`  | no       | Filter by service                                    |
+| `filters.project`  | no       | Filter by project                                    |
+| `filters.branch`   | no       | Filter by branch                                     |
+
 ### `POST /prune`
 
 Delete logs before a timestamp (epoch milliseconds).
@@ -975,9 +1017,33 @@ Delete logs before a timestamp (epoch milliseconds).
 { "before": 1700000000000 }
 ```
 
+### Aggregates API
+
+Saved log filters for dashboards and quick views. Stored as JSON on disk.
+
+**Create:**
+```bash
+curl -X POST http://localhost:3485/aggregates \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "prod-errors",
+    "name": "Production Errors",
+    "filters": { "level": "error", "project": "my-app", "branch": "main" },
+    "icon": "🔴"
+  }'
+```
+
+**List all:** `GET /aggregates` → `{ aggregates: [...] }`
+
+**Get one:** `GET /aggregates/prod-errors` → `{ aggregate: {...} }`
+
+**Update:** `PUT /aggregates/prod-errors` with partial body
+
+**Delete:** `DELETE /aggregates/prod-errors`
+
 ### `GET /health`
 
-Returns `{ ok, uptime, db_size_bytes, log_count }`.
+Returns `{ ok, uptime, db_size_bytes, log_count }`. When auto-prune is configured, also includes `auto_prune: { max_db_size, max_age_days, interval_seconds, db_usage_pct }`.
 
 ## Database Schema
 
@@ -1036,12 +1102,98 @@ shutdown();
 | `maxBodySize`      | `number`                        | `5242880` | Max request body size in bytes (5 MB)               |
 | `maxBatchSize`     | `number`                        | `1000`    | Max log entries per ingest request                  |
 | `streamDebounceMs` | `number`                        | `50`      | Debounce interval for SSE stream updates            |
+| `autoPrune`        | `AutoPruneConfig`               | —         | Auto-prune configuration (see below)                |
+| `archive`          | `ArchiveConfig`                 | —         | S3 archive configuration (see below)                |
+| `uiDistPath`       | `string`                        | —         | Path to web UI dist folder                          |
+
+## Auto-Prune & Archival
+
+Auto-prune is **enabled by default** to prevent SQLite from growing unbounded. Out of the box, the server prunes logs older than 30 days and keeps the database under 500MB. When S3 is configured, logs are **archived to S3 as Parquet files before being deleted** from SQLite — no data is lost. When S3 is not configured, pruned logs are permanently deleted.
+
+Pass `--no-prune` to disable automatic pruning entirely.
+
+### How It Works
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     Auto-Prune Cycle                             │
+│                  (runs every --prune-interval)                   │
+│                                                                  │
+│  1. Age-based prune (if --max-age-days set):                     │
+│     └─ Find logs older than N days                               │
+│        ├─ S3 configured → archive to Parquet, then delete        │
+│        └─ No S3 → delete directly                                │
+│                                                                  │
+│  2. Size-based prune (if --max-db-size set):                     │
+│     └─ While DB size > threshold:                                │
+│        ├─ Fetch oldest 5000 logs                                 │
+│        ├─ S3 configured → archive to Parquet, then delete        │
+│        ├─ No S3 → delete directly                                │
+│        └─ Stall detection: stop if DB size didn't shrink         │
+│                                                                  │
+│  3. If anything was archived to S3:                               │
+│     └─ Refresh DuckDB view so queries see new Parquet files      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Defaults
+
+A plain `relog.dev start` automatically prunes with these defaults:
+
+| Threshold        | Default | Description                              |
+| ---------------- | ------- | ---------------------------------------- |
+| `--max-db-size`  | `500mb` | Delete oldest logs when DB exceeds 500MB |
+| `--max-age-days` | `30`    | Delete logs older than 30 days           |
+| `--prune-interval` | `60`  | Check thresholds every 60 seconds        |
+
+### Examples
+
+```bash
+# Default pruning — just start the server, no flags needed
+relog.dev start
+
+# Customize thresholds
+relog.dev start --max-db-size 2gb --max-age-days 90
+
+# Disable pruning entirely
+relog.dev start --no-prune
+
+# Archive to S3 before pruning — no data loss
+relog.dev start \
+  --s3-endpoint https://s3.amazonaws.com \
+  --s3-bucket my-logs-bucket \
+  --s3-access-key AKIA... \
+  --s3-secret-key secret...
+
+# MinIO / Tigris (path-style URLs)
+relog.dev start \
+  --max-age-days 7 \
+  --s3-endpoint http://minio:9000 \
+  --s3-bucket logs \
+  --s3-access-key minioadmin \
+  --s3-secret-key minioadmin \
+  --s3-url-style path
+```
+
+### Hot + Cold Storage
+
+When S3 is configured, relog.dev uses a **hot/cold storage architecture**:
+
+- **Hot**: Recent logs live in SQLite for fast writes and real-time streaming
+- **Cold**: Archived logs live in S3 as compressed Parquet files (Snappy codec)
+- **Unified queries**: DuckDB creates a UNION ALL view across both, so `/logs`, `/query`, and `/histogram` transparently query all data
+
+Parquet files are partitioned by `project/branch/year/month/day` for efficient range scans.
+
+### Retry Behavior
+
+S3 uploads use exponential backoff with jitter: `baseDelay * 2^attempt + random * baseDelay`, capped at `maxDelay`. The default retry config is 3 retries with 1–30s delays. If all retries fail for a partition, those logs stay in SQLite and will be retried on the next prune cycle.
 
 ## Environment Variables
 
 | Variable                    | Description                                                                        |
 | --------------------------- | ---------------------------------------------------------------------------------- |
-| `RELOG_URL`                 | Default relog.dev startr URL for the Next.js integration                           |
+| `RELOG_URL`                 | Default relog.dev server URL for the Next.js integration                           |
 | `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands                   |
 | `RELOG_INGEST_KEY*`         | API key(s) for ingest role — any env starting with `RELOG_INGEST_KEY` is collected |
 | `RELOG_READ_KEY*`           | API key(s) for read role — any env starting with `RELOG_READ_KEY` is collected     |

@@ -2,9 +2,9 @@ import { join } from "node:path";
 import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
 import { getAggregatesPath } from "../paths.ts";
+import { type PruneHandle, startAutoPrune } from "../pruner.ts";
 import type { ServerConfig } from "../types.ts";
 import { type AuthKeys, type AuthResult, checkRole } from "./middleware/auth.ts";
-import { ArchiveGuard, handleArchive } from "./routes/archive.ts";
 import { handleHealth } from "./routes/health.ts";
 import { handleIngest } from "./routes/ingest.ts";
 import { handleLogs } from "./routes/logs.ts";
@@ -95,7 +95,7 @@ export interface ServerInstance {
 	streamManager: StreamManager;
 	aggregatesManager: AggregatesManager;
 	shutdown: () => void;
-	autoPruneTimer?: ReturnType<typeof setInterval>;
+	pruneHandle?: PruneHandle;
 }
 
 export async function startServer(config: ServerConfig): Promise<ServerInstance> {
@@ -107,7 +107,6 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const aggregatesManager = new AggregatesManager(getAggregatesPath());
 	await aggregatesManager.init();
 	const ingestLimiter = new RateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
-	const archiveGuard = new ArchiveGuard();
 
 	const duckdb = new DuckDBReader(config.dbPath, config.archive);
 	await duckdb.init();
@@ -182,10 +181,6 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
 					response = await handleQueryStream(request, duckdb);
-				} else if (method === "POST" && path === "/archive") {
-					auth = checkRole(request, "admin", keys, prefixLen);
-					if (auth.error) return auth.error;
-					response = await handleArchive(request, db, config.archive, duckdb, archiveGuard);
 				} else if (method === "POST" && path === "/prune") {
 					auth = checkRole(request, "admin", keys, prefixLen);
 					if (auth.error) return auth.error;
@@ -234,42 +229,17 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		},
 	});
 
-	let autoPruneTimer: ReturnType<typeof setInterval> | undefined;
-
-	if (config.autoPrune) {
-		const { maxDbSize, maxAgeDays, intervalSeconds = 60 } = config.autoPrune;
-		if (maxDbSize || maxAgeDays) {
-			autoPruneTimer = setInterval(() => {
-				try {
-					let deleted = 0;
-					if (maxAgeDays) {
-						const cutoff = Date.now() - maxAgeDays * 86_400_000;
-						deleted += db.prune(cutoff);
-					}
-					if (maxDbSize && db.getDbSize() > maxDbSize) {
-						// Delete oldest 10% of logs by count to bring size down
-						const count = db.getLogCount();
-						const target = Math.max(Math.floor(count * 0.1), 1000);
-						const oldest = db.pruneOldest(target);
-						deleted += oldest;
-					}
-					if (deleted > 0) {
-						console.log(`[relog.dev] auto-prune: deleted ${deleted} logs`);
-					}
-				} catch (err) {
-					console.error("[relog.dev] auto-prune error:", err);
-				}
-			}, intervalSeconds * 1000);
-		}
-	}
+	const pruneHandle = config.autoPrune
+		? startAutoPrune(db, config.autoPrune, config.archive, () => duckdb.refreshView())
+		: undefined;
 
 	const shutdown = () => {
-		if (autoPruneTimer) clearInterval(autoPruneTimer);
+		pruneHandle?.stop();
 		streamManager.shutdown();
 		server.stop();
 		duckdb?.close();
 		db.close();
 	};
 
-	return { server, db, duckdb, streamManager, aggregatesManager, shutdown, autoPruneTimer };
+	return { server, db, duckdb, streamManager, aggregatesManager, shutdown, pruneHandle };
 }

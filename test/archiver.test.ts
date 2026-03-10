@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { S3Client } from "bun";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { logsToParquet, groupByPartition, archiveLogs } from "../src/archiver.ts";
+import { logsToParquet, groupByPartition, archiveLogBatch } from "../src/archiver.ts";
 import { RelogDatabase } from "../src/db/database.ts";
 import { DuckDBReader } from "../src/db/duckdb.ts";
 import type { ArchiveConfig, LogEntry } from "../src/types.ts";
@@ -505,11 +505,11 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 		// Note: Bun's S3Client doesn't have list, so we'll leave cleanup to the bucket lifecycle
 	});
 
-	test("archiveLogs uploads Parquet to S3 and deletes from SQLite", async () => {
+	test("archiveLogBatch uploads Parquet to S3 and returns succeeded IDs", async () => {
 		const now = Date.now();
 		const oldTimestamp = new Date(now - 86_400_000 * 10).toISOString();
 
-		// Insert logs that are old enough to archive
+		// Insert logs to archive
 		db.insert(
 			[
 				{
@@ -536,7 +536,7 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 			"sk-s3t",
 		);
 
-		// Insert a recent log that should NOT be archived
+		// Insert a recent log that we won't include in the batch
 		db.insert([
 			{
 				level: "info",
@@ -545,19 +545,22 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 			},
 		]);
 
-		const beforeCount = db.getLogCount();
-		expect(beforeCount).toBe(3);
+		expect(db.getLogCount()).toBe(3);
 
-		// Archive logs older than 5 days
+		// Get old logs and archive them via archiveLogBatch
 		const cutoff = now - 86_400_000 * 5;
-		const result = await archiveLogs(db, archiveConfig, cutoff);
+		const logs = db.getLogsForArchive(cutoff, 1000);
+		expect(logs.length).toBe(2);
 
-		expect(result.archived).toBe(2);
+		const result = await archiveLogBatch(logs, archiveConfig);
+
+		expect(result.succeededIds.length).toBe(2);
 		expect(result.failed).toBe(0);
 		expect(result.partitions).toBeGreaterThanOrEqual(1);
 		expect(result.errors).toHaveLength(0);
 
-		// Archived logs should be deleted from SQLite
+		// Delete archived logs from SQLite (as the pruner would)
+		db.deleteByIds(result.succeededIds);
 		expect(db.getLogCount()).toBe(1);
 
 		// The remaining log should be the recent one
@@ -649,10 +652,4 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 		}
 	});
 
-	test("archiveLogs with no matching logs is a no-op", async () => {
-		const result = await archiveLogs(db, archiveConfig, 0);
-		expect(result.archived).toBe(0);
-		expect(result.failed).toBe(0);
-		expect(result.partitions).toBe(0);
-	});
 });

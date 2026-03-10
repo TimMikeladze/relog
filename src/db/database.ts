@@ -122,9 +122,22 @@ export class RelogDatabase {
 
 	getDbSize(): number {
 		const row = this.readonlyDb
-			.prepare("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()")
+			.prepare(
+				"SELECT (page_count - freelist_count) * page_size as size FROM pragma_page_count(), pragma_page_size(), pragma_freelist_count()",
+			)
 			.get() as { size: number };
 		return row.size;
+	}
+
+	getOldestLogs(limit: number): LogEntry[] {
+		const rows = this.readonlyDb
+			.prepare("SELECT * FROM logs ORDER BY created_at ASC LIMIT ?")
+			.all(limit) as LogEntry[];
+		return rows.map((row) => ({ ...row, meta: parseMeta(row.meta) }));
+	}
+
+	walCheckpoint(): void {
+		this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
 	}
 
 	getLogsSince(lastId: number, filters: StreamFilters = {}, limit: number = 100): LogEntry[] {
