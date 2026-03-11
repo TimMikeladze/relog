@@ -25,16 +25,27 @@ export class DuckDBReader {
 	private instance: DuckDBInstance | null = null;
 	private sqlitePath: string;
 	private archive?: ArchiveConfig;
+	private pool: DuckDBConnection[] = [];
+	private maxPoolSize = 4;
 
 	constructor(sqlitePath: string, archive?: ArchiveConfig) {
 		this.sqlitePath = sqlitePath;
 		this.archive = archive;
 	}
 
-	/** Get a fresh connection for each operation (safe for concurrency). */
-	private async connect(): Promise<DuckDBConnection> {
+	private async acquire(): Promise<DuckDBConnection> {
+		const conn = this.pool.pop();
+		if (conn) return conn;
 		if (!this.instance) throw new Error("DuckDB not initialized");
 		return this.instance.connect();
+	}
+
+	private release(conn: DuckDBConnection, errored = false): void {
+		if (errored || this.pool.length >= this.maxPoolSize) {
+			conn.closeSync();
+		} else {
+			this.pool.push(conn);
+		}
 	}
 
 	async init(): Promise<void> {
@@ -52,17 +63,23 @@ export class DuckDBReader {
 
 				const endpoint = this.archive.endpoint.replace(/^https?:\/\//, "");
 				const useSsl = this.archive.endpoint.startsWith("https");
-				await conn.run(`
-					CREATE SECRET relog_s3 (
-						TYPE S3,
-						KEY_ID '${escapeString(this.archive.accessKeyId)}',
-						SECRET '${escapeString(this.archive.secretAccessKey)}',
-						ENDPOINT '${escapeString(endpoint)}',
-						URL_STYLE '${this.archive.urlStyle ?? "path"}',
-						USE_SSL ${useSsl},
-						REGION '${escapeString(this.archive.region ?? "us-east-1")}'
+				try {
+					await conn.run(`
+						CREATE SECRET relog_s3 (
+							TYPE S3,
+							KEY_ID '${escapeString(this.archive.accessKeyId)}',
+							SECRET '${escapeString(this.archive.secretAccessKey)}',
+							ENDPOINT '${escapeString(endpoint)}',
+							URL_STYLE '${this.archive.urlStyle ?? "path"}',
+							USE_SSL ${useSsl},
+							REGION '${escapeString(this.archive.region ?? "us-east-1")}'
+						);
+					`);
+				} catch {
+					throw new Error(
+						"Failed to configure S3 access in DuckDB — check endpoint, bucket, and credentials",
 					);
-				`);
+				}
 
 				await this.createLogsView(conn);
 			} else {
@@ -99,17 +116,22 @@ export class DuckDBReader {
 
 	/** Recreate the logs view so newly archived Parquet files become visible. */
 	async refreshView(): Promise<void> {
-		const conn = await this.connect();
+		const conn = await this.acquire();
+		let errored = false;
 		try {
 			await this.createLogsView(conn);
+		} catch (err) {
+			errored = true;
+			throw err;
 		} finally {
-			conn.closeSync();
+			this.release(conn, errored);
 		}
 	}
 
 	async query(sql: string, params?: unknown[], maxRows: number = 10000): Promise<QueryResult> {
 		const safeSql = validateQuery(sql, maxRows);
-		const conn = await this.connect();
+		const conn = await this.acquire();
+		let errored = false;
 		try {
 			const start = performance.now();
 			const reader =
@@ -120,8 +142,11 @@ export class DuckDBReader {
 			const rows = rawRows.map(coerceRow);
 			const time_ms = Math.round((performance.now() - start) * 100) / 100;
 			return { rows, count: rows.length, time_ms };
+		} catch (err) {
+			errored = true;
+			throw err;
 		} finally {
-			conn.closeSync();
+			this.release(conn, errored);
 		}
 	}
 
@@ -130,7 +155,8 @@ export class DuckDBReader {
 		maxRows: number = 10000,
 	): AsyncIterableIterator<Record<string, unknown>> {
 		const safeSql = validateQuery(sql, maxRows);
-		const conn = await this.connect();
+		const conn = await this.acquire();
+		let errored = false;
 		try {
 			const result = await conn.stream(safeSql);
 			while (true) {
@@ -142,8 +168,11 @@ export class DuckDBReader {
 					yield coerceRow(row as Record<string, unknown>);
 				}
 			}
+		} catch (err) {
+			errored = true;
+			throw err;
 		} finally {
-			conn.closeSync();
+			this.release(conn, errored);
 		}
 	}
 
@@ -193,7 +222,8 @@ export class DuckDBReader {
 		const limit = opts.limit ?? 100;
 		const offset = opts.offset ?? 0;
 
-		const conn = await this.connect();
+		const conn = await this.acquire();
+		let errored = false;
 		try {
 			let total = -1;
 			if (opts.includeTotal !== false) {
@@ -258,8 +288,11 @@ export class DuckDBReader {
 				rows: rows.map((row) => ({ ...row, meta: parseMeta(row.meta) })),
 				total,
 			};
+		} catch (err) {
+			errored = true;
+			throw err;
 		} finally {
-			conn.closeSync();
+			this.release(conn, errored);
 		}
 	}
 
@@ -318,7 +351,8 @@ export class DuckDBReader {
 			LIMIT 100000
 		`;
 
-		const conn = await this.connect();
+		const conn = await this.acquire();
+		let errored = false;
 		try {
 			const reader = await conn.runAndReadAll(sql, params as (string | number | bigint)[]);
 			const rows = reader.getRowObjects() as {
@@ -367,8 +401,11 @@ export class DuckDBReader {
 			}
 
 			return { buckets: Array.from(bucketMap.values()), bucket_ms: bucketMs };
+		} catch (err) {
+			errored = true;
+			throw err;
 		} finally {
-			conn.closeSync();
+			this.release(conn, errored);
 		}
 	}
 
@@ -379,7 +416,8 @@ export class DuckDBReader {
 		projects: Record<string, number>;
 		versions: Record<string, number>;
 	}> {
-		const conn = await this.connect();
+		const conn = await this.acquire();
+		let errored = false;
 		try {
 			const reader = await conn.runAndReadAll(`
 				SELECT
@@ -417,12 +455,19 @@ export class DuckDBReader {
 			}
 
 			return { log_count: totalCount, levels, services, projects, versions };
+		} catch (err) {
+			errored = true;
+			throw err;
 		} finally {
-			conn.closeSync();
+			this.release(conn, errored);
 		}
 	}
 
 	close(): void {
+		for (const conn of this.pool) {
+			conn.closeSync();
+		}
+		this.pool.length = 0;
 		if (this.instance) {
 			this.instance.closeSync();
 			this.instance = null;

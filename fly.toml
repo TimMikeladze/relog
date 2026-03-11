@@ -1,0 +1,35 @@
+app = "relog"
+primary_region = "iad"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+
+# API keys — set via: fly secrets set RELOG_ADMIN_KEY=your-secret-key
+# RELOG_INGEST_KEY  — ingest-only access
+# RELOG_READ_KEY    — read + ingest access
+# RELOG_ADMIN_KEY   — full access (ingest + read + prune)
+
+[http_service]
+  internal_port = 3485
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[mounts]
+  source = "relog_data"
+  destination = "/data"
+  initial_size = "3gb"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

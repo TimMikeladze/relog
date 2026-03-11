@@ -139,9 +139,9 @@ export const startCommand: Command = command({
 			Bun.spawn([opener, url], { stdout: null, stderr: null });
 		}
 
-		const onSignal = () => {
-			console.log("\nShutting down...");
-			shutdown();
+		const onSignal = async () => {
+			console.log("\nShutting down gracefully...");
+			await shutdown();
 			process.exit(0);
 		};
 		process.once("SIGINT", onSignal);

@@ -13,14 +13,35 @@ export class StreamManager {
 	private db: RelogDatabase;
 	private encoder = new TextEncoder();
 	private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 	private debounceMs: number;
 	private maxClients: number;
+	private heartbeatMs: number;
 	private closed = false;
 
-	constructor(db: RelogDatabase, debounceMs: number = 50, maxClients: number = 100) {
+	constructor(db: RelogDatabase, debounceMs: number = 50, maxClients: number = 100, heartbeatMs: number = 30_000) {
 		this.db = db;
 		this.debounceMs = debounceMs;
 		this.maxClients = maxClients;
+		this.heartbeatMs = heartbeatMs;
+		this.startHeartbeat();
+	}
+
+	private startHeartbeat(): void {
+		this.heartbeatTimer = setInterval(() => {
+			if (this.closed || this.clients.size === 0) return;
+			const failed: StreamClient[] = [];
+			for (const client of this.clients) {
+				try {
+					client.controller.enqueue(this.encoder.encode(": heartbeat\n\n"));
+				} catch {
+					failed.push(client);
+				}
+			}
+			for (const client of failed) {
+				this.clients.delete(client);
+			}
+		}, this.heartbeatMs);
 	}
 
 	notify(): void {
@@ -56,8 +77,13 @@ export class StreamManager {
 			clearTimeout(this.debounceTimer);
 			this.debounceTimer = null;
 		}
+		if (this.heartbeatTimer) {
+			clearInterval(this.heartbeatTimer);
+			this.heartbeatTimer = null;
+		}
 		for (const client of this.clients) {
 			try {
+				client.controller.enqueue(this.encoder.encode("event: close\ndata: server shutting down\n\n"));
 				client.controller.close();
 			} catch {
 				// already closed

@@ -1793,6 +1793,39 @@ describe("CORS OPTIONS preflight edge cases", () => {
 });
 
 describe("StreamManager lifecycle", () => {
+	test("shutdown sends close event to connected clients", async () => {
+		const p = tmpDbPath();
+		const s = await startServer({ port: 0, dbPath: p });
+		const url = `http://localhost:${s.server.port}`;
+
+		const res = await fetch(`${url}/stream`);
+		const reader = res.body!.getReader();
+		const decoder = new TextDecoder();
+
+		// Read the initial ": connected" comment
+		let received = "";
+		const { value } = await reader.read();
+		if (value) received += decoder.decode(value);
+		expect(received).toContain("connected");
+
+		// Shutdown — should send close event before disconnecting
+		s.streamManager.shutdown();
+
+		// Read remaining data until stream ends
+		let closeData = "";
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (value) closeData += decoder.decode(value);
+			if (done) break;
+		}
+		expect(closeData).toContain("event: close");
+		expect(closeData).toContain("server shutting down");
+
+		s.server.stop();
+		s.db.close();
+		cleanupDb(p);
+	});
+
 	test("shutdown is idempotent", async () => {
 		const p = tmpDbPath();
 		const s = await startServer({ port: 0, dbPath: p });

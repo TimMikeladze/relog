@@ -18,5 +18,4 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 .turbo
-relog.db*
-test-e2e.db*
+*.db*

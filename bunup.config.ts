@@ -13,5 +13,6 @@ export default defineConfig([
 		entry: ["src/browser.ts"],
 		dts: true,
 		target: "browser",
+		clean: false,
 	},
 ]);

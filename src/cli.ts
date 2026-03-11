@@ -1,4 +1,8 @@
 #!/usr/bin/env bun
+process.on("unhandledRejection", (err) => {
+	console.error("[relog.dev] Unhandled promise rejection:", err);
+});
+
 import { run } from "@drizzle-team/brocli";
 import { deleteDbCommand } from "./cli/delete-db.ts";
 import { exportCommand } from "./cli/export.ts";

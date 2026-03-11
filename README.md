@@ -22,6 +22,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **S3 archival** — archive old logs to S3/MinIO as Parquet files, then query both hot (SQLite) and cold (S3) data seamlessly via DuckDB
 - **Auto-prune** — automatic database maintenance with configurable size and age limits; archives to S3 before deleting when configured
 - **Aggregates** — saved log filters with CRUD API for dashboards and quick views
+- **Docker & Fly.io** — production-ready Dockerfile and fly.toml for single-instance deployment with persistent SQLite volumes
 
 ## Architecture
 
@@ -1189,6 +1190,64 @@ Parquet files are partitioned by `project/branch/year/month/day` for efficient r
 ### Retry Behavior
 
 S3 uploads use exponential backoff with jitter: `baseDelay * 2^attempt + random * baseDelay`, capped at `maxDelay`. The default retry config is 3 retries with 1–30s delays. If all retries fail for a partition, those logs stay in SQLite and will be retried on the next prune cycle.
+
+## Deploy
+
+### Docker
+
+```bash
+docker build -t relog .
+docker run -p 3485:3485 -v relog_data:/data relog
+```
+
+The server stores its SQLite database at `/data/relog.db` inside the container. Mount a volume to `/data` for persistence.
+
+Set API keys via environment variables:
+
+```bash
+docker run -p 3485:3485 -v relog_data:/data \
+  -e RELOG_ADMIN_KEY=your-secret-key \
+  relog
+```
+
+### Fly.io
+
+The included `fly.toml` is configured for a single-instance deployment with a persistent volume for SQLite.
+
+```bash
+# First time setup
+fly launch --no-deploy
+fly volumes create relog_data --region iad --size 3
+
+# Set API keys as secrets
+fly secrets set RELOG_ADMIN_KEY=your-secret-key
+
+# Deploy
+fly deploy
+```
+
+The default configuration:
+
+| Setting | Value | Description |
+| --- | --- | --- |
+| VM | `shared-cpu-1x` | Shared CPU with 1GB memory |
+| Volume | `3gb` | Persistent storage at `/data` |
+| Health check | `/health` every 30s | Excluded from auth |
+| Auto-stop | `off` | Always-on (logging servers can't sleep) |
+| Auto-prune | `500mb` / `30d` | Default size and age limits |
+
+To archive to S3 before pruning (Tigris is Fly.io's native S3-compatible storage):
+
+```bash
+fly secrets set \
+  RELOG_ADMIN_KEY=your-secret-key
+
+fly deploy -- \
+  --s3-endpoint https://fly.storage.tigris.dev \
+  --s3-bucket my-logs \
+  --s3-access-key $TIGRIS_ACCESS_KEY \
+  --s3-secret-key $TIGRIS_SECRET_KEY
+```
 
 ## Environment Variables
 

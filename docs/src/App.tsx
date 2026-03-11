@@ -243,16 +243,18 @@ function App() {
 				<LivePreview />
 				{/* 3. Friction removal: ready to start? Here's how */}
 				<Examples />
-				{/* 4. Product polish: see the real app */}
-				<AppScreenshots />
+				{/* 4. Unique differentiators: why relog, not alternatives */}
+				<ValueProps />
 				{/* 5. Reduce complexity anxiety: "it's simple" */}
 				<Architecture />
-				{/* 6. Unique differentiators: why relog, not alternatives */}
-				<ValueProps />
+				{/* 6. Product polish: see the real app */}
+				<AppScreenshots />
 				{/* 7. Reassurance checklist: yes, it does that too */}
-				<Features />
+				<Checklist />
 				{/* 8. Overcome final objections */}
 				<FAQ />
+				{/* 9. Final push */}
+				<ClosingCTA />
 				<Footer />
 			</main>
 		</div>
@@ -327,8 +329,9 @@ function Hero() {
 				transition={{ duration: 0.6, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
 				className="text-dim text-[15px] leading-[1.7] mb-6 max-w-lg"
 			>
-				Self-hosted log server backed by Bun, SQLite, DuckDB, and object storage. Ship structured
-				logs, query with SQL, stream in real-time, and let AI agents analyze everything via MCP.
+				Ship structured logs from TypeScript, Python, or the browser. Query with SQL. Stream in
+				real-time. Give your AI agents full access via MCP.{" "}
+				<span className="text-muted">Self-hosted, free forever, MIT licensed.</span>
 			</motion.p>
 
 			<motion.div
@@ -336,7 +339,7 @@ function Hero() {
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.6, delay: 0.5 }}
 			>
-				<div className="inline-flex bg-bg-code border border-white/[0.06] rounded-lg px-4 py-2 font-mono text-[13px] items-center gap-2.5">
+				<div className="inline-flex bg-bg-code border border-white/[0.06] rounded-lg px-4 py-2.5 font-mono text-[13px] items-center gap-2.5">
 					<span className="text-muted select-none">$</span>
 					<span className="text-fg">bunx relog.dev start</span>
 					<CopyButton text="bunx relog.dev start" />
@@ -771,7 +774,7 @@ function LivePreview() {
 				return;
 			}
 			setVisible(MOCK_LOGS.slice(0, count));
-		}, 60);
+		}, 25);
 		return () => clearInterval(interval);
 	}, [inView]);
 
@@ -800,7 +803,7 @@ function LivePreview() {
 						<span className="min-w-0 flex-1 py-1.5 pr-3">Message</span>
 					</div>
 					{/* Log rows */}
-					<div className="max-h-[340px] overflow-y-auto relative">
+					<div className="max-h-[240px] overflow-y-auto relative">
 						{visible.map((log, i) => (
 							<div key={i}>
 								<LogRow
@@ -837,7 +840,7 @@ function AppScreenshots() {
 	return (
 		<section className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
 			<Reveal>
-				<h2 className="text-lg font-semibold tracking-tight mb-4">The app</h2>
+				<h2 className="text-lg font-semibold tracking-tight mb-4">See it in action</h2>
 			</Reveal>
 
 			<Reveal delay={0.1}>
@@ -1095,10 +1098,14 @@ function Architecture() {
 	return (
 		<section ref={ref} className="max-w-5xl mx-auto px-5 sm:px-8 py-14">
 			<Reveal>
-				<h2 className="text-lg font-semibold tracking-tight mb-2">Three moving parts</h2>
-				<p className="text-[13px] text-muted mb-6">
-					Bun server writes to SQLite in WAL mode. Old logs get archived to S3 as Parquet files.
-					DuckDB queries both hot (SQLite) and cold (S3) data transparently.
+				<h2 className="text-lg font-semibold tracking-tight mb-2">How it works</h2>
+				<p className="text-[13px] text-muted mb-6 max-w-2xl">
+					SDKs batch and ship logs to a Bun server over HTTP. The server writes to SQLite in WAL
+					mode for high-throughput concurrent reads and writes. When logs age out, an archive
+					command converts them to Parquet files on S3, R2, or MinIO. DuckDB sits on top as the
+					query engine — it reads both hot data in SQLite and cold data in object storage, so
+					every query spans your full history without loading everything into memory. The Web UI,
+					CLI, MCP server, and raw SQL all talk to DuckDB.
 				</p>
 			</Reveal>
 
@@ -1119,9 +1126,9 @@ function ValueProps() {
 	return (
 		<section ref={ref} className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
 			<Reveal>
-				<h2 className="text-lg font-semibold tracking-tight mb-2">What makes it different</h2>
+				<h2 className="text-lg font-semibold tracking-tight mb-2">Why relog?</h2>
 				<p className="text-[13px] text-muted mb-6">
-					Not just another logger. Wide events, tail sampling, and AI-native from day one.
+					Not just another logger. Wide events, tail sampling, and AI agents — from day one.
 				</p>
 			</Reveal>
 
@@ -1235,80 +1242,91 @@ function ValueProps() {
 	);
 }
 
-// ─── Features ────────────────────────────────────────────────────────
-function Features() {
-	const categories: { title: string; color: string; items: { label: string; desc: string }[] }[] = [
-		{
-			title: "Ingestion",
-			color: "bg-emerald-400",
-			items: [
-				{ label: "TypeScript SDK", desc: "Batching, retries, child loggers, flush on shutdown" },
-				{ label: "Python SDK", desc: "Context managers, wide events, structured logging" },
-				{ label: "Browser SDK", desc: "Console capture, error tracking, session IDs" },
-				{
-					label: "Next.js integration",
-					desc: "Console capture, error handler, browser proxy route",
-				},
-				{ label: "Wide events", desc: "One event per request — .request(), .response(), .end()" },
-				{ label: "Tail sampling", desc: "Sample normal traffic, keep errors and slow requests" },
-			],
-		},
-		{
-			title: "Storage & Query",
-			color: "bg-amber-400",
-			items: [
-				{ label: "SQLite + WAL mode", desc: "Single file, no external database to manage" },
-				{ label: "S3 + Parquet archival", desc: "Archive old logs, query cold data with DuckDB" },
-				{ label: "SQL queries", desc: "Full SELECT against your logs with DuckDB" },
-				{ label: "Full-text search", desc: "Fast substring search across messages and meta" },
-				{
-					label: "Real-time tail",
-					desc: "SSE streaming with server-side level and service filters",
-				},
-				{ label: "Distributed tracing", desc: "trace_id and span_id propagation and grouping" },
-			],
-		},
-		{
-			title: "Platform",
-			color: "bg-blue-400",
-			items: [
-				{ label: "Web UI", desc: "Explore, traces, query, and dashboard views" },
-				{ label: "CLI", desc: "tail, search, query, export, stats from terminal" },
-				{ label: "MCP server", desc: "AI agents search and query logs via tool use" },
-				{ label: "Role-based auth", desc: "Ingest, read, admin tiers with Bearer tokens" },
-				{ label: "Deployment context", desc: "First-class version, branch, and deployment_id" },
-				{ label: "Zero config", desc: "bunx relog.dev start — single command, no setup" },
-			],
-		},
+// ─── Checklist — scannable feature list ───────────────────────────────
+function Checklist() {
+	const items = [
+		"TypeScript SDK",
+		"Python SDK",
+		"Browser SDK",
+		"Next.js integration",
+		"Wide events",
+		"Tail sampling",
+		"SQLite + WAL mode",
+		"S3 / R2 archival",
+		"SQL queries via DuckDB",
+		"Full-text search",
+		"Real-time streaming",
+		"Distributed tracing",
+		"Web UI",
+		"CLI",
+		"MCP server",
+		"Role-based auth",
+		"Deployment context",
+		"Zero config",
 	];
 
 	return (
 		<section className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
 			<Reveal>
-				<h2 className="text-lg font-semibold tracking-tight mb-6">Everything you need</h2>
+				<h2 className="text-lg font-semibold tracking-tight mb-4">Everything included</h2>
 			</Reveal>
-			<div className="grid sm:grid-cols-3 gap-6">
-				{categories.map((cat, ci) => (
-					<Reveal key={cat.title} delay={ci * 0.08}>
-						<div>
-							<div className="flex items-center gap-2 mb-3">
-								<span className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />
-								<span className="text-[12px] font-semibold uppercase tracking-wider text-muted/60">
-									{cat.title}
-								</span>
-							</div>
-							<div className="space-y-2.5">
-								{cat.items.map((f) => (
-									<div key={f.label}>
-										<p className="text-[13px] font-medium text-fg">{f.label}</p>
-										<p className="text-[12px] text-muted leading-relaxed">{f.desc}</p>
-									</div>
-								))}
-							</div>
-						</div>
-					</Reveal>
-				))}
-			</div>
+			<Reveal delay={0.1}>
+				<div className="grid grid-cols-2 sm:grid-cols-3 gap-x-8 gap-y-2.5 rounded-lg border border-white/[0.06] bg-white/[0.015] p-5">
+					{items.map((item, i) => (
+						<motion.div
+							key={item}
+							initial={{ opacity: 0 }}
+							whileInView={{ opacity: 1 }}
+							viewport={{ once: true }}
+							transition={{ delay: i * 0.02, duration: 0.3 }}
+							className="flex items-center gap-2 text-[13px]"
+						>
+							<span className="text-emerald-400/60 text-[11px]">✓</span>
+							<span className="text-dim">{item}</span>
+						</motion.div>
+					))}
+				</div>
+			</Reveal>
+		</section>
+	);
+}
+
+// ─── Closing CTA ──────────────────────────────────────────────────────
+function ClosingCTA() {
+	return (
+		<section className="max-w-5xl mx-auto px-5 sm:px-8 py-16">
+			<Reveal>
+				<div className="text-center">
+					<h2 className="text-xl sm:text-2xl font-bold tracking-tight mb-2">
+						Ready to replace{" "}
+						<code className="font-mono text-amber-400/80 text-[0.9em]">console.log</code>?
+					</h2>
+					<p className="text-[13px] text-muted mb-6">
+						One command. Zero config. Your logs, your infrastructure.
+					</p>
+					<div className="inline-flex bg-bg-code border border-white/[0.06] rounded-lg px-4 py-2.5 font-mono text-[13px] items-center gap-2.5">
+						<span className="text-muted select-none">$</span>
+						<span className="text-fg">bunx relog.dev start</span>
+						<CopyButton text="bunx relog.dev start" />
+					</div>
+					<div className="flex items-center justify-center gap-3 mt-5">
+						<a
+							href="https://github.com/TimMikeladze/relog"
+							className="inline-flex items-center gap-1.5 text-[12px] text-muted hover:text-fg transition-colors px-3 py-1.5 rounded-md border border-white/[0.06] hover:border-white/[0.12] hover:bg-white/[0.03]"
+						>
+							<GitHubIcon />
+							View on GitHub
+						</a>
+						<a
+							href="https://app.relog.dev"
+							className="inline-flex items-center gap-1.5 text-[12px] font-medium text-bg bg-fg hover:bg-fg/90 transition-colors px-3.5 py-1.5 rounded-md"
+						>
+							Open App
+							<span className="text-[10px]">→</span>
+						</a>
+					</div>
+				</div>
+			</Reveal>
 		</section>
 	);
 }
@@ -1506,34 +1524,6 @@ function FAQ() {
 		{
 			q: "How does authentication work?",
 			a: "Three roles with hierarchical access: ingest (write-only), read (query/stream/search), admin (all + prune/config). Bearer token auth with multiple keys per role — comma-separated flags or individually named env vars. Ideal for Docker/k8s with separate secrets per app.",
-		},
-		{
-			q: "How does the Next.js integration work?",
-			a: "Two files: instrumentation.ts and middleware.ts. All console.log/warn/error calls are captured automatically, every HTTP request is logged with method/path/status/duration, and unhandled errors in server components and route handlers are tracked. Includes a browser proxy route for client-side logging.",
-		},
-		{
-			q: "What about browser logging?",
-			a: "The browser SDK (relog.dev/browser) batches logs via fetch or sendBeacon, captures console output and unhandled errors, and adds session IDs. Deliver directly to the server or proxy through your backend to keep API keys off the client.",
-		},
-		{
-			q: "What SQL can I run?",
-			a: "Any read-only SELECT, EXPLAIN, or safe PRAGMA against the logs table via DuckDB. The CLI, HTTP API, MCP server, and Web UI all support SQL queries. Common columns: id, timestamp, level, message, service, project, branch, trace_id, meta (JSON).",
-		},
-		{
-			q: "How do child loggers work?",
-			a: "log.child({ traceId, requestId, ... }) creates a logger that inherits the parent's transport, service, level, and metadata. All additional fields are merged. Useful for per-request context in HTTP handlers.",
-		},
-		{
-			q: "How do I export logs?",
-			a: "CLI: relog.dev export --format json|csv|ndjson --from 7d --output logs.json. HTTP API: GET /logs with filters. Supports time ranges, level/service/project filters, and configurable limits.",
-		},
-		{
-			q: "Can I prune old logs?",
-			a: "relog.dev prune --keep-days 30 or --before <ISO timestamp>. Prompts for confirmation unless --yes is passed. Combine with archival to move old data to S3 before pruning.",
-		},
-		{
-			q: "What about Python?",
-			a: "Full Python SDK (pip install relog) with snake_case conventions, context managers for wide events (with log.event('name') as ev), automatic exception capture, and the same batching/retry/sampling features as the TypeScript SDK.",
 		},
 	];
 

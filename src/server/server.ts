@@ -94,7 +94,7 @@ export interface ServerInstance {
 	duckdb: DuckDBReader;
 	streamManager: StreamManager;
 	aggregatesManager: AggregatesManager;
-	shutdown: () => void;
+	shutdown: () => Promise<void>;
 	pruneHandle?: PruneHandle;
 }
 
@@ -126,6 +126,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const server = Bun.serve({
 		port: config.port,
 		maxRequestBodySize: maxBody,
+		idleTimeout: config.idleTimeout ?? 60,
 		async fetch(request) {
 			const requestOrigin = request.headers.get("Origin");
 			const cors = corsHeaders(config, requestOrigin);
@@ -239,10 +240,12 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		? startAutoPrune(db, config.autoPrune, config.archive, () => duckdb.refreshView())
 		: undefined;
 
-	const shutdown = () => {
+	const shutdown = async () => {
 		pruneHandle?.stop();
 		streamManager.shutdown();
 		server.stop();
+		// Grace period for in-flight requests to complete
+		await Bun.sleep(3000);
 		duckdb?.close();
 		db.close();
 	};

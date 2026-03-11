@@ -7,6 +7,7 @@ const DEFAULT_RETRY: RetryConfig = { maxRetries: 3, baseDelayMs: 1000, maxDelayM
 
 export interface PruneHandle {
 	stop(): void;
+	readonly archiveFailures: number;
 }
 
 export async function pruneByAge(
@@ -14,14 +15,15 @@ export async function pruneByAge(
 	maxAgeDays: number,
 	archiveConfig?: ArchiveConfig,
 	retry: RetryConfig = DEFAULT_RETRY,
-): Promise<number> {
+): Promise<{ deleted: number; archiveBlocked: boolean }> {
 	const cutoff = Date.now() - maxAgeDays * 86_400_000;
 
 	if (!archiveConfig) {
-		return db.prune(cutoff);
+		return { deleted: db.prune(cutoff), archiveBlocked: false };
 	}
 
 	let totalDeleted = 0;
+	let archiveBlocked = false;
 	for (;;) {
 		const logs = db.getLogsForArchive(cutoff, BATCH_SIZE);
 		if (logs.length === 0) break;
@@ -36,11 +38,12 @@ export async function pruneByAge(
 			console.warn(
 				`[relog.dev] auto-prune: archive failed for all partitions during age-based prune, stopping. errors: ${result.errors.join("; ")}`,
 			);
+			archiveBlocked = true;
 			break;
 		}
 	}
 
-	return totalDeleted;
+	return { deleted: totalDeleted, archiveBlocked };
 }
 
 export async function pruneBySize(
@@ -48,9 +51,10 @@ export async function pruneBySize(
 	maxDbSize: number,
 	archiveConfig?: ArchiveConfig,
 	retry: RetryConfig = DEFAULT_RETRY,
-): Promise<number> {
+): Promise<{ deleted: number; archiveBlocked: boolean }> {
 	let totalDeleted = 0;
 	let previousSize = db.getDbSize();
+	let archiveBlocked = false;
 
 	while (db.getDbSize() > maxDbSize) {
 		const logs = db.getOldestLogs(BATCH_SIZE);
@@ -66,6 +70,7 @@ export async function pruneBySize(
 				console.warn(
 					`[relog.dev] auto-prune: archive failed for all partitions during size-based prune, stopping. errors: ${result.errors.join("; ")}`,
 				);
+				archiveBlocked = true;
 				break;
 			}
 		} else {
@@ -84,7 +89,7 @@ export async function pruneBySize(
 		previousSize = currentSize;
 	}
 
-	return totalDeleted;
+	return { deleted: totalDeleted, archiveBlocked };
 }
 
 export function startAutoPrune(
@@ -93,13 +98,19 @@ export function startAutoPrune(
 	archiveConfig?: ArchiveConfig,
 	onArchive?: () => Promise<void>,
 ): PruneHandle {
-	const { maxDbSize, maxAgeDays, intervalSeconds = 60 } = pruneConfig;
+	const { maxDbSize, maxAgeDays, intervalSeconds = 60, retry: retryConfig } = pruneConfig;
 
 	if (!maxDbSize && !maxAgeDays) {
-		return { stop() {} };
+		return {
+			stop() {},
+			get archiveFailures() {
+				return 0;
+			},
+		};
 	}
 
 	let inFlight = false;
+	let consecutiveArchiveFailures = 0;
 
 	const timer = setInterval(async () => {
 		if (inFlight) return;
@@ -107,16 +118,22 @@ export function startAutoPrune(
 
 		try {
 			let deleted = 0;
+			let archiveBlocked = false;
 
 			if (maxAgeDays) {
-				deleted += await pruneByAge(db, maxAgeDays, archiveConfig);
+				const result = await pruneByAge(db, maxAgeDays, archiveConfig, retryConfig);
+				deleted += result.deleted;
+				if (result.archiveBlocked) archiveBlocked = true;
 			}
 
 			if (maxDbSize) {
-				deleted += await pruneBySize(db, maxDbSize, archiveConfig);
+				const result = await pruneBySize(db, maxDbSize, archiveConfig, retryConfig);
+				deleted += result.deleted;
+				if (result.archiveBlocked) archiveBlocked = true;
 			}
 
 			if (deleted > 0) {
+				consecutiveArchiveFailures = 0;
 				console.log(`[relog.dev] auto-prune: deleted ${deleted} logs`);
 				if (archiveConfig && onArchive) {
 					try {
@@ -125,6 +142,19 @@ export function startAutoPrune(
 						console.error("[relog.dev] auto-prune: onArchive callback failed:", err);
 					}
 				}
+			} else if (archiveBlocked) {
+				consecutiveArchiveFailures++;
+				if (consecutiveArchiveFailures >= 10) {
+					console.error(
+						`[relog.dev] CRITICAL: archive has failed ${consecutiveArchiveFailures} consecutive cycles — database may grow unbounded. Check S3 connectivity and credentials.`,
+					);
+				} else if (consecutiveArchiveFailures >= 3) {
+					console.warn(
+						`[relog.dev] auto-prune: archive has failed ${consecutiveArchiveFailures} consecutive cycles`,
+					);
+				}
+			} else {
+				consecutiveArchiveFailures = 0;
 			}
 		} catch (err) {
 			console.error("[relog.dev] auto-prune error:", err);
@@ -136,6 +166,9 @@ export function startAutoPrune(
 	return {
 		stop() {
 			clearInterval(timer);
+		},
+		get archiveFailures() {
+			return consecutiveArchiveFailures;
 		},
 	};
 }

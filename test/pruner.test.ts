@@ -68,20 +68,20 @@ describe("pruneByAge (no S3)", () => {
 		insertLogs(db, 50, 1); // 1 day old
 		expect(db.getLogCount()).toBe(150);
 
-		const deleted = await pruneByAge(db, 5);
+		const { deleted } = await pruneByAge(db, 5);
 		expect(deleted).toBe(100);
 		expect(db.getLogCount()).toBe(50);
 	});
 
 	test("no-ops when no logs are old enough", async () => {
 		insertLogs(db, 50, 1);
-		const deleted = await pruneByAge(db, 5);
+		const { deleted } = await pruneByAge(db, 5);
 		expect(deleted).toBe(0);
 		expect(db.getLogCount()).toBe(50);
 	});
 
 	test("no-ops on empty database", async () => {
-		const deleted = await pruneByAge(db, 5);
+		const { deleted } = await pruneByAge(db, 5);
 		expect(deleted).toBe(0);
 	});
 });
@@ -109,7 +109,7 @@ describe("pruneBySize (no S3)", () => {
 
 		// Set threshold to roughly half the current size
 		const maxDbSize = Math.floor(initialSize / 2);
-		const deleted = await pruneBySize(db, maxDbSize);
+		const { deleted } = await pruneBySize(db, maxDbSize);
 
 		expect(deleted).toBeGreaterThan(0);
 		expect(db.getDbSize()).toBeLessThanOrEqual(maxDbSize);
@@ -119,7 +119,7 @@ describe("pruneBySize (no S3)", () => {
 		insertLogs(db, 10, 0);
 
 		// Set threshold impossibly low — below schema overhead
-		const deleted = await pruneBySize(db, 1);
+		const { deleted } = await pruneBySize(db, 1);
 
 		expect(deleted).toBe(10);
 		expect(db.getLogCount()).toBe(0);
@@ -127,13 +127,13 @@ describe("pruneBySize (no S3)", () => {
 
 	test("no-ops when already under threshold", async () => {
 		insertLogs(db, 10, 0);
-		const deleted = await pruneBySize(db, Number.MAX_SAFE_INTEGER);
+		const { deleted } = await pruneBySize(db, Number.MAX_SAFE_INTEGER);
 		expect(deleted).toBe(0);
 		expect(db.getLogCount()).toBe(10);
 	});
 
 	test("no-ops on empty database", async () => {
-		const deleted = await pruneBySize(db, 1);
+		const { deleted } = await pruneBySize(db, 1);
 		expect(deleted).toBe(0);
 	});
 });
@@ -301,7 +301,7 @@ describe.if(HAS_MINIO)("pruneByAge with S3 archiving", () => {
 		insertLogs(db, 30, 1);
 		expect(db.getLogCount()).toBe(80);
 
-		const deleted = await pruneByAge(db, 5, archiveConfig);
+		const { deleted } = await pruneByAge(db, 5, archiveConfig);
 
 		expect(deleted).toBe(50);
 		expect(db.getLogCount()).toBe(30);
@@ -351,7 +351,7 @@ describe.if(HAS_MINIO)("pruneBySize with S3 archiving", () => {
 		const initialSize = db.getDbSize();
 		const maxDbSize = Math.floor(initialSize / 2);
 
-		const deleted = await pruneBySize(db, maxDbSize, archiveConfig);
+		const { deleted } = await pruneBySize(db, maxDbSize, archiveConfig);
 
 		expect(deleted).toBeGreaterThan(0);
 		expect(db.getDbSize()).toBeLessThanOrEqual(maxDbSize);
@@ -386,7 +386,7 @@ describe("pruneByAge with unreachable S3", () => {
 		insertLogs(db, 50, 10);
 		expect(db.getLogCount()).toBe(50);
 
-		const deleted = await pruneByAge(db, 5, badArchiveConfig, NO_RETRY);
+		const { deleted } = await pruneByAge(db, 5, badArchiveConfig, NO_RETRY);
 
 		expect(deleted).toBe(0);
 		// All logs should still be in SQLite
@@ -421,7 +421,7 @@ describe("pruneBySize with unreachable S3", () => {
 		const initialCount = db.getLogCount();
 		expect(initialCount).toBe(100);
 
-		const deleted = await pruneBySize(db, 1, badArchiveConfig, NO_RETRY);
+		const { deleted } = await pruneBySize(db, 1, badArchiveConfig, NO_RETRY);
 
 		expect(deleted).toBe(0);
 		expect(db.getLogCount()).toBe(100);
@@ -450,7 +450,7 @@ describe("pruneByAge: multi-batch", () => {
 		insertLogs(db, 200, 1);
 		expect(db.getLogCount()).toBe(12200);
 
-		const deleted = await pruneByAge(db, 5);
+		const { deleted } = await pruneByAge(db, 5);
 		expect(deleted).toBe(12000);
 		expect(db.getLogCount()).toBe(200);
 	});
@@ -477,7 +477,7 @@ describe("pruneBySize: multi-iteration convergence", () => {
 
 		// Set threshold to ~55% — deletes ~6750 logs (more than one 5000 batch)
 		const maxDbSize = Math.floor(initialSize * 0.55);
-		const deleted = await pruneBySize(db, maxDbSize);
+		const { deleted } = await pruneBySize(db, maxDbSize);
 
 		expect(deleted).toBeGreaterThan(5000); // Must have taken multiple iterations
 		expect(db.getDbSize()).toBeLessThanOrEqual(maxDbSize);
@@ -572,10 +572,10 @@ describe("prune idempotency", () => {
 		insertLogs(db, 100, 10);
 		insertLogs(db, 50, 1);
 
-		const first = await pruneByAge(db, 5);
+		const { deleted: first } = await pruneByAge(db, 5);
 		expect(first).toBe(100);
 
-		const second = await pruneByAge(db, 5);
+		const { deleted: second } = await pruneByAge(db, 5);
 		expect(second).toBe(0);
 		expect(db.getLogCount()).toBe(50);
 	});
@@ -584,10 +584,10 @@ describe("prune idempotency", () => {
 		insertLogs(db, 5000, 0);
 		const maxDbSize = Math.floor(db.getDbSize() / 2);
 
-		const first = await pruneBySize(db, maxDbSize);
+		const { deleted: first } = await pruneBySize(db, maxDbSize);
 		expect(first).toBeGreaterThan(0);
 
-		const second = await pruneBySize(db, maxDbSize);
+		const { deleted: second } = await pruneBySize(db, maxDbSize);
 		expect(second).toBe(0);
 	});
 });
@@ -863,6 +863,157 @@ describe("archiveLogBatch", () => {
 	});
 });
 
+// ─── archiveBlocked return value ─────────────────────────────────
+
+describe("pruneByAge archiveBlocked flag", () => {
+	let dbPath: string;
+	let db: RelogDatabase;
+	const badArchiveConfig: ArchiveConfig = {
+		endpoint: "http://localhost:1",
+		bucket: "nonexistent",
+		accessKeyId: "fake",
+		secretAccessKey: "fake",
+		prefix: "test",
+		region: "us-east-1",
+	};
+
+	beforeEach(() => {
+		dbPath = tmpPath("prune-blocked-age");
+		db = new RelogDatabase(dbPath);
+	});
+
+	afterEach(() => {
+		db.close();
+		cleanupDb(dbPath);
+	});
+
+	test("returns archiveBlocked=true when S3 fails and logs need pruning", async () => {
+		insertLogs(db, 50, 10);
+		const result = await pruneByAge(db, 5, badArchiveConfig, NO_RETRY);
+		expect(result.deleted).toBe(0);
+		expect(result.archiveBlocked).toBe(true);
+	});
+
+	test("returns archiveBlocked=false when no archive config", async () => {
+		insertLogs(db, 50, 10);
+		const result = await pruneByAge(db, 5);
+		expect(result.deleted).toBe(50);
+		expect(result.archiveBlocked).toBe(false);
+	});
+
+	test("returns archiveBlocked=false when nothing to prune", async () => {
+		insertLogs(db, 50, 1);
+		const result = await pruneByAge(db, 5, badArchiveConfig, NO_RETRY);
+		expect(result.deleted).toBe(0);
+		expect(result.archiveBlocked).toBe(false);
+	});
+});
+
+describe("pruneBySize archiveBlocked flag", () => {
+	let dbPath: string;
+	let db: RelogDatabase;
+	const badArchiveConfig: ArchiveConfig = {
+		endpoint: "http://localhost:1",
+		bucket: "nonexistent",
+		accessKeyId: "fake",
+		secretAccessKey: "fake",
+		prefix: "test",
+		region: "us-east-1",
+	};
+
+	beforeEach(() => {
+		dbPath = tmpPath("prune-blocked-size");
+		db = new RelogDatabase(dbPath);
+	});
+
+	afterEach(() => {
+		db.close();
+		cleanupDb(dbPath);
+	});
+
+	test("returns archiveBlocked=true when S3 fails and DB over threshold", async () => {
+		insertLogs(db, 100, 0);
+		const result = await pruneBySize(db, 1, badArchiveConfig, NO_RETRY);
+		expect(result.deleted).toBe(0);
+		expect(result.archiveBlocked).toBe(true);
+	});
+
+	test("returns archiveBlocked=false when no archive config", async () => {
+		insertLogs(db, 100, 0);
+		const result = await pruneBySize(db, 1);
+		expect(result.deleted).toBe(100);
+		expect(result.archiveBlocked).toBe(false);
+	});
+});
+
+// ─── PruneHandle.archiveFailures counter ─────────────────────────
+
+describe("startAutoPrune: archiveFailures counter", () => {
+	let dbPath: string;
+	let db: RelogDatabase;
+	const badArchiveConfig: ArchiveConfig = {
+		endpoint: "http://localhost:1",
+		bucket: "nonexistent",
+		accessKeyId: "fake",
+		secretAccessKey: "fake",
+		prefix: "test",
+		region: "us-east-1",
+	};
+
+	beforeEach(() => {
+		dbPath = tmpPath("prune-failures");
+		db = new RelogDatabase(dbPath);
+	});
+
+	afterEach(() => {
+		db.close();
+		cleanupDb(dbPath);
+	});
+
+	test("archiveFailures starts at 0", () => {
+		const handle = startAutoPrune(db, { maxAgeDays: 5, intervalSeconds: 60 }, badArchiveConfig);
+		expect(handle.archiveFailures).toBe(0);
+		handle.stop();
+	});
+
+	test("archiveFailures increments on consecutive archive failures", async () => {
+		insertLogs(db, 100, 10);
+
+		const handle = startAutoPrune(
+			db,
+			{ maxAgeDays: 5, intervalSeconds: 0.05, retry: NO_RETRY },
+			badArchiveConfig,
+		);
+
+		// Wait for a few prune cycles to fail
+		await Bun.sleep(300);
+		handle.stop();
+
+		expect(handle.archiveFailures).toBeGreaterThan(0);
+		// Logs should still be there since archive failed
+		expect(db.getLogCount()).toBe(100);
+	});
+
+	test("archiveFailures resets when pruning succeeds without archive", async () => {
+		insertLogs(db, 100, 10);
+
+		// Start with no archive config — pruning should succeed and counter stays 0
+		const handle = startAutoPrune(db, { maxAgeDays: 5, intervalSeconds: 0.05 });
+
+		await Bun.sleep(200);
+		handle.stop();
+
+		expect(handle.archiveFailures).toBe(0);
+		expect(db.getLogCount()).toBe(0);
+	});
+
+	test("no-op handle has archiveFailures=0", () => {
+		const handle = startAutoPrune(db, {});
+		expect(handle.archiveFailures).toBe(0);
+		handle.stop();
+	});
+});
+
 // ─── Edge cases ──────────────────────────────────────────────────
 
 describe("edge cases", () => {
@@ -885,7 +1036,7 @@ describe("edge cases", () => {
 		// Wait a tiny bit so logs are in the past
 		await Bun.sleep(10);
 
-		const deleted = await pruneByAge(db, 0);
+		const { deleted } = await pruneByAge(db, 0);
 		expect(deleted).toBe(100);
 		expect(db.getLogCount()).toBe(0);
 	});
@@ -896,7 +1047,7 @@ describe("edge cases", () => {
 		insertLogs(db, 50, 5, { project: "recent" }); // 5 days
 		insertLogs(db, 50, 1, { project: "fresh" }); // 1 day
 
-		const deleted = await pruneByAge(db, 10);
+		const { deleted } = await pruneByAge(db, 10);
 		expect(deleted).toBe(100); // ancient + old
 		expect(db.getLogCount()).toBe(100); // recent + fresh
 

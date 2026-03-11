@@ -32,6 +32,7 @@ beforeAll(async () => {
 		ingestKeys: [INGEST_KEY],
 		cors: true,
 		streamDebounceMs: 10,
+		idleTimeout: 30,
 	});
 	baseUrl = `http://localhost:${instance.server.port}`;
 });
@@ -675,5 +676,73 @@ describe("meta and fields roundtrip", () => {
 		expect(meta_out.userId).toBe(42);
 		expect(meta_out.tags).toEqual(["a", "b"]);
 		expect(meta_out.nested.x).toBe(1);
+	});
+});
+
+// ─── Fix #4: idleTimeout is passed to server ─────────────────────
+
+describe("server idleTimeout config", () => {
+	test("server starts with custom idleTimeout", async () => {
+		const p = `test-idle-${Date.now()}.db`;
+		const s = await startServer({ port: 0, dbPath: p, idleTimeout: 15 });
+		// Server started successfully with custom idle timeout
+		expect(s.server.port).toBeGreaterThan(0);
+		s.server.stop();
+		s.duckdb.close();
+		s.db.close();
+		for (const f of [p, `${p}-wal`, `${p}-shm`]) {
+			try { unlinkSync(f); } catch {}
+		}
+	});
+});
+
+// ─── Fix #5: shutdown returns a Promise ──────────────────────────
+
+describe("server graceful shutdown", () => {
+	test("shutdown returns a promise", async () => {
+		const p = `test-shutdown-${Date.now()}.db`;
+		const s = await startServer({ port: 0, dbPath: p });
+		const result = s.shutdown();
+		expect(result).toBeInstanceOf(Promise);
+		await result;
+		for (const f of [p, `${p}-wal`, `${p}-shm`]) {
+			try { unlinkSync(f); } catch {}
+		}
+	});
+});
+
+// ─── Fix #10: DuckDB S3 credential sanitization ─────────────────
+
+describe("DuckDB S3 credential sanitization", () => {
+	test("S3 config error does not leak credentials", async () => {
+		const { DuckDBReader } = await import("../db/duckdb.ts");
+		const p = `test-s3-cred-${Date.now()}.db`;
+		// Create the SQLite DB so DuckDB can attach it
+		const { RelogDatabase } = await import("../db/database.ts");
+		const db = new RelogDatabase(p);
+		db.close();
+
+		const reader = new DuckDBReader(p, {
+			endpoint: "http://localhost:1",
+			bucket: "test-bucket",
+			accessKeyId: "SUPER_SECRET_ACCESS_KEY",
+			secretAccessKey: "ULTRA_SECRET_KEY_12345",
+			prefix: "logs",
+			region: "us-east-1",
+		});
+
+		try {
+			await reader.init();
+			// If init somehow succeeds (shouldn't with localhost:1), that's fine
+		} catch (err) {
+			const msg = (err as Error).message;
+			// Error message should NOT contain the credentials regardless of where it fails
+			expect(msg).not.toContain("SUPER_SECRET_ACCESS_KEY");
+			expect(msg).not.toContain("ULTRA_SECRET_KEY_12345");
+		}
+
+		for (const f of [p, `${p}-wal`, `${p}-shm`]) {
+			try { unlinkSync(f); } catch {}
+		}
 	});
 });

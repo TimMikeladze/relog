@@ -72,6 +72,8 @@ export interface AutoPruneConfig {
 	maxAgeDays?: number;
 	/** How often to check thresholds, in seconds (default: 60) */
 	intervalSeconds?: number;
+	/** Retry config for S3 archive uploads during prune */
+	retry?: RetryConfig;
 }
 
 export interface ServerConfig {
@@ -86,6 +88,8 @@ export interface ServerConfig {
 	maxBatchSize?: number;
 	streamDebounceMs?: number;
 	ingestRpm?: number;
+	/** TCP idle timeout in seconds (default: 60). */
+	idleTimeout?: number;
 	autoPrune?: AutoPruneConfig;
 	archive?: ArchiveConfig;
 	uiDistPath?: string;

@@ -22,6 +22,10 @@ export function getAppDistPath(): string | null {
 	const prod = join(import.meta.dir, "app");
 	if (existsSync(join(prod, "index.html"))) return prod;
 
+	// Bundled: when bunup places shared modules in dist/shared/, resolve up one level
+	const bundled = join(import.meta.dir, "../app");
+	if (existsSync(join(bundled, "index.html"))) return bundled;
+
 	// Development: running from src/ -> ../app/dist
 	const dev = join(import.meta.dir, "../app/dist");
 	if (existsSync(join(dev, "index.html"))) return dev;
