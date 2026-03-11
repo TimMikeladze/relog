@@ -1103,9 +1103,9 @@ function Architecture() {
 					SDKs batch and ship logs to a Bun server over HTTP. The server writes to SQLite in WAL
 					mode for high-throughput concurrent reads and writes. When logs age out, an archive
 					command converts them to Parquet files on S3, R2, or MinIO. DuckDB sits on top as the
-					query engine — it reads both hot data in SQLite and cold data in object storage, so
-					every query spans your full history without loading everything into memory. The Web UI,
-					CLI, MCP server, and raw SQL all talk to DuckDB.
+					query engine — it reads both hot data in SQLite and cold data in object storage, so every
+					query spans your full history without loading everything into memory. The Web UI, CLI, MCP
+					server, and raw SQL all talk to DuckDB.
 				</p>
 			</Reveal>
 

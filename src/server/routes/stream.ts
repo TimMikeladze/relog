@@ -19,7 +19,12 @@ export class StreamManager {
 	private heartbeatMs: number;
 	private closed = false;
 
-	constructor(db: RelogDatabase, debounceMs: number = 50, maxClients: number = 100, heartbeatMs: number = 30_000) {
+	constructor(
+		db: RelogDatabase,
+		debounceMs: number = 50,
+		maxClients: number = 100,
+		heartbeatMs: number = 30_000,
+	) {
 		this.db = db;
 		this.debounceMs = debounceMs;
 		this.maxClients = maxClients;
@@ -83,7 +88,9 @@ export class StreamManager {
 		}
 		for (const client of this.clients) {
 			try {
-				client.controller.enqueue(this.encoder.encode("event: close\ndata: server shutting down\n\n"));
+				client.controller.enqueue(
+					this.encoder.encode("event: close\ndata: server shutting down\n\n"),
+				);
 				client.controller.close();
 			} catch {
 				// already closed

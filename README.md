@@ -1228,13 +1228,13 @@ fly deploy
 
 The default configuration:
 
-| Setting | Value | Description |
-| --- | --- | --- |
-| VM | `shared-cpu-1x` | Shared CPU with 1GB memory |
-| Volume | `3gb` | Persistent storage at `/data` |
-| Health check | `/health` every 30s | Excluded from auth |
-| Auto-stop | `off` | Always-on (logging servers can't sleep) |
-| Auto-prune | `500mb` / `30d` | Default size and age limits |
+| Setting      | Value               | Description                             |
+| ------------ | ------------------- | --------------------------------------- |
+| VM           | `shared-cpu-1x`     | Shared CPU with 1GB memory              |
+| Volume       | `3gb`               | Persistent storage at `/data`           |
+| Health check | `/health` every 30s | Excluded from auth                      |
+| Auto-stop    | `off`               | Always-on (logging servers can't sleep) |
+| Auto-prune   | `500mb` / `30d`     | Default size and age limits             |
 
 To archive to S3 before pruning (Tigris is Fly.io's native S3-compatible storage):
 

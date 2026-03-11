@@ -691,7 +691,9 @@ describe("server idleTimeout config", () => {
 		s.duckdb.close();
 		s.db.close();
 		for (const f of [p, `${p}-wal`, `${p}-shm`]) {
-			try { unlinkSync(f); } catch {}
+			try {
+				unlinkSync(f);
+			} catch {}
 		}
 	});
 });
@@ -706,7 +708,9 @@ describe("server graceful shutdown", () => {
 		expect(result).toBeInstanceOf(Promise);
 		await result;
 		for (const f of [p, `${p}-wal`, `${p}-shm`]) {
-			try { unlinkSync(f); } catch {}
+			try {
+				unlinkSync(f);
+			} catch {}
 		}
 	});
 });
@@ -742,7 +746,9 @@ describe("DuckDB S3 credential sanitization", () => {
 		}
 
 		for (const f of [p, `${p}-wal`, `${p}-shm`]) {
-			try { unlinkSync(f); } catch {}
+			try {
+				unlinkSync(f);
+			} catch {}
 		}
 	});
 });
