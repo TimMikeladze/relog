@@ -1,5 +1,5 @@
 const BLOCKED_KEYWORDS =
-	/\b(ATTACH|DETACH|LOAD_EXTENSION|INSTALL|LOAD|COPY|EXPORT|IMPORT|REINDEX|VACUUM|ALTER|CREATE|DROP|INSERT|UPDATE|DELETE|REPLACE|MERGE|TRUNCATE|GRANT|REVOKE|SET|CALL|EXECUTE|PREPARE)\b/i;
+	/\b(ATTACH|DETACH|LOAD_EXTENSION|INSTALL|LOAD|COPY|EXPORT|IMPORT|REINDEX|VACUUM|ALTER|CREATE|DROP|INSERT|UPDATE|DELETE|REPLACE|MERGE|TRUNCATE|GRANT|REVOKE|SET|CALL|EXECUTE|PREPARE|PRAGMA)\b/i;
 
 /** Block DuckDB functions that can read/write files or access the network. */
 const BLOCKED_FUNCTIONS =
@@ -7,7 +7,10 @@ const BLOCKED_FUNCTIONS =
 
 /** Block system catalog schemas and DuckDB introspection functions. */
 const BLOCKED_SCHEMAS =
-	/\b(information_schema|pg_catalog|duckdb_tables|duckdb_columns|duckdb_views|duckdb_indexes|duckdb_schemas|duckdb_types|duckdb_functions|duckdb_settings|duckdb_databases|duckdb_extensions|duckdb_constraints|duckdb_dependencies|duckdb_keywords|duckdb_sequences|duckdb_temporary_files|glob|system\.)(?:\s*\(|\b)/i;
+	/\b(information_schema|pg_catalog|duckdb_tables|duckdb_columns|duckdb_views|duckdb_indexes|duckdb_schemas|duckdb_types|duckdb_functions|duckdb_settings|duckdb_databases|duckdb_extensions|duckdb_constraints|duckdb_dependencies|duckdb_keywords|duckdb_sequences|duckdb_temporary_files|duckdb_secrets|glob|system\.)(?:\s*\(|\b)/i;
+
+/** Detect dollar-quoted strings ($$...$$) which could hide blocked keywords. */
+const DOLLAR_QUOTE = /\$\$/;
 
 export class QueryValidationError extends Error {
 	constructor(message: string) {
@@ -100,6 +103,10 @@ export function validateQuery(sql: string, maxRows: number): string {
 	}
 
 	const stripped = stripSqlComments(sql);
+
+	if (DOLLAR_QUOTE.test(stripped)) {
+		throw new QueryValidationError("Dollar-quoted strings are not allowed");
+	}
 
 	if (hasSemicolonOutsideQuotes(stripped)) {
 		throw new QueryValidationError("Multiple statements are not allowed");

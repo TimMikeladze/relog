@@ -1,6 +1,8 @@
 import type { Aggregate } from "../../types.ts";
 import type { AggregatesManager } from "../aggregates.ts";
 
+const VALID_ID = /^[a-zA-Z0-9_-]{1,128}$/;
+
 export async function handleAggregates(
 	request: Request,
 	aggregatesManager: AggregatesManager,
@@ -9,6 +11,10 @@ export async function handleAggregates(
 	const method = request.method;
 	const pathParts = url.pathname.split("/").filter(Boolean);
 	const id = pathParts[1]; // /aggregates/:id
+
+	if (id && !VALID_ID.test(id)) {
+		return Response.json({ error: "Invalid aggregate ID" }, { status: 400 });
+	}
 
 	// GET /aggregates or /aggregates/:id
 	if (method === "GET") {
@@ -33,6 +39,10 @@ export async function handleAggregates(
 					{ error: "Missing required fields: id, name, filters" },
 					{ status: 400 },
 				);
+			}
+
+			if (!VALID_ID.test(body.id)) {
+				return Response.json({ error: "Invalid aggregate ID" }, { status: 400 });
 			}
 
 			const aggregate = await aggregatesManager.add(body);
