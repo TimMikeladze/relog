@@ -4,6 +4,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 
 ## Key Features
 
+- **Process wrapping** — prefix any command with `relog` to capture all its logs automatically, zero SDK integration needed
 - **Zero-dependency server** — single SQLite file, WAL mode, no Redis or external databases
 - **Batching client SDK** — automatic batching, retries with exponential backoff, buffer overflow protection
 - **Wide events** — build one event per request with all context, emit at the end with auto-duration and level escalation
@@ -49,6 +50,17 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 │   - sendBeacon      │    └───▶│   Your Server (proxy)            │
 │   - error capture   │  POST   │   /api/relog ──▶ relog /ingest   │
 └─────────────────────┘         └──────────────────────────────────┘
+
+┌─────────────────────┐
+│  relog <command>     │  stdio   ┌──────────────────────────────┐
+│                     │─────────▶│  Any Process                 │
+│  Wraps any process, │  pipe    │  (bun, node, python, cargo…) │
+│  captures stdout/   │◀─────────│                              │
+│  stderr as logs     │          └──────────────────────────────┘
+│   - auto level      │
+│   - JSON-aware      │  HTTP
+│   - passthrough     │────────▶  relog.dev server
+└─────────────────────┘
 
 ┌─────────────────────┐
 │   relog.dev CLI      │  HTTP
@@ -123,6 +135,55 @@ cat logs.json
 # clean up
 kill %1 && rm -rf ~/.relog logs.json
 ```
+
+### Wrapping Any Command
+
+The fastest way to capture logs — just prefix your existing command with `relog`:
+
+```bash
+# start the server in one terminal
+bunx relog.dev start
+
+# in another terminal, prefix your command with relog
+relog bun run dev
+relog python manage.py runserver
+relog cargo run --release
+relog ./start.sh
+```
+
+The output looks identical to running the command directly. Behind the scenes, every line of stdout/stderr is parsed, classified by log level, and shipped to the relog server as structured log records.
+
+**How level detection works:**
+
+| Source output | Detected level | Why |
+| --- | --- | --- |
+| `[ERROR] build failed` | error | Bracketed pattern |
+| `ERROR: connection refused` | error | Delimited pattern |
+| `TypeError: Cannot read properties` | error | Error class name |
+| `{"level":50,"msg":"fail"}` | error | Pino numeric level |
+| `2024-01-15 12:00:00 WARN slow` | warn | Timestamp + keyword |
+| `level=error msg="crash"` | error | Logfmt |
+| `Traceback (most recent call last):` | error | Python traceback |
+| `panic: runtime error` | error | Go panic |
+| Plain text on stdout | info | Default |
+| Plain text on stderr | warn | stderr default |
+
+**Options go before the command:**
+
+```bash
+relog --service api --url http://logs:3485 bun run dev
+relog --auth my-token python app.py
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--url` | `http://localhost:3485` | Server URL (also reads `RELOG_URL` env) |
+| `--service` | Inferred from `package.json` name or command | Service name for log records |
+| `--auth` | — | Bearer token (also reads `RELOG_AUTH` env) |
+
+Service name is auto-detected from the nearest `package.json` `name` field, or falls back to the command name. Git project and branch are auto-detected as usual.
+
+The wrapped process's exit code is forwarded — `relog bun test && echo "passed"` works correctly. Ctrl+C is forwarded to the child process.
 
 ### Using the SDK
 
@@ -439,6 +500,30 @@ with log.event("process_payment") as ev:
 ## CLI
 
 All commands accept `--url` (default `http://localhost:3485`) and `--auth` for Bearer token authentication (also reads `RELOG_AUTH` env).
+
+### `relog <command>`
+
+Wrap any command to automatically capture its logs. See [Wrapping Any Command](#wrapping-any-command) for full details.
+
+```bash
+# auto-detect: anything that isn't a known relog subcommand is wrapped
+relog bun run dev
+relog node server.js
+relog python app.py
+
+# explicit run subcommand (equivalent)
+relog run -- bun run dev
+
+# with relog options before the command
+relog --service my-api --url http://logs:3485 bun run dev
+
+# use -- to pass flags through to the child
+relog --service svc -- node app.js --port 8080
+```
+
+Stdout lines default to `info`, stderr lines default to `warn`. Lines containing structural level indicators (`[ERROR]`, `ERROR:`, `TypeError:`, JSON with `level` field, logfmt `level=`, etc.) are automatically upgraded to the correct level.
+
+Supports JSON structured logs from Pino, Bunyan, Winston, and any logger that outputs `{"level":"...","message":"..."}` or `{"level":30,"msg":"..."}` (numeric Pino levels). Also detects GCP Cloud Logging's `severity` field and logfmt `level=error` style.
 
 ### `relog.dev start`
 

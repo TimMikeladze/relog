@@ -15,24 +15,31 @@ import { sendCommand } from "./cli/send.ts";
 import { startCommand } from "./cli/serve.ts";
 import { statsCommand } from "./cli/stats.ts";
 import { tailCommand } from "./cli/tail.ts";
+import { executeWrap, isWrapMode } from "./cli/run.ts";
 
-run(
-	[
-		startCommand,
-		sendCommand,
-		seedCommand,
-		tailCommand,
-		queryCommand,
-		searchCommand,
-		statsCommand,
-		pruneCommand,
-		exportCommand,
-		mcpCommand,
-		deleteDbCommand,
-	],
-	{
-		name: "relog.dev",
-		description: "Universal logging system",
-		version: "0.1.0",
-	},
-);
+const args = process.argv.slice(2);
+
+if (isWrapMode(args)) {
+	await executeWrap(args);
+} else {
+	run(
+		[
+			startCommand,
+			sendCommand,
+			seedCommand,
+			tailCommand,
+			queryCommand,
+			searchCommand,
+			statsCommand,
+			pruneCommand,
+			exportCommand,
+			mcpCommand,
+			deleteDbCommand,
+		],
+		{
+			name: "relog.dev",
+			description: "Universal logging system",
+			version: "0.1.0",
+		},
+	);
+}
