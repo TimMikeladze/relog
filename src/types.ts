@@ -93,6 +93,8 @@ export interface ServerConfig {
 	autoPrune?: AutoPruneConfig;
 	archive?: ArchiveConfig;
 	uiDistPath?: string;
+	/** Path to sources YAML config file for continuous external log ingestion */
+	sourcesConfigPath?: string;
 }
 
 export interface QueryResult {

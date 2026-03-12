@@ -3,6 +3,8 @@ import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
 import { getAggregatesPath } from "../paths.ts";
 import { type PruneHandle, startAutoPrune } from "../pruner.ts";
+import { type SourcesHandle, startSources } from "../sources/runner.ts";
+import { loadSourcesConfig } from "../sources/config.ts";
 import type { ServerConfig } from "../types.ts";
 import { type AuthKeys, type AuthResult, checkRole } from "./middleware/auth.ts";
 import { handleHealth } from "./routes/health.ts";
@@ -96,6 +98,7 @@ export interface ServerInstance {
 	aggregatesManager: AggregatesManager;
 	shutdown: () => Promise<void>;
 	pruneHandle?: PruneHandle;
+	sourcesHandle?: SourcesHandle;
 }
 
 export async function startServer(config: ServerConfig): Promise<ServerInstance> {
@@ -236,11 +239,24 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		},
 	});
 
+	// Load source configs BEFORE starting background tasks so a config error
+	// doesn't leak a running pruner or HTTP server
+	const sourceConfigs = config.sourcesConfigPath
+		? loadSourcesConfig(config.sourcesConfigPath)
+		: undefined;
+
 	const pruneHandle = config.autoPrune
 		? startAutoPrune(db, config.autoPrune, config.archive, () => duckdb.refreshView())
 		: undefined;
 
+	let sourcesHandle: SourcesHandle | undefined;
+	if (sourceConfigs && sourceConfigs.length > 0) {
+		sourcesHandle = startSources(db, streamManager, sourceConfigs);
+		console.log(`[relog.dev] ${sourceConfigs.length} source(s) configured`);
+	}
+
 	const shutdown = async () => {
+		sourcesHandle?.stop();
 		pruneHandle?.stop();
 		streamManager.shutdown();
 		server.stop();
@@ -250,5 +266,5 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		db.close();
 	};
 
-	return { server, db, duckdb, streamManager, aggregatesManager, shutdown, pruneHandle };
+	return { server, db, duckdb, streamManager, aggregatesManager, shutdown, pruneHandle, sourcesHandle };
 }

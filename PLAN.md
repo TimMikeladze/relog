@@ -1,116 +1,123 @@
-# Plan: Apply "Logging Sucks" Lessons to relog.dev
+# Sources: Continuous External Log Ingestion
 
-## Key Lessons from the Article
+## Goal
+Add a source adapter system that continuously pulls logs from external systems (GitHub Actions, Vercel, etc.) into relog. Sources run as background tasks alongside the server, similar to the existing auto-pruner.
 
-1. **Wide events > scattered log lines** — one comprehensive event per unit of work with ALL context
-2. **Build the event throughout the request, emit once at the end** — accumulate context like a lint roller
-3. **Optimize for querying, not writing** — structured key-value pairs, not string interpolation
-4. **Tail sampling for cost** — always keep errors/slow, sample the rest
+## Architecture
 
-## DX-First Design
+Sources follow the same pattern as `pruner.ts` — background interval timers started in `startServer()`, with a handle for graceful shutdown. Each adapter is a function that yields batches of `IngestPayload[]`. Cursor state lives in a new SQLite table so sources survive restarts.
 
-The API should feel like a natural extension of the existing Logger. No ceremony, no boilerplate, chainable, and hard to misuse.
-
-### Usage Examples
-
-**Basic — chain it all:**
-
-```ts
-logger.event("checkout").set("user_id", "usr_123").set("cart_items", 3).end();
-// emits one wide event with duration_ms auto-calculated
+```
+sources.yaml → SourceRunner (interval timer) → Adapter.pull(cursor) → db.insert() → streamManager.notify()
 ```
 
-**Request lifecycle — build up over time:**
+## Steps
 
-```ts
-const ev = logger.event("http_request");
-ev.set("method", req.method);
-ev.set("path", req.url);
+### 1. Source types and adapter interface
+**File:** `src/sources/types.ts`
 
-const user = await authenticate(req);
-ev.set("user_id", user.id);
-ev.set("org_id", user.orgId);
-
-try {
-	const result = await handleRequest(req);
-	ev.set("status", 200);
-	ev.set("response_size", result.length);
-} catch (err) {
-	ev.set("status", 500);
-	ev.error(err); // records error + auto-escalates level
+```typescript
+interface SourceAdapter {
+  name: string
+  pull(config: Record<string, unknown>, cursor: string | null): AsyncIterable<PullBatch>
 }
 
-ev.end(); // single wide event with everything
-```
+interface PullBatch {
+  logs: IngestPayload[]
+  cursor: string  // opaque string, adapter-defined
+}
 
-**Bulk set:**
-
-```ts
-ev.set({ method: "POST", path: "/api/pay", user_id: "usr_1" });
-```
-
-**Auto-cleanup with `using` (TC39 Explicit Resource Management):**
-
-```ts
-{
-	using ev = logger.event("db_query");
-	ev.set("table", "users");
-	ev.set("query", "SELECT ...");
-	// auto-emits on scope exit via Symbol.dispose
+interface SourceConfig {
+  adapter: string
+  every: number  // seconds
+  [key: string]: unknown  // adapter-specific params (repo, project, token, etc.)
 }
 ```
 
-**Child events inherit parent context:**
+### 2. Cursor state table
+**File:** `src/db/schema.ts` (add table), `src/db/database.ts` (add methods)
 
-```ts
-const reqLogger = logger.child({ requestId: "abc" });
-const ev = reqLogger.event("process_payment");
-// ev automatically has requestId, service, project, branch, trace_id
+New table:
+```sql
+CREATE TABLE IF NOT EXISTS source_cursors (
+  source_id TEXT PRIMARY KEY,
+  cursor TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+)
 ```
 
-## Files to Create/Modify
+Add `getCursor(id)`, `setCursor(id, cursor)` to `RelogDatabase`.
 
-1. **`src/event.ts`** (NEW) — `EventBuilder` class
-2. **`src/logger.ts`** — Add `.event()` method
-3. **`src/types.ts`** — Add `EventBuilderOptions` type
-4. **`src/console.ts`** — Show duration in formatted output for wide events
-5. **`src/browser.ts`** — Add `.event()` to `BrowserLogger` + singleton
-6. **`src/client.ts`** — Export `EventBuilder`
-7. **`test/client.test.ts`** — Tests for EventBuilder
+### 3. Config file parser
+**File:** `src/sources/config.ts`
 
-## EventBuilder API
+- Parse YAML file (use `bun` built-in or a small parser)
+- Resolve `$ENV_VAR` references in string values
+- Validate with zod
+- Return `SourceConfig[]`
 
-```ts
-class EventBuilder {
-	set(key: string, value: unknown): this; // single key
-	set(obj: Record<string, unknown>): this; // bulk set (overload)
-	error(err: Error): this; // record error + escalate level
-	warn(message?: string): this; // escalate to warn
-	end(): void; // emit the wide event
-	[Symbol.dispose](): void; // auto-end via `using`
-}
+### 4. Source runner
+**File:** `src/sources/runner.ts`
+
+Similar to `startAutoPrune()`:
+- Takes `db`, `streamManager`, `SourceConfig[]`, adapter registry
+- For each source config, starts a `setInterval` at the configured `every`
+- Each tick: get cursor from DB → call `adapter.pull()` → `db.insert()` → save new cursor → `streamManager.notify()`
+- Guard against overlapping runs (same `inFlight` pattern as pruner)
+- Returns a `SourcesHandle` with `stop()` for graceful shutdown
+
+### 5. GitHub Actions adapter
+**File:** `src/sources/adapters/github-actions.ts`
+
+- Uses GitHub REST API (`/repos/{owner}/{repo}/actions/runs` and `/repos/{owner}/{repo}/actions/runs/{id}/logs`)
+- Cursor: `"TIMESTAMP|RUN_ID,RUN_ID,..."` — timestamp for API filtering, seen IDs for dedup at boundary
+- Fetches completed workflow runs since cursor timestamp, skips already-seen IDs
+- Downloads log zip for each run, extracts lines
+- Maps to `IngestPayload`:
+  - `project` ← repo name
+  - `branch` ← head_branch
+  - `trace_id` ← run ID
+  - `service` ← job name
+  - `version` ← head_sha
+  - `meta.step` ← step name
+  - `meta.workflow` ← workflow name
+  - `level` ← `error` if conclusion=failure, `info` otherwise
+  - `timestamp` ← step start time
+
+### 6. Wire into server
+**Files:** `src/server/server.ts`, `src/cli/serve.ts`, `src/types.ts`
+
+- Add `sources?: SourceConfig[]` to `ServerConfig`
+- Add `--sources` flag to `startCommand` (path to YAML file)
+- In `startServer()`, after pruner setup, start source runner
+- Add `sourcesHandle` to `ServerInstance`, call `.stop()` in `shutdown()`
+
+### 7. Adapter registry
+**File:** `src/sources/registry.ts`
+
+Simple map of adapter name → adapter. Start with just `github-actions`. Easy to add more later.
+
+## Config file format
+
+```yaml
+sources:
+  - adapter: github-actions
+    repo: myorg/app
+    token: $GITHUB_TOKEN
+    every: 60
+  - adapter: github-actions
+    repo: myorg/api
+    token: $GITHUB_TOKEN
+    every: 60
 ```
 
-### Auto-Level Escalation
+## Build order
+1 → 2 → 3 → 7 → 4 → 5 → 6
 
-- Default: `info`
-- `.warn()` → `warn`
-- `.error()` → `error`
-- Higher level always wins (never downgrades)
+Steps 1-4 and 7 are the framework. Step 5 is the first adapter. Step 6 wires it all together.
 
-### What Gets Emitted
-
-A single `LogRecord` where:
-
-- `message` = event name (e.g. `"http_request"`)
-- `meta` = all accumulated key-value pairs + `{ duration_ms, event: true }`
-- `level` = auto-escalated based on errors/warns
-- `trace_id`, `service`, `project`, `branch` = inherited from logger
-
-### Console Output for Wide Events
-
-```
-14:32:05.123 INFO  [my-app@main] [api] http_request (142ms) {method: "POST", path: "/checkout", user_id: "usr_123", status: 200}
-```
-
-Duration shown inline when `meta.duration_ms` is present.
+## Non-goals (for now)
+- CLI `relog pull` one-shot command (can add later, reuses adapters)
+- Dynamic source management via API (just restart with new config)
+- Custom field mapping overrides (sensible defaults per adapter)
+- Adapter plugins as separate packages

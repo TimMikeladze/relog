@@ -47,6 +47,7 @@ export const startCommand: Command = command({
 			.default("path"),
 		noUi: boolean("no-ui").desc("Disable serving the web UI"),
 		noOpen: boolean("no-open").desc("Serve the web UI but skip opening it in the browser"),
+		sources: string().desc("Path to sources YAML config file for external log ingestion"),
 	},
 	handler: async (opts) => {
 		function parseKeys(raw: string | undefined): string[] {
@@ -112,6 +113,7 @@ export const startCommand: Command = command({
 			autoPrune,
 			archive,
 			uiDistPath,
+			sourcesConfigPath: opts.sources,
 		});
 
 		const url = `http://localhost:${server.port}`;

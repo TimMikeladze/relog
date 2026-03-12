@@ -383,24 +383,18 @@ describe("detectLevel: text patterns", () => {
 
 	describe("after timestamp (Java/Spring/Python logging)", () => {
 		test("ISO timestamp + ERROR", () => {
-			expect(
-				detectLevel("2024-01-15 12:00:00.000 ERROR something failed", "info").level,
-			).toBe("error");
+			expect(detectLevel("2024-01-15 12:00:00.000 ERROR something failed", "info").level).toBe(
+				"error",
+			);
 		});
 		test("ISO timestamp + WARN", () => {
-			expect(
-				detectLevel("2024-01-15 12:00:00 WARN slow response", "info").level,
-			).toBe("warn");
+			expect(detectLevel("2024-01-15 12:00:00 WARN slow response", "info").level).toBe("warn");
 		});
 		test("ISO timestamp + INFO", () => {
-			expect(
-				detectLevel("2024-01-15T12:00:00.000 INFO app started", "error").level,
-			).toBe("info");
+			expect(detectLevel("2024-01-15T12:00:00.000 INFO app started", "error").level).toBe("info");
 		});
 		test("slash date + DEBUG", () => {
-			expect(
-				detectLevel("2024/01/15 12:00:00 DEBUG loading config", "info").level,
-			).toBe("debug");
+			expect(detectLevel("2024/01/15 12:00:00 DEBUG loading config", "info").level).toBe("debug");
 		});
 
 		// Real-world: Spring Boot
@@ -416,7 +410,8 @@ describe("detectLevel: text patterns", () => {
 		// Real-world: Python logging
 		test("Python logging format", () => {
 			expect(
-				detectLevel("2024-01-15 12:00:00,123 ERROR django.request: Internal Server Error", "info").level,
+				detectLevel("2024-01-15 12:00:00,123 ERROR django.request: Internal Server Error", "info")
+					.level,
 			).toBe("error");
 		});
 	});
@@ -438,9 +433,7 @@ describe("detectLevel: text patterns", () => {
 			).toBe("warn");
 		});
 		test('level="error" (quoted)', () => {
-			expect(
-				detectLevel('time=2024-01-15 level="error" msg="crash"', "info").level,
-			).toBe("error");
+			expect(detectLevel('time=2024-01-15 level="error" msg="crash"', "info").level).toBe("error");
 		});
 
 		// Real-world: Docker / Logrus
@@ -556,7 +549,9 @@ describe("detectLevel: error indicators", () => {
 			expect(detectLevel("Error: something broke", "warn").level).toBe("error");
 		});
 		test("TypeError:", () => {
-			expect(detectLevel("TypeError: Cannot read properties of undefined", "warn").level).toBe("error");
+			expect(detectLevel("TypeError: Cannot read properties of undefined", "warn").level).toBe(
+				"error",
+			);
 		});
 		test("ReferenceError:", () => {
 			expect(detectLevel("ReferenceError: foo is not defined", "warn").level).toBe("error");
@@ -565,7 +560,9 @@ describe("detectLevel: error indicators", () => {
 			expect(detectLevel("SyntaxError: Unexpected token", "warn").level).toBe("error");
 		});
 		test("RangeError:", () => {
-			expect(detectLevel("RangeError: Maximum call stack size exceeded", "warn").level).toBe("error");
+			expect(detectLevel("RangeError: Maximum call stack size exceeded", "warn").level).toBe(
+				"error",
+			);
 		});
 		test("ValueError (Python):", () => {
 			expect(detectLevel("ValueError: invalid literal for int()", "warn").level).toBe("error");
@@ -612,7 +609,9 @@ describe("detectLevel: error indicators", () => {
 		});
 		test("TypeError: on stderr upgrades to error", () => {
 			// Node.js uncaught TypeError → stderr → error
-			expect(detectLevel("TypeError: Cannot read properties of undefined (reading 'map')", "warn").level).toBe("error");
+			expect(
+				detectLevel("TypeError: Cannot read properties of undefined (reading 'map')", "warn").level,
+			).toBe("error");
 		});
 	});
 });
@@ -655,14 +654,11 @@ describe("executeWrap integration", () => {
 	});
 
 	test("captures stderr and forwards child exit code", async () => {
-		const proc = Bun.spawn(
-			["bun", "src/cli.ts", "bash", "-c", "echo oops >&2; exit 42"],
-			{
-				stdout: "pipe",
-				stderr: "pipe",
-				env: { ...process.env, RELOG_URL: "http://127.0.0.1:1" },
-			},
-		);
+		const proc = Bun.spawn(["bun", "src/cli.ts", "bash", "-c", "echo oops >&2; exit 42"], {
+			stdout: "pipe",
+			stderr: "pipe",
+			env: { ...process.env, RELOG_URL: "http://127.0.0.1:1" },
+		});
 
 		const stderr = await new Response(proc.stderr).text();
 		const exitCode = await proc.exited;
@@ -686,14 +682,11 @@ describe("executeWrap integration", () => {
 	});
 
 	test("command not found exits with 127", async () => {
-		const proc = Bun.spawn(
-			["bun", "src/cli.ts", "nonexistent-binary-xyz"],
-			{
-				stdout: "pipe",
-				stderr: "pipe",
-				env: { ...process.env, RELOG_URL: "http://127.0.0.1:1" },
-			},
-		);
+		const proc = Bun.spawn(["bun", "src/cli.ts", "nonexistent-binary-xyz"], {
+			stdout: "pipe",
+			stderr: "pipe",
+			env: { ...process.env, RELOG_URL: "http://127.0.0.1:1" },
+		});
 
 		const stderr = await new Response(proc.stderr).text();
 		const exitCode = await proc.exited;

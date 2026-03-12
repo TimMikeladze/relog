@@ -1,5 +1,5 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
-import { CREATE_INDEXES, CREATE_LOGS_TABLE } from "./schema.ts";
+import { CREATE_INDEXES, CREATE_LOGS_TABLE, CREATE_SOURCE_CURSORS_TABLE } from "./schema.ts";
 import type { IngestPayload, LogEntry, StreamFilters } from "../types.ts";
 import { parseMeta } from "./util.ts";
 import { getDefaultDbPath } from "../paths.ts";
@@ -32,6 +32,7 @@ export class RelogDatabase {
 		this.db.exec("PRAGMA synchronous = NORMAL");
 		this.db.exec("PRAGMA busy_timeout = 5000");
 		this.db.exec(CREATE_LOGS_TABLE);
+		this.db.exec(CREATE_SOURCE_CURSORS_TABLE);
 		// Migrate: add columns for existing DBs
 		try {
 			this.db.exec("ALTER TABLE logs ADD COLUMN project TEXT");
@@ -229,6 +230,71 @@ export class RelogDatabase {
 		}
 
 		return totalChanges;
+	}
+
+	getCursor(sourceId: string): string | null {
+		const row = this.readonlyDb
+			.prepare("SELECT cursor FROM source_cursors WHERE source_id = ?")
+			.get(sourceId) as { cursor: string } | null;
+		return row?.cursor ?? null;
+	}
+
+	setCursor(sourceId: string, cursor: string): void {
+		this.db
+			.prepare(
+				"INSERT INTO source_cursors (source_id, cursor, updated_at) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at",
+			)
+			.run(sourceId, cursor, Date.now());
+	}
+
+	insertAndSetCursor(entries: IngestPayload[], sourceId: string, cursor: string): void {
+		const insertStmt = this.db.prepare(`
+      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+		const cursorStmt = this.db.prepare(
+			"INSERT INTO source_cursors (source_id, cursor, updated_at) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at",
+		);
+
+		const now = Date.now();
+		this.db.transaction(() => {
+			for (const entry of entries) {
+				let ts: string;
+				let createdAt: number;
+
+				if (entry.timestamp) {
+					const parsed = new Date(entry.timestamp).getTime();
+					if (Number.isNaN(parsed)) {
+						ts = new Date(now).toISOString();
+						createdAt = now;
+					} else {
+						ts = entry.timestamp;
+						createdAt = parsed;
+					}
+				} else {
+					ts = new Date(now).toISOString();
+					createdAt = now;
+				}
+				insertStmt.run(
+					ts,
+					entry.level,
+					entry.message,
+					entry.meta ? JSON.stringify(entry.meta) : null,
+					entry.service ?? null,
+					entry.host ?? null,
+					entry.pid ?? null,
+					entry.trace_id ?? null,
+					entry.span_id ?? null,
+					entry.project ?? null,
+					entry.branch ?? null,
+					entry.version ?? null,
+					entry.deployment_id ?? null,
+					null,
+					createdAt,
+				);
+			}
+			cursorStmt.run(sourceId, cursor, now);
+		})();
 	}
 
 	close(): void {

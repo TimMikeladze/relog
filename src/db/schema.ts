@@ -18,6 +18,13 @@ CREATE TABLE IF NOT EXISTS logs (
   created_at INTEGER NOT NULL
 )`;
 
+export const CREATE_SOURCE_CURSORS_TABLE = `
+CREATE TABLE IF NOT EXISTS source_cursors (
+  source_id TEXT PRIMARY KEY,
+  cursor TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+)`;
+
 export const CREATE_INDEXES: string[] = [
 	"CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs (created_at)",
 	"CREATE INDEX IF NOT EXISTS idx_logs_level ON logs (level)",
