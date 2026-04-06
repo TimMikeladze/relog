@@ -245,7 +245,12 @@ export class RelogDatabase {
 		this.db.prepare(UPSERT_CURSOR_SQL).run(sourceId, cursor, Date.now());
 	}
 
-	insertAndSetCursor(entries: IngestPayload[], sourceId: string, cursor: string, keyPrefix?: string): void {
+	insertAndSetCursor(
+		entries: IngestPayload[],
+		sourceId: string,
+		cursor: string,
+		keyPrefix?: string,
+	): void {
 		const insertStmt = this.db.prepare(`
       INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

@@ -147,7 +147,10 @@ async function fetchNewRuns(
 async function fetchJobs(repo: string, runId: number, token: string): Promise<WorkflowJob[]> {
 	const allJobs: WorkflowJob[] = [];
 	for (let page = 1; page <= 5; page++) {
-		const res = await githubFetch(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100&page=${page}`, token);
+		const res = await githubFetch(
+			`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100&page=${page}`,
+			token,
+		);
 		const data = (await res.json()) as { jobs: WorkflowJob[] };
 		allJobs.push(...data.jobs);
 		if (data.jobs.length < 100) break;
@@ -228,7 +231,10 @@ export const githubActionsAdapter: SourceAdapter = {
 		const branch = config.branch as string | undefined;
 
 		if (!repo) throw new Error("github-actions adapter requires 'repo'");
-		if (!REPO_RE.test(repo)) throw new Error(`github-actions adapter: invalid repo format '${repo}' (expected 'owner/name')`);
+		if (!REPO_RE.test(repo))
+			throw new Error(
+				`github-actions adapter: invalid repo format '${repo}' (expected 'owner/name')`,
+			);
 		if (!token) throw new Error("github-actions adapter requires 'token'");
 
 		const parsed = parseCursor(cursor);
@@ -240,9 +246,7 @@ export const githubActionsAdapter: SourceAdapter = {
 		const jobsByRun = new Map<number, WorkflowJob[]>();
 		for (let i = 0; i < runs.length; i += JOB_FETCH_CONCURRENCY) {
 			const batch = runs.slice(i, i + JOB_FETCH_CONCURRENCY);
-			const results = await Promise.all(
-				batch.map((run) => fetchJobs(repo, run.id, token)),
-			);
+			const results = await Promise.all(batch.map((run) => fetchJobs(repo, run.id, token)));
 			for (let j = 0; j < batch.length; j++) {
 				jobsByRun.set(batch[j]!.id, results[j]!);
 			}

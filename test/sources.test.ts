@@ -394,9 +394,30 @@ describe("runToLogs", () => {
 	test("maps step conclusions to log levels", () => {
 		const failedJob = makeJob({
 			steps: [
-				{ name: "Build", status: "completed", conclusion: "failure", number: 1, started_at: "2026-03-12T00:00:10Z", completed_at: null },
-				{ name: "Lint", status: "completed", conclusion: "skipped", number: 2, started_at: null, completed_at: null },
-				{ name: "Test", status: "completed", conclusion: "success", number: 3, started_at: "2026-03-12T00:00:20Z", completed_at: null },
+				{
+					name: "Build",
+					status: "completed",
+					conclusion: "failure",
+					number: 1,
+					started_at: "2026-03-12T00:00:10Z",
+					completed_at: null,
+				},
+				{
+					name: "Lint",
+					status: "completed",
+					conclusion: "skipped",
+					number: 2,
+					started_at: null,
+					completed_at: null,
+				},
+				{
+					name: "Test",
+					status: "completed",
+					conclusion: "success",
+					number: 3,
+					started_at: "2026-03-12T00:00:20Z",
+					completed_at: null,
+				},
 			],
 		});
 
@@ -424,7 +445,16 @@ describe("runToLogs", () => {
 	test("uses job started_at as fallback when step started_at is null", () => {
 		const job = makeJob({
 			started_at: "2026-03-12T00:00:10Z",
-			steps: [{ name: "Step", status: "completed", conclusion: "success", number: 1, started_at: null, completed_at: null }],
+			steps: [
+				{
+					name: "Step",
+					status: "completed",
+					conclusion: "success",
+					number: 1,
+					started_at: null,
+					completed_at: null,
+				},
+			],
 		});
 		const logs = runToLogs(makeRun(), [job]);
 		expect(logs[0]!.timestamp).toBe("2026-03-12T00:00:10Z");
@@ -445,7 +475,9 @@ describe("github-actions adapter validation", () => {
 		const adapter = getAdapter("github-actions");
 		const iter = adapter.pull({ token: "tok", repo: "", every: 60 }, null);
 		await expect(async () => {
-			for await (const _ of iter) { /* drain */ }
+			for await (const _ of iter) {
+				/* drain */
+			}
 		}).toThrow("requires 'repo'");
 	});
 
@@ -453,7 +485,9 @@ describe("github-actions adapter validation", () => {
 		const adapter = getAdapter("github-actions");
 		const iter = adapter.pull({ token: "tok", repo: "../../etc/passwd", every: 60 }, null);
 		await expect(async () => {
-			for await (const _ of iter) { /* drain */ }
+			for await (const _ of iter) {
+				/* drain */
+			}
 		}).toThrow("invalid repo format");
 	});
 
@@ -461,7 +495,9 @@ describe("github-actions adapter validation", () => {
 		const adapter = getAdapter("github-actions");
 		const iter = adapter.pull({ repo: "myorg/app", token: "", every: 60 }, null);
 		await expect(async () => {
-			for await (const _ of iter) { /* drain */ }
+			for await (const _ of iter) {
+				/* drain */
+			}
 		}).toThrow("requires 'token'");
 	});
 });
@@ -470,7 +506,9 @@ describe("github-actions adapter validation", () => {
 
 function cleanupDb(path: string) {
 	for (const f of [path, `${path}-wal`, `${path}-shm`]) {
-		try { unlinkSync(f); } catch {}
+		try {
+			unlinkSync(f);
+		} catch {}
 	}
 }
 
@@ -482,8 +520,12 @@ describe("source runner", () => {
 	function makeMockStreamManager() {
 		let notifyCount = 0;
 		return {
-			notify: () => { notifyCount++; },
-			get notifyCount() { return notifyCount; },
+			notify: () => {
+				notifyCount++;
+			},
+			get notifyCount() {
+				return notifyCount;
+			},
 		};
 	}
 
@@ -531,12 +573,14 @@ describe("source runner", () => {
 		const sm = makeMockStreamManager();
 
 		// startSources with a very long interval so no tick fires after initial
-		const handle = startSources(db, sm as any, [{
-			adapter: "github-actions",
-			every: 99999,
-			repo: "test/noop",
-			token: "fake-token",
-		}]);
+		const handle = startSources(db, sm as any, [
+			{
+				adapter: "github-actions",
+				every: 99999,
+				repo: "test/noop",
+				token: "fake-token",
+			},
+		]);
 
 		// The initial tick will fail (no real GitHub API), but stop should still work
 		await Bun.sleep(100); // let the initial tick fire and fail
@@ -552,12 +596,14 @@ describe("source runner", () => {
 		const db = new RelogDatabase(path);
 		const sm = makeMockStreamManager();
 
-		const handle = startSources(db, sm as any, [{
-			adapter: "github-actions",
-			every: 99999,
-			repo: "test/noop",
-			token: "fake-token",
-		}]);
+		const handle = startSources(db, sm as any, [
+			{
+				adapter: "github-actions",
+				every: 99999,
+				repo: "test/noop",
+				token: "fake-token",
+			},
+		]);
 
 		await Bun.sleep(50);
 		await handle.stop();
@@ -573,21 +619,30 @@ describe("source runner", () => {
 describe("config edge cases", () => {
 	test("throws on every: 0", () => {
 		const path = join(tmpdir(), `relog-test-every0-${Date.now()}.yaml`);
-		writeFileSync(path, `sources:\n  - adapter: github-actions\n    repo: myorg/app\n    token: x\n    every: 0\n`);
+		writeFileSync(
+			path,
+			`sources:\n  - adapter: github-actions\n    repo: myorg/app\n    token: x\n    every: 0\n`,
+		);
 		expect(() => loadSourcesConfig(path)).toThrow("positive");
 		unlinkSync(path);
 	});
 
 	test("throws on negative every", () => {
 		const path = join(tmpdir(), `relog-test-everyneg-${Date.now()}.yaml`);
-		writeFileSync(path, `sources:\n  - adapter: github-actions\n    repo: myorg/app\n    token: x\n    every: -5\n`);
+		writeFileSync(
+			path,
+			`sources:\n  - adapter: github-actions\n    repo: myorg/app\n    token: x\n    every: -5\n`,
+		);
 		expect(() => loadSourcesConfig(path)).toThrow("positive");
 		unlinkSync(path);
 	});
 
 	test("throws on non-numeric every", () => {
 		const path = join(tmpdir(), `relog-test-everystr-${Date.now()}.yaml`);
-		writeFileSync(path, `sources:\n  - adapter: github-actions\n    repo: myorg/app\n    token: x\n    every: fast\n`);
+		writeFileSync(
+			path,
+			`sources:\n  - adapter: github-actions\n    repo: myorg/app\n    token: x\n    every: fast\n`,
+		);
 		expect(() => loadSourcesConfig(path)).toThrow("positive");
 		unlinkSync(path);
 	});
