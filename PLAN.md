@@ -1,6 +1,7 @@
 # Sources: Continuous External Log Ingestion
 
 ## Goal
+
 Add a source adapter system that continuously pulls logs from external systems (GitHub Actions, Vercel, etc.) into relog. Sources run as background tasks alongside the server, similar to the existing auto-pruner.
 
 ## Architecture
@@ -14,30 +15,33 @@ sources.yaml → SourceRunner (interval timer) → Adapter.pull(cursor) → db.i
 ## Steps
 
 ### 1. Source types and adapter interface
+
 **File:** `src/sources/types.ts`
 
 ```typescript
 interface SourceAdapter {
-  name: string
-  pull(config: Record<string, unknown>, cursor: string | null): AsyncIterable<PullBatch>
+	name: string;
+	pull(config: Record<string, unknown>, cursor: string | null): AsyncIterable<PullBatch>;
 }
 
 interface PullBatch {
-  logs: IngestPayload[]
-  cursor: string  // opaque string, adapter-defined
+	logs: IngestPayload[];
+	cursor: string; // opaque string, adapter-defined
 }
 
 interface SourceConfig {
-  adapter: string
-  every: number  // seconds
-  [key: string]: unknown  // adapter-specific params (repo, project, token, etc.)
+	adapter: string;
+	every: number; // seconds
+	[key: string]: unknown; // adapter-specific params (repo, project, token, etc.)
 }
 ```
 
 ### 2. Cursor state table
+
 **File:** `src/db/schema.ts` (add table), `src/db/database.ts` (add methods)
 
 New table:
+
 ```sql
 CREATE TABLE IF NOT EXISTS source_cursors (
   source_id TEXT PRIMARY KEY,
@@ -49,6 +53,7 @@ CREATE TABLE IF NOT EXISTS source_cursors (
 Add `getCursor(id)`, `setCursor(id, cursor)` to `RelogDatabase`.
 
 ### 3. Config file parser
+
 **File:** `src/sources/config.ts`
 
 - Parse YAML file (use `bun` built-in or a small parser)
@@ -57,9 +62,11 @@ Add `getCursor(id)`, `setCursor(id, cursor)` to `RelogDatabase`.
 - Return `SourceConfig[]`
 
 ### 4. Source runner
+
 **File:** `src/sources/runner.ts`
 
 Similar to `startAutoPrune()`:
+
 - Takes `db`, `streamManager`, `SourceConfig[]`, adapter registry
 - For each source config, starts a `setInterval` at the configured `every`
 - Each tick: get cursor from DB → call `adapter.pull()` → `db.insert()` → save new cursor → `streamManager.notify()`
@@ -67,6 +74,7 @@ Similar to `startAutoPrune()`:
 - Returns a `SourcesHandle` with `stop()` for graceful shutdown
 
 ### 5. GitHub Actions adapter
+
 **File:** `src/sources/adapters/github-actions.ts`
 
 - Uses GitHub REST API (`/repos/{owner}/{repo}/actions/runs` and `/repos/{owner}/{repo}/actions/runs/{id}/logs`)
@@ -85,6 +93,7 @@ Similar to `startAutoPrune()`:
   - `timestamp` ← step start time
 
 ### 6. Wire into server
+
 **Files:** `src/server/server.ts`, `src/cli/serve.ts`, `src/types.ts`
 
 - Add `sources?: SourceConfig[]` to `ServerConfig`
@@ -93,6 +102,7 @@ Similar to `startAutoPrune()`:
 - Add `sourcesHandle` to `ServerInstance`, call `.stop()` in `shutdown()`
 
 ### 7. Adapter registry
+
 **File:** `src/sources/registry.ts`
 
 Simple map of adapter name → adapter. Start with just `github-actions`. Easy to add more later.
@@ -112,11 +122,13 @@ sources:
 ```
 
 ## Build order
+
 1 → 2 → 3 → 7 → 4 → 5 → 6
 
 Steps 1-4 and 7 are the framework. Step 5 is the first adapter. Step 6 wires it all together.
 
 ## Non-goals (for now)
+
 - CLI `relog pull` one-shot command (can add later, reuses adapters)
 - Dynamic source management via API (just restart with new config)
 - Custom field mapping overrides (sensible defaults per adapter)

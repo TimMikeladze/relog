@@ -22,6 +22,18 @@ export interface SearchOptions {
 	around_id?: number; // center results around this log ID
 }
 
+const UPSERT_CURSOR_SQL =
+	"INSERT INTO source_cursors (source_id, cursor, updated_at) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at";
+
+function addColumnIfMissing(db: Database, sql: string): void {
+	try {
+		db.exec(sql);
+	} catch (err: unknown) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (!msg.includes("duplicate column name")) throw err;
+	}
+}
+
 export class RelogDatabase {
 	private db: Database;
 	private readonlyDb: Database;
@@ -34,21 +46,11 @@ export class RelogDatabase {
 		this.db.exec(CREATE_LOGS_TABLE);
 		this.db.exec(CREATE_SOURCE_CURSORS_TABLE);
 		// Migrate: add columns for existing DBs
-		try {
-			this.db.exec("ALTER TABLE logs ADD COLUMN project TEXT");
-		} catch {}
-		try {
-			this.db.exec("ALTER TABLE logs ADD COLUMN branch TEXT");
-		} catch {}
-		try {
-			this.db.exec("ALTER TABLE logs ADD COLUMN version TEXT");
-		} catch {}
-		try {
-			this.db.exec("ALTER TABLE logs ADD COLUMN deployment_id TEXT");
-		} catch {}
-		try {
-			this.db.exec("ALTER TABLE logs ADD COLUMN key_prefix TEXT");
-		} catch {}
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN project TEXT");
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN branch TEXT");
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN version TEXT");
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN deployment_id TEXT");
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN key_prefix TEXT");
 		for (const idx of CREATE_INDEXES) {
 			this.db.exec(idx);
 		}
@@ -240,21 +242,15 @@ export class RelogDatabase {
 	}
 
 	setCursor(sourceId: string, cursor: string): void {
-		this.db
-			.prepare(
-				"INSERT INTO source_cursors (source_id, cursor, updated_at) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at",
-			)
-			.run(sourceId, cursor, Date.now());
+		this.db.prepare(UPSERT_CURSOR_SQL).run(sourceId, cursor, Date.now());
 	}
 
-	insertAndSetCursor(entries: IngestPayload[], sourceId: string, cursor: string): void {
+	insertAndSetCursor(entries: IngestPayload[], sourceId: string, cursor: string, keyPrefix?: string): void {
 		const insertStmt = this.db.prepare(`
       INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-		const cursorStmt = this.db.prepare(
-			"INSERT INTO source_cursors (source_id, cursor, updated_at) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at",
-		);
+		const cursorStmt = this.db.prepare(UPSERT_CURSOR_SQL);
 
 		const now = Date.now();
 		this.db.transaction(() => {
@@ -289,7 +285,7 @@ export class RelogDatabase {
 					entry.branch ?? null,
 					entry.version ?? null,
 					entry.deployment_id ?? null,
-					null,
+					keyPrefix ?? null,
 					createdAt,
 				);
 			}

@@ -8,10 +8,7 @@ export interface PullBatch {
 
 export interface SourceAdapter {
 	name: string;
-	pull(
-		config: Record<string, unknown>,
-		cursor: string | null,
-	): AsyncIterable<PullBatch>;
+	pull(config: Record<string, unknown>, cursor: string | null): AsyncIterable<PullBatch>;
 }
 
 export interface SourceConfig {

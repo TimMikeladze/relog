@@ -1047,7 +1047,13 @@ function ArchitectureDiagram({ inView }: { inView: boolean }) {
 					<ArchNode label="TypeScript" sub="SDK" color="#6ee7b7" delay={0.1} inView={inView} />
 					<ArchNode label="Python" sub="SDK" color="#6ee7b7" delay={0.13} inView={inView} />
 					<ArchNode label="Browser" sub="SDK" color="#6ee7b7" delay={0.16} inView={inView} />
-					<ArchNode label="Sources" sub="GitHub Actions, etc." color="#6ee7b7" delay={0.19} inView={inView} />
+					<ArchNode
+						label="Sources"
+						sub="GitHub Actions, etc."
+						color="#6ee7b7"
+						delay={0.19}
+						inView={inView}
+					/>
 				</div>
 			</div>
 
@@ -1311,9 +1317,7 @@ function ExternalSources() {
 				{/* Right: field mapping */}
 				<Reveal delay={0.15}>
 					<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 h-full">
-						<h3 className="text-[13px] font-medium text-fg mb-3">
-							GitHub Actions → relog fields
-						</h3>
+						<h3 className="text-[13px] font-medium text-fg mb-3">GitHub Actions → relog fields</h3>
 						<div className="space-y-1.5">
 							{mappings.map((m, i) => (
 								<motion.div

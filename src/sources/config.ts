@@ -151,9 +151,7 @@ export function loadSourcesConfig(filePath: string): SourceConfig[] {
 		const id = deriveSourceId(config);
 
 		if (seenIds.has(id)) {
-			throw new Error(
-				`Duplicate source id "${id}". Add an explicit 'id' field to disambiguate.`,
-			);
+			throw new Error(`Duplicate source id "${id}". Add an explicit 'id' field to disambiguate.`);
 		}
 		seenIds.add(id);
 

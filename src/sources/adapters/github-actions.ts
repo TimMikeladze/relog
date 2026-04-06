@@ -3,6 +3,9 @@ import type { PullBatch, SourceAdapter } from "../types.ts";
 
 const RUNS_PER_PAGE = 30;
 const MAX_PAGES = 10;
+const FETCH_TIMEOUT_MS = 30_000;
+const JOB_FETCH_CONCURRENCY = 5;
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 interface WorkflowRun {
 	id: number;
@@ -86,6 +89,7 @@ async function githubFetch(path: string, token: string): Promise<Response> {
 			Accept: "application/vnd.github+json",
 			"X-GitHub-Api-Version": "2022-11-28",
 		},
+		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	});
 
 	if (res.status === 403 || res.status === 429) {
@@ -135,25 +139,20 @@ async function fetchNewRuns(
 	}
 
 	// Oldest first so we process in chronological order
-	runs.sort(
-		(a, b) =>
-			new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-	);
+	runs.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
 	return runs;
 }
 
-async function fetchJobs(
-	repo: string,
-	runId: number,
-	token: string,
-): Promise<WorkflowJob[]> {
-	const res = await githubFetch(
-		`/repos/${repo}/actions/runs/${runId}/jobs`,
-		token,
-	);
-	const data = (await res.json()) as { jobs: WorkflowJob[] };
-	return data.jobs;
+async function fetchJobs(repo: string, runId: number, token: string): Promise<WorkflowJob[]> {
+	const allJobs: WorkflowJob[] = [];
+	for (let page = 1; page <= 5; page++) {
+		const res = await githubFetch(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100&page=${page}`, token);
+		const data = (await res.json()) as { jobs: WorkflowJob[] };
+		allJobs.push(...data.jobs);
+		if (data.jobs.length < 100) break;
+	}
+	return allJobs;
 }
 
 /**
@@ -216,18 +215,20 @@ function runToLogs(run: WorkflowRun, jobs: WorkflowJob[]): IngestPayload[] {
 	return logs;
 }
 
+// Exported for testing
+export { parseCursor, buildCursor, runToLogs };
+export type { ParsedCursor, WorkflowRun, WorkflowJob, WorkflowStep };
+
 export const githubActionsAdapter: SourceAdapter = {
 	name: "github-actions",
 
-	async *pull(
-		config: Record<string, unknown>,
-		cursor: string | null,
-	): AsyncIterable<PullBatch> {
+	async *pull(config: Record<string, unknown>, cursor: string | null): AsyncIterable<PullBatch> {
 		const repo = config.repo as string;
 		const token = config.token as string;
 		const branch = config.branch as string | undefined;
 
 		if (!repo) throw new Error("github-actions adapter requires 'repo'");
+		if (!REPO_RE.test(repo)) throw new Error(`github-actions adapter: invalid repo format '${repo}' (expected 'owner/name')`);
 		if (!token) throw new Error("github-actions adapter requires 'token'");
 
 		const parsed = parseCursor(cursor);
@@ -235,11 +236,23 @@ export const githubActionsAdapter: SourceAdapter = {
 
 		if (runs.length === 0) return;
 
+		// Fetch jobs concurrently in batches to avoid N+1 API waterfall
+		const jobsByRun = new Map<number, WorkflowJob[]>();
+		for (let i = 0; i < runs.length; i += JOB_FETCH_CONCURRENCY) {
+			const batch = runs.slice(i, i + JOB_FETCH_CONCURRENCY);
+			const results = await Promise.all(
+				batch.map((run) => fetchJobs(repo, run.id, token)),
+			);
+			for (let j = 0; j < batch.length; j++) {
+				jobsByRun.set(batch[j]!.id, results[j]!);
+			}
+		}
+
 		let newestTimestamp = parsed?.timestamp ?? runs[0]!.created_at;
 		let boundaryIds = new Set<number>(parsed?.seenIds);
 
 		for (const run of runs) {
-			const jobs = await fetchJobs(repo, run.id, token);
+			const jobs = jobsByRun.get(run.id) ?? [];
 			const logs = runToLogs(run, jobs);
 
 			// When timestamp advances, old boundary IDs are no longer needed —

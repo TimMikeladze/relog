@@ -1342,28 +1342,28 @@ The `github-actions` adapter fetches completed workflow runs via the GitHub API,
 
 **Config options:**
 
-| Option   | Required | Description                                 |
-| -------- | -------- | ------------------------------------------- |
-| `repo`   | yes      | GitHub repository (`owner/repo`)            |
-| `token`  | yes      | GitHub token (or `$ENV_VAR` reference)      |
-| `branch` | no       | Filter to a specific branch                 |
-| `every`  | yes      | Poll interval in seconds                    |
+| Option   | Required | Description                            |
+| -------- | -------- | -------------------------------------- |
+| `repo`   | yes      | GitHub repository (`owner/repo`)       |
+| `token`  | yes      | GitHub token (or `$ENV_VAR` reference) |
+| `branch` | no       | Filter to a specific branch            |
+| `every`  | yes      | Poll interval in seconds               |
 
 **What gets ingested:**
 
 Each workflow run produces one log entry per step, plus a summary entry per job. This gives granular visibility — which step failed? — while `trace_id` groups everything from the same run.
 
-| GitHub Actions field | relog field            | Example                        |
-| -------------------- | ---------------------- | ------------------------------ |
-| Repository           | `project`              | `myorg/api`                    |
-| Branch               | `branch`               | `main`                         |
-| Run ID               | `trace_id`             | `gha:7890123456`               |
-| Job name             | `service`              | `build`                        |
-| Commit SHA           | `version`              | `a1b2c3d4`                     |
-| Step name            | `message`              | `Run tests — success`          |
-| Step conclusion      | `level`                | `error` if failed, else `info` |
-| Workflow name        | `meta.workflow`        | `CI`                           |
-| Run URL              | `meta.run_url`         | GitHub link to the run         |
+| GitHub Actions field | relog field     | Example                        |
+| -------------------- | --------------- | ------------------------------ |
+| Repository           | `project`       | `myorg/api`                    |
+| Branch               | `branch`        | `main`                         |
+| Run ID               | `trace_id`      | `gha:7890123456`               |
+| Job name             | `service`       | `build`                        |
+| Commit SHA           | `version`       | `a1b2c3d4`                     |
+| Step name            | `message`       | `Run tests — success`          |
+| Step conclusion      | `level`         | `error` if failed, else `info` |
+| Workflow name        | `meta.workflow` | `CI`                           |
+| Run URL              | `meta.run_url`  | GitHub link to the run         |
 
 **Example: searching CI failures**
 
@@ -1435,27 +1435,27 @@ A source adapter is a single file that implements the `SourceAdapter` interface:
 import type { SourceAdapter, PullBatch } from "../types.ts";
 
 export const myAdapter: SourceAdapter = {
-  name: "my-system",
+	name: "my-system",
 
-  async *pull(config, cursor) {
-    // fetch new data since cursor (null on first run)
-    const items = await fetchNewItems(config.apiUrl, cursor);
+	async *pull(config, cursor) {
+		// fetch new data since cursor (null on first run)
+		const items = await fetchNewItems(config.apiUrl, cursor);
 
-    for (const item of items) {
-      yield {
-        logs: [
-          {
-            timestamp: item.created_at,
-            level: item.success ? "info" : "error",
-            message: item.description,
-            service: "my-system",
-            project: config.project,
-          },
-        ],
-        cursor: item.id, // opaque string — returned to you next time
-      };
-    }
-  },
+		for (const item of items) {
+			yield {
+				logs: [
+					{
+						timestamp: item.created_at,
+						level: item.success ? "info" : "error",
+						message: item.description,
+						service: "my-system",
+						project: config.project,
+					},
+				],
+				cursor: item.id, // opaque string — returned to you next time
+			};
+		}
+	},
 };
 ```
 

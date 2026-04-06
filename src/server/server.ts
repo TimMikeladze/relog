@@ -120,6 +120,12 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		);
 	}
 
+	// Load source configs before starting the HTTP server so a config
+	// error doesn't leak a running server or pruner
+	const sourceConfigs = config.sourcesConfigPath
+		? loadSourcesConfig(config.sourcesConfigPath)
+		: undefined;
+
 	const keys: AuthKeys = {
 		ingestKeys: config.ingestKeys,
 		readKeys: config.readKeys,
@@ -239,12 +245,6 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		},
 	});
 
-	// Load source configs BEFORE starting background tasks so a config error
-	// doesn't leak a running pruner or HTTP server
-	const sourceConfigs = config.sourcesConfigPath
-		? loadSourcesConfig(config.sourcesConfigPath)
-		: undefined;
-
 	const pruneHandle = config.autoPrune
 		? startAutoPrune(db, config.autoPrune, config.archive, () => duckdb.refreshView())
 		: undefined;
@@ -256,7 +256,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	}
 
 	const shutdown = async () => {
-		sourcesHandle?.stop();
+		await sourcesHandle?.stop();
 		pruneHandle?.stop();
 		streamManager.shutdown();
 		server.stop();
@@ -266,5 +266,14 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		db.close();
 	};
 
-	return { server, db, duckdb, streamManager, aggregatesManager, shutdown, pruneHandle, sourcesHandle };
+	return {
+		server,
+		db,
+		duckdb,
+		streamManager,
+		aggregatesManager,
+		shutdown,
+		pruneHandle,
+		sourcesHandle,
+	};
 }
