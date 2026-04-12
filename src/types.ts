@@ -29,10 +29,12 @@ export interface LogRecord {
 	pid?: number;
 	trace_id?: string;
 	span_id?: string;
+	parent_span_id?: string;
 	project?: string;
 	branch?: string;
 	version?: string;
 	deployment_id?: string;
+	duration_ms?: number;
 	key_prefix?: string;
 	created_at?: number;
 }
@@ -160,10 +162,12 @@ export interface IngestPayload {
 	pid?: number;
 	trace_id?: string;
 	span_id?: string;
+	parent_span_id?: string;
 	project?: string;
 	branch?: string;
 	version?: string;
 	deployment_id?: string;
+	duration_ms?: number;
 }
 
 export interface Aggregate {

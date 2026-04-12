@@ -166,6 +166,10 @@ export class Logger {
 			version: this.version,
 			deployment_id: this.deploymentId,
 		};
+		// Promote duration_ms from meta to top-level for the DB column
+		if (typeof finalMeta?.duration_ms === "number") {
+			record.duration_ms = finalMeta.duration_ms;
+		}
 
 		if (this.consoleEnabled) {
 			printLogRecord(record);

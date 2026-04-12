@@ -51,6 +51,8 @@ export class RelogDatabase {
 		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN version TEXT");
 		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN deployment_id TEXT");
 		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN key_prefix TEXT");
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN parent_span_id TEXT");
+		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN duration_ms REAL");
 		for (const idx of CREATE_INDEXES) {
 			this.db.exec(idx);
 		}
@@ -64,8 +66,8 @@ export class RelogDatabase {
 
 	insert(entries: IngestPayload[], keyPrefix?: string): void {
 		const stmt = this.db.prepare(`
-      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, parent_span_id, project, branch, version, deployment_id, duration_ms, key_prefix, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
 		const now = Date.now();
@@ -88,6 +90,15 @@ export class RelogDatabase {
 					ts = new Date(now).toISOString();
 					createdAt = now;
 				}
+				// Extract duration_ms from meta as fallback (EventBuilder puts it there)
+				let durationMs: number | null = entry.duration_ms ?? null;
+				if (durationMs === null && entry.meta) {
+					const metaDuration = entry.meta.duration_ms;
+					if (typeof metaDuration === "number") {
+						durationMs = metaDuration;
+					}
+				}
+
 				stmt.run(
 					ts,
 					entry.level,
@@ -98,10 +109,12 @@ export class RelogDatabase {
 					entry.pid ?? null,
 					entry.trace_id ?? null,
 					entry.span_id ?? null,
+					entry.parent_span_id ?? null,
 					entry.project ?? null,
 					entry.branch ?? null,
 					entry.version ?? null,
 					entry.deployment_id ?? null,
+					durationMs,
 					keyPrefix ?? null,
 					createdAt,
 				);
@@ -252,8 +265,8 @@ export class RelogDatabase {
 		keyPrefix?: string,
 	): void {
 		const insertStmt = this.db.prepare(`
-      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO logs (timestamp, level, message, meta, service, host, pid, trace_id, span_id, parent_span_id, project, branch, version, deployment_id, duration_ms, key_prefix, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 		const cursorStmt = this.db.prepare(UPSERT_CURSOR_SQL);
 
@@ -276,6 +289,15 @@ export class RelogDatabase {
 					ts = new Date(now).toISOString();
 					createdAt = now;
 				}
+
+				let durationMs: number | null = entry.duration_ms ?? null;
+				if (durationMs === null && entry.meta) {
+					const metaDuration = entry.meta.duration_ms;
+					if (typeof metaDuration === "number") {
+						durationMs = metaDuration;
+					}
+				}
+
 				insertStmt.run(
 					ts,
 					entry.level,
@@ -286,10 +308,12 @@ export class RelogDatabase {
 					entry.pid ?? null,
 					entry.trace_id ?? null,
 					entry.span_id ?? null,
+					entry.parent_span_id ?? null,
 					entry.project ?? null,
 					entry.branch ?? null,
 					entry.version ?? null,
 					entry.deployment_id ?? null,
+					durationMs,
 					keyPrefix ?? null,
 					createdAt,
 				);

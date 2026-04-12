@@ -11,10 +11,12 @@ export interface LogRecord {
 	pid?: number | null;
 	trace_id?: string | null;
 	span_id?: string | null;
+	parent_span_id?: string | null;
 	project?: string | null;
 	branch?: string | null;
 	version?: string | null;
 	deployment_id?: string | null;
+	duration_ms?: number | null;
 	key_prefix?: string | null;
 	created_at?: number | null;
 }

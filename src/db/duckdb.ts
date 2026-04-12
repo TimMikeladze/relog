@@ -107,10 +107,8 @@ export class DuckDBReader {
 		await conn.run(`
 			CREATE OR REPLACE VIEW logs AS
 				SELECT * FROM hot.logs
-				UNION ALL
-				SELECT id, timestamp, level, message, meta, service, host, pid,
-					trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at
-				FROM read_parquet('${parquetPath}', hive_partitioning=false, union_by_name=true)
+				UNION ALL BY NAME
+				SELECT * FROM read_parquet('${parquetPath}', hive_partitioning=false, union_by_name=true)
 		`);
 	}
 
@@ -254,10 +252,10 @@ export class DuckDBReader {
 						SELECT * FROM logs
 						WHERE ${wherePrefix}id < ?
 						ORDER BY id DESC LIMIT ?
-					) UNION ALL
+					) UNION ALL BY NAME
 					SELECT * FROM logs
 					WHERE ${wherePrefix}id = ?
-					UNION ALL
+					UNION ALL BY NAME
 					SELECT * FROM (
 						SELECT * FROM logs
 						WHERE ${wherePrefix}id > ?

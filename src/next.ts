@@ -355,11 +355,9 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 		}
 
 		// Optionally override service
-		if (service) {
-			for (const entry of entries) {
-				entry.service = service;
-			}
-		}
+		const finalEntries = service
+			? entries.map((entry) => ({ ...entry, service }))
+			: entries;
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
@@ -372,7 +370,7 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 			const res = await fetch(`${url}/ingest`, {
 				method: "POST",
 				headers,
-				body: JSON.stringify(entries),
+				body: JSON.stringify(finalEntries),
 			});
 
 			if (!res.ok) {

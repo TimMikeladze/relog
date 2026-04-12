@@ -49,10 +49,12 @@ export function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 	const pids: (number | null)[] = [];
 	const traceIds: (string | null)[] = [];
 	const spanIds: (string | null)[] = [];
+	const parentSpanIds: (string | null)[] = [];
 	const projects: (string | null)[] = [];
 	const branches: (string | null)[] = [];
 	const versions: (string | null)[] = [];
 	const deploymentIds: (string | null)[] = [];
+	const durationMsValues: (number | null)[] = [];
 	const keyPrefixes: (string | null)[] = [];
 	const createdAts: bigint[] = [];
 
@@ -67,10 +69,12 @@ export function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 		pids.push(log.pid ?? null);
 		traceIds.push(log.trace_id ?? null);
 		spanIds.push(log.span_id ?? null);
+		parentSpanIds.push(log.parent_span_id ?? null);
 		projects.push(log.project ?? null);
 		branches.push(log.branch ?? null);
 		versions.push(log.version ?? null);
 		deploymentIds.push(log.deployment_id ?? null);
+		durationMsValues.push(log.duration_ms ?? null);
 		keyPrefixes.push(log.key_prefix ?? null);
 		createdAts.push(BigInt(log.created_at!));
 	}
@@ -87,10 +91,12 @@ export function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 			{ name: "pid", data: pids, type: "INT32", nullable: true },
 			{ name: "trace_id", data: traceIds, type: "STRING", nullable: true },
 			{ name: "span_id", data: spanIds, type: "STRING", nullable: true },
+			{ name: "parent_span_id", data: parentSpanIds, type: "STRING", nullable: true },
 			{ name: "project", data: projects, type: "STRING", nullable: true },
 			{ name: "branch", data: branches, type: "STRING", nullable: true },
 			{ name: "version", data: versions, type: "STRING", nullable: true },
 			{ name: "deployment_id", data: deploymentIds, type: "STRING", nullable: true },
+			{ name: "duration_ms", data: durationMsValues, type: "DOUBLE", nullable: true },
 			{ name: "key_prefix", data: keyPrefixes, type: "STRING", nullable: true },
 			{ name: "created_at", data: createdAts, type: "INT64" },
 		],

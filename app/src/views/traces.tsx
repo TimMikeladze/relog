@@ -31,9 +31,12 @@ interface TraceRow {
 interface SpanBar {
 	name: string;
 	service: string;
+	spanId: string;
+	parentSpanId?: string;
 	start: number;
 	duration: number;
 	level: string;
+	depth: number;
 }
 
 function levelPriority(level: string): number {
@@ -44,32 +47,75 @@ function levelPriority(level: string): number {
 	);
 }
 
-function buildSpans(logs: LogRecord[]): SpanBar[] {
-	const spans: SpanBar[] = [];
-	const baseTime = logs.length > 0 ? new Date(logs[0].timestamp).getTime() : 0;
+function parseMeta(log: LogRecord): Record<string, unknown> {
+	try {
+		return typeof log.meta === "string" ? JSON.parse(log.meta || "{}") : log.meta || {};
+	} catch {
+		return {};
+	}
+}
 
-	const wideEvents = logs.filter((l) => {
-		try {
-			const meta = typeof l.meta === "string" ? JSON.parse(l.meta || "{}") : l.meta || {};
-			return meta.event === true || meta.duration_ms != null;
-		} catch {
-			return false;
+function flattenTree(nodes: Omit<SpanBar, "depth">[]): SpanBar[] {
+	type TreeNode = Omit<SpanBar, "depth"> & { children: TreeNode[] };
+	const byId = new Map<string, TreeNode>();
+	const roots: TreeNode[] = [];
+
+	for (const node of nodes) {
+		byId.set(node.spanId, { ...node, children: [] });
+	}
+
+	for (const node of byId.values()) {
+		// Prevent self-referencing spans
+		if (node.parentSpanId && node.parentSpanId !== node.spanId && byId.has(node.parentSpanId)) {
+			byId.get(node.parentSpanId)!.children.push(node);
+		} else {
+			roots.push(node);
 		}
-	});
+	}
 
-	if (wideEvents.length > 0) {
-		for (const ev of wideEvents) {
-			const meta = typeof ev.meta === "string" ? JSON.parse(ev.meta || "{}") : ev.meta || {};
-			const durationMs = Number(meta.duration_ms) || 1;
-			spans.push({
-				name: ev.message,
-				service: ev.service || "unknown",
-				start: Math.max(0, new Date(ev.timestamp).getTime() - baseTime - durationMs),
+	const result: SpanBar[] = [];
+	const visited = new Set<string>();
+	function walk(n: TreeNode, depth: number) {
+		if (visited.has(n.spanId)) return;
+		visited.add(n.spanId);
+		result.push({ ...n, depth });
+		n.children.sort((a, b) => a.start - b.start);
+		for (const child of n.children) walk(child, depth + 1);
+	}
+	roots.sort((a, b) => a.start - b.start);
+	for (const root of roots) walk(root, 0);
+	return result;
+}
+
+function buildSpans(logs: LogRecord[]): SpanBar[] {
+	if (logs.length === 0) return [];
+	const raw: Omit<SpanBar, "depth">[] = [];
+
+	// Prefer logs that have duration_ms (OTEL spans or wide events)
+	const spansWithDuration = logs.filter(
+		(l) => l.duration_ms != null || parseMeta(l).duration_ms != null,
+	);
+
+	if (spansWithDuration.length > 0) {
+		const baseTime = Math.min(
+			...spansWithDuration.map((l) => new Date(l.timestamp).getTime()),
+		);
+		for (const log of spansWithDuration) {
+			const meta = parseMeta(log);
+			const durationMs = Number(log.duration_ms ?? meta.duration_ms) || 1;
+			raw.push({
+				name: log.message,
+				service: log.service || "unknown",
+				spanId: log.span_id || String(log.id),
+				parentSpanId: log.parent_span_id || undefined,
+				start: Math.max(0, new Date(log.timestamp).getTime() - baseTime),
 				duration: durationMs,
-				level: ev.level,
+				level: log.level,
 			});
 		}
 	} else {
+		const baseTime = new Date(logs[0].timestamp).getTime();
+		// Fallback: group by span_id or service
 		const spanGroups = new Map<string, LogRecord[]>();
 		for (const l of logs) {
 			const key = l.span_id || l.service || "unknown";
@@ -83,9 +129,11 @@ function buildSpans(logs: LogRecord[]): SpanBar[] {
 				(max, l) => (levelPriority(l.level) > levelPriority(max) ? l.level : max),
 				"info",
 			);
-			spans.push({
+			raw.push({
 				name: key,
 				service: group[0].service || "unknown",
+				spanId: key,
+				parentSpanId: undefined,
 				start,
 				duration: Math.max(end - start, 1),
 				level: maxLevel,
@@ -93,7 +141,10 @@ function buildSpans(logs: LogRecord[]): SpanBar[] {
 		}
 	}
 
-	return spans;
+	// If any spans have parent_span_id, build a tree; otherwise flat with depth 0
+	const hasTree = raw.some((s) => s.parentSpanId);
+	if (hasTree) return flattenTree(raw);
+	return raw.map((s) => ({ ...s, depth: 0 }));
 }
 
 function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
@@ -114,10 +165,9 @@ function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
 		);
 		let durationMs = 0;
 		for (const l of group) {
-			try {
-				const meta = typeof l.meta === "string" ? JSON.parse(l.meta || "{}") : l.meta || {};
-				if (meta.duration_ms != null) durationMs = Math.max(durationMs, Number(meta.duration_ms));
-			} catch {}
+			// Prefer the column, fall back to meta
+			const d = l.duration_ms ?? parseMeta(l).duration_ms;
+			if (d != null) durationMs = Math.max(durationMs, Number(d));
 		}
 		const services = [...new Set(group.map((l) => l.service).filter(Boolean))].join(",");
 		rows.push({
@@ -189,7 +239,10 @@ export function TracesView({
 		inClause("version", filters.version);
 		inClause("deployment_id", filters.deployment_id);
 		inClause("level", filters.level);
-		if (filters.grep) where += ` AND message LIKE '%${filters.grep.replace(/'/g, "''")}%'`;
+		if (filters.grep) {
+			const escaped = filters.grep.replace(/'/g, "''").replace(/[%_\\]/g, "\\$&");
+			where += ` AND message LIKE '%${escaped}%' ESCAPE '\\'`;
+		}
 		if (filters.from) {
 			const match = filters.from.match(/^(\d+)([smhdwMy])$/);
 			if (match) {
@@ -211,7 +264,7 @@ export function TracesView({
         trace_id,
         MIN(timestamp) as first_ts,
         COUNT(DISTINCT COALESCE(span_id, CAST(id AS VARCHAR))) as span_count,
-        MAX(CASE WHEN meta IS NOT NULL AND meta LIKE '%duration_ms%' THEN CAST(json_extract(meta, '$.duration_ms') AS DOUBLE) ELSE 0 END) as duration_ms,
+        COALESCE(MAX(duration_ms), 0) as duration_ms,
         MAX(CASE
           WHEN level = 'fatal' THEN 5
           WHEN level = 'error' THEN 4
@@ -250,7 +303,7 @@ export function TracesView({
 					})),
 				);
 			})
-			.catch((err) => console.error("Traces query failed:", err))
+			.catch(() => {})
 			.finally(() => setLoading(false));
 	}, [enabled, live, filters]);
 
@@ -267,7 +320,10 @@ export function TracesView({
 		setTraceLogs([]);
 		setTraceSpans([]);
 		if (!expandedTrace || live === "1" || !enabled) return;
-		const sql = `SELECT * FROM logs WHERE trace_id = '${expandedTrace}' ORDER BY created_at ASC LIMIT 200`;
+		// Sanitize trace_id: allow hex, dashes, colons, alphanumeric (covers OTEL hex + gha:123 patterns)
+		if (!/^[\w:.-]{1,256}$/.test(expandedTrace)) return;
+		const safe = expandedTrace.replace(/'/g, "''");
+		const sql = `SELECT * FROM logs WHERE trace_id = '${safe}' ORDER BY created_at ASC LIMIT 200`;
 		apiPost<QueryResult>("/query", { sql })
 			.then((res) => {
 				const logs = res.rows as unknown as LogRecord[];
@@ -451,23 +507,34 @@ export function TracesView({
 							{expandedTrace === t.trace_id && (
 								<div className="border-t border-border/50 bg-muted/20 px-4 py-4 space-y-4">
 									{/* Waterfall */}
-									{displayTraceSpans.length > 0 && (
+									{displayTraceSpans.length > 0 && (() => {
+									const maxEnd = Math.max(
+										...displayTraceSpans.map((s) => s.start + s.duration),
+										1,
+									);
+									return (
 										<div>
 											<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
 												Waterfall
 											</div>
-											<div className="space-y-1">
+											<div className="space-y-0.5">
 												{displayTraceSpans.map((span, i) => {
-													const maxEnd = Math.max(
-														...displayTraceSpans.map((s) => s.start + s.duration),
-														1,
-													);
 													const leftPct = (span.start / maxEnd) * 100;
 													const widthPct = Math.max((span.duration / maxEnd) * 100, 0.5);
 													const isError = levelPriority(span.level) >= 4;
+													const indent = span.depth * 12;
 													return (
 														<div key={i} className="flex items-center gap-2">
-															<span className="w-24 shrink-0 truncate text-[10px] text-muted-foreground">
+															<span
+																className="shrink-0 truncate text-[10px] text-muted-foreground"
+																style={{
+																	width: `${96 + indent}px`,
+																	paddingLeft: `${indent}px`,
+																}}
+															>
+																{span.depth > 0 && (
+																	<span className="text-border mr-1">{"└"}</span>
+																)}
 																{span.service}
 															</span>
 															<div className="relative h-5 flex-1 rounded bg-muted/30">
@@ -490,7 +557,8 @@ export function TracesView({
 												})}
 											</div>
 										</div>
-									)}
+									);
+								})()}
 
 									{/* Trace logs */}
 									<div>

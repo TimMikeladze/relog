@@ -61,7 +61,7 @@ export function createMcpServer(opts: McpOptions): McpServer {
 
 	server.tool(
 		"query_logs",
-		"Run a read-only SQL query against the logs table. The table has columns: id, timestamp, level, message, meta, service, host, pid, trace_id, span_id, project, branch, version, deployment_id, created_at.",
+		"Run a read-only SQL query against the logs table. The table has columns: id, timestamp, level, message, meta, service, host, pid, trace_id, span_id, parent_span_id, project, branch, version, deployment_id, duration_ms, key_prefix, created_at.",
 		{
 			sql: z.string().describe("SQL query (SELECT only). A LIMIT is auto-added if missing."),
 		},

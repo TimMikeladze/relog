@@ -110,6 +110,18 @@ export async function handleIngest(
 				{ status: 400 },
 			);
 		}
+		if (entry.parent_span_id !== undefined && typeof entry.parent_span_id !== "string") {
+			return Response.json(
+				{ error: "Invalid log entry: 'parent_span_id' must be a string" },
+				{ status: 400 },
+			);
+		}
+		if (entry.duration_ms !== undefined && typeof entry.duration_ms !== "number") {
+			return Response.json(
+				{ error: "Invalid log entry: 'duration_ms' must be a number" },
+				{ status: 400 },
+			);
+		}
 		if (entry.message.length > MAX_MESSAGE_LENGTH) {
 			return Response.json(
 				{ error: `Invalid log entry: 'message' exceeds ${MAX_MESSAGE_LENGTH} characters` },
@@ -121,6 +133,7 @@ export async function handleIngest(
 			"host",
 			"trace_id",
 			"span_id",
+			"parent_span_id",
 			"project",
 			"branch",
 			"version",

@@ -113,18 +113,23 @@ function hexId(len: number): string {
 interface TraceContext {
 	trace_id: string;
 	span_id: string;
+	parent_span_id?: string;
 }
 
 // Generate correlated trace groups — multiple spans sharing a trace_id
 const activeTraces: TraceContext[] = [];
 
 function getOrCreateTrace(): TraceContext {
-	// 40% chance to reuse an existing trace (creates correlated spans)
+	// 40% chance to reuse an existing trace (creates child span)
 	if (activeTraces.length > 0 && Math.random() < 0.4) {
-		const trace = pick(activeTraces);
-		return { trace_id: trace.trace_id, span_id: hexId(16) };
+		const parent = pick(activeTraces);
+		return {
+			trace_id: parent.trace_id,
+			span_id: hexId(16),
+			parent_span_id: parent.span_id,
+		};
 	}
-	// New trace
+	// New root trace
 	const ctx: TraceContext = { trace_id: hexId(32), span_id: hexId(16) };
 	activeTraces.push(ctx);
 	// Keep pool bounded
@@ -231,6 +236,7 @@ export const seedCommand: Command = command({
 					pid: Math.floor(Math.random() * 50000) + 1000,
 					trace_id: trace.trace_id,
 					span_id: trace.span_id,
+					parent_span_id: trace.parent_span_id,
 					meta: randomMeta(level, message),
 				};
 			});

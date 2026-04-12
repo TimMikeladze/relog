@@ -289,10 +289,8 @@ describe("DuckDB UNION ALL view (SQLite + Parquet)", () => {
 			await conn.run(`
 				CREATE OR REPLACE VIEW logs AS
 					SELECT * FROM hot.logs
-					UNION ALL
-					SELECT id, timestamp, level, message, meta, service, host, pid,
-						trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at
-					FROM read_parquet('${parquetDir.replace(/'/g, "''")}/**/*.parquet', hive_partitioning=false, union_by_name=true)
+					UNION ALL BY NAME
+					SELECT * FROM read_parquet('${parquetDir.replace(/'/g, "''")}/**/*.parquet', hive_partitioning=false, union_by_name=true)
 			`);
 
 			// Query the combined view
@@ -349,10 +347,8 @@ describe("DuckDB UNION ALL view (SQLite + Parquet)", () => {
 			await conn.run(`
 				CREATE OR REPLACE VIEW logs AS
 					SELECT * FROM hot.logs
-					UNION ALL
-					SELECT id, timestamp, level, message, meta, service, host, pid,
-						trace_id, span_id, project, branch, version, deployment_id, key_prefix, created_at
-					FROM read_parquet('${parquetDir.replace(/'/g, "''")}/**/*.parquet', hive_partitioning=false, union_by_name=true)
+					UNION ALL BY NAME
+					SELECT * FROM read_parquet('${parquetDir.replace(/'/g, "''")}/**/*.parquet', hive_partitioning=false, union_by_name=true)
 			`);
 
 			// Query for error level — should find both hot and cold error logs

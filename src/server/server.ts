@@ -16,6 +16,7 @@ import { handleQuery, handleQueryStream } from "./routes/query.ts";
 import { StreamManager, handleStream } from "./routes/stream.ts";
 import { AggregatesManager } from "./aggregates.ts";
 import { handleAggregates } from "./routes/aggregates.ts";
+import { handleOtelTraces, handleOtelLogs } from "./routes/otel.ts";
 
 const DEFAULT_MAX_BODY = 5 * 1024 * 1024;
 const DEFAULT_INGEST_RPM = 600;
@@ -164,7 +165,31 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				let auth: AuthResult;
 				const prefixLen = config.keyPrefixLength ?? 6;
 
-				if (method === "POST" && path === "/ingest") {
+				if (method === "POST" && path === "/v1/traces") {
+					auth = checkRole(request, "ingest", keys, prefixLen);
+					if (auth.error) return auth.error;
+					if (!ingestLimiter.check()) {
+						response = Response.json(
+							{ error: "Too many requests" },
+							{ status: 429, headers: { "Retry-After": "10" } },
+						);
+					} else {
+						response = await handleOtelTraces(request, db, maxBatchSize, auth.keyPrefix);
+						if (response.status === 200) streamManager.notify();
+					}
+				} else if (method === "POST" && path === "/v1/logs") {
+					auth = checkRole(request, "ingest", keys, prefixLen);
+					if (auth.error) return auth.error;
+					if (!ingestLimiter.check()) {
+						response = Response.json(
+							{ error: "Too many requests" },
+							{ status: 429, headers: { "Retry-After": "10" } },
+						);
+					} else {
+						response = await handleOtelLogs(request, db, maxBatchSize, auth.keyPrefix);
+						if (response.status === 200) streamManager.notify();
+					}
+				} else if (method === "POST" && path === "/ingest") {
 					auth = checkRole(request, "ingest", keys, prefixLen);
 					if (auth.error) return auth.error;
 					if (!ingestLimiter.check()) {
