@@ -94,3 +94,14 @@ export interface Aggregate {
 	createdAt: number;
 	updatedAt: number;
 }
+
+export interface SpanBar {
+	name: string;
+	service: string;
+	spanId: string;
+	parentSpanId?: string;
+	start: number;
+	duration: number;
+	level: string;
+	depth: number;
+}

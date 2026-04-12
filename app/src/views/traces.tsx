@@ -4,7 +4,10 @@ import { apiPost } from "@/api/client";
 import { useStream } from "@/hooks/use-stream";
 import { TimelineChart, HoverStats } from "@/components/timeline-chart";
 import { LevelBadge } from "@/components/level-badge";
-import type { Filters, LogRecord, QueryResult } from "@/types";
+import { TraceWaterfall } from "@/components/trace-waterfall";
+import { SpanDetail } from "@/components/span-detail";
+import { getServiceColor } from "@/components/service-colors";
+import type { Filters, LogRecord, QueryResult, SpanBar } from "@/types";
 
 import {
 	ChevronRight,
@@ -16,6 +19,9 @@ import {
 	Trash2,
 	Bookmark,
 	BookmarkCheck,
+	ArrowUpDown,
+	AlignLeft,
+	PanelRight,
 } from "lucide-react";
 import { useBookmarks } from "@/hooks/use-bookmarks";
 
@@ -26,18 +32,10 @@ interface TraceRow {
 	duration_ms: number;
 	max_level: string;
 	services: string;
+	root_message: string;
 }
 
-interface SpanBar {
-	name: string;
-	service: string;
-	spanId: string;
-	parentSpanId?: string;
-	start: number;
-	duration: number;
-	level: string;
-	depth: number;
-}
+type SortField = "time" | "duration" | "spans";
 
 function levelPriority(level: string): number {
 	return (
@@ -65,7 +63,6 @@ function flattenTree(nodes: Omit<SpanBar, "depth">[]): SpanBar[] {
 	}
 
 	for (const node of byId.values()) {
-		// Prevent self-referencing spans
 		if (node.parentSpanId && node.parentSpanId !== node.spanId && byId.has(node.parentSpanId)) {
 			byId.get(node.parentSpanId)!.children.push(node);
 		} else {
@@ -89,62 +86,62 @@ function flattenTree(nodes: Omit<SpanBar, "depth">[]): SpanBar[] {
 
 function buildSpans(logs: LogRecord[]): SpanBar[] {
 	if (logs.length === 0) return [];
-	const raw: Omit<SpanBar, "depth">[] = [];
 
-	// Prefer logs that have duration_ms (OTEL spans or wide events)
-	const spansWithDuration = logs.filter(
-		(l) => l.duration_ms != null || parseMeta(l).duration_ms != null,
-	);
+	// Base time = earliest log in the trace (not just ones with duration)
+	const baseTime = Math.min(...logs.map((l) => new Date(l.timestamp).getTime()));
 
-	if (spansWithDuration.length > 0) {
-		const baseTime = Math.min(
-			...spansWithDuration.map((l) => new Date(l.timestamp).getTime()),
-		);
-		for (const log of spansWithDuration) {
-			const meta = parseMeta(log);
-			const durationMs = Number(log.duration_ms ?? meta.duration_ms) || 1;
-			raw.push({
-				name: log.message,
-				service: log.service || "unknown",
-				spanId: log.span_id || String(log.id),
-				parentSpanId: log.parent_span_id || undefined,
-				start: Math.max(0, new Date(log.timestamp).getTime() - baseTime),
-				duration: durationMs,
-				level: log.level,
-			});
-		}
-	} else {
-		const baseTime = new Date(logs[0].timestamp).getTime();
-		// Fallback: group by span_id or service
-		const spanGroups = new Map<string, LogRecord[]>();
-		for (const l of logs) {
-			const key = l.span_id || l.service || "unknown";
-			if (!spanGroups.has(key)) spanGroups.set(key, []);
-			spanGroups.get(key)!.push(l);
-		}
-		for (const [key, group] of spanGroups) {
-			const start = new Date(group[0].timestamp).getTime() - baseTime;
-			const end = new Date(group[group.length - 1].timestamp).getTime() - baseTime;
-			const maxLevel = group.reduce(
-				(max, l) => (levelPriority(l.level) > levelPriority(max) ? l.level : max),
-				"info",
-			);
-			raw.push({
-				name: key,
-				service: group[0].service || "unknown",
-				spanId: key,
-				parentSpanId: undefined,
-				start,
-				duration: Math.max(end - start, 1),
-				level: maxLevel,
-			});
-		}
+	// Group logs by span_id so each span becomes one bar, regardless of how many logs it has.
+	// Logs without a span_id get a synthetic unique key so they don't collapse together.
+	const spanGroups = new Map<string, LogRecord[]>();
+	for (const log of logs) {
+		const key = log.span_id || `__log_${log.id}`;
+		if (!spanGroups.has(key)) spanGroups.set(key, []);
+		spanGroups.get(key)!.push(log);
 	}
 
-	// If any spans have parent_span_id, build a tree; otherwise flat with depth 0
+	const raw: Omit<SpanBar, "depth">[] = [];
+	for (const [spanId, group] of spanGroups) {
+		group.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+		// Prefer a log with duration_ms for the span's representative info
+		const durationLog = group.find(
+			(l) => l.duration_ms != null || parseMeta(l).duration_ms != null,
+		);
+		const representative = durationLog ?? group[0];
+		const meta = parseMeta(representative);
+		const explicitDuration = Number(representative.duration_ms ?? meta.duration_ms);
+
+		const startMs = new Date(group[0].timestamp).getTime() - baseTime;
+		let durationMs: number;
+		if (Number.isFinite(explicitDuration) && explicitDuration > 0) {
+			durationMs = explicitDuration;
+		} else if (group.length > 1) {
+			const endMs = new Date(group[group.length - 1].timestamp).getTime() - baseTime;
+			durationMs = Math.max(endMs - startMs, 1);
+		} else {
+			// Single point-in-time log with no duration: treat as 1ms marker
+			durationMs = 1;
+		}
+
+		const maxLevel = group.reduce(
+			(max, l) => (levelPriority(l.level) > levelPriority(max) ? l.level : max),
+			"info",
+		);
+
+		raw.push({
+			name: representative.message,
+			service: representative.service || "unknown",
+			spanId: spanId.startsWith("__log_") ? String(representative.id) : spanId,
+			parentSpanId: representative.parent_span_id || undefined,
+			start: Math.max(0, startMs),
+			duration: durationMs,
+			level: maxLevel,
+		});
+	}
+
 	const hasTree = raw.some((s) => s.parentSpanId);
 	if (hasTree) return flattenTree(raw);
-	return raw.map((s) => ({ ...s, depth: 0 }));
+	return raw.map((s) => ({ ...s, depth: 0 })).sort((a, b) => a.start - b.start);
 }
 
 function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
@@ -165,11 +162,12 @@ function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
 		);
 		let durationMs = 0;
 		for (const l of group) {
-			// Prefer the column, fall back to meta
 			const d = l.duration_ms ?? parseMeta(l).duration_ms;
 			if (d != null) durationMs = Math.max(durationMs, Number(d));
 		}
 		const services = [...new Set(group.map((l) => l.service).filter(Boolean))].join(",");
+		// Use first log's message as root message
+		const rootMessage = group[0].message;
 		rows.push({
 			trace_id: traceId,
 			first_ts: group[0].timestamp,
@@ -177,11 +175,44 @@ function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
 			duration_ms: durationMs,
 			max_level: maxLevel,
 			services,
+			root_message: rootMessage,
 		});
 	}
 
 	rows.sort((a, b) => new Date(b.first_ts).getTime() - new Date(a.first_ts).getTime());
 	return rows;
+}
+
+function formatTimestamp(ts: string): string {
+	try {
+		return new Date(ts).toLocaleTimeString("en-US", {
+			hour12: false,
+			fractionalSecondDigits: 3,
+		});
+	} catch {
+		return ts;
+	}
+}
+
+function truncateId(id: string): string {
+	return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id;
+}
+
+function sortTraces(traces: TraceRow[], field: SortField): TraceRow[] {
+	const sorted = [...traces];
+	switch (field) {
+		case "duration":
+			sorted.sort((a, b) => b.duration_ms - a.duration_ms);
+			break;
+		case "spans":
+			sorted.sort((a, b) => b.span_count - a.span_count);
+			break;
+		case "time":
+		default:
+			sorted.sort((a, b) => new Date(b.first_ts).getTime() - new Date(a.first_ts).getTime());
+			break;
+	}
+	return sorted;
 }
 
 export function TracesView({
@@ -199,7 +230,11 @@ export function TracesView({
 	const [expandedTrace, setExpandedTrace] = useHashParam("expanded");
 	const [traceLogs, setTraceLogs] = useState<LogRecord[]>([]);
 	const [traceSpans, setTraceSpans] = useState<SpanBar[]>([]);
+	const [traceLogsLoading, setTraceLogsLoading] = useState(false);
 	const [live, setLive] = useHashParam("live");
+	const [detailMode, setDetailMode] = useHashParam("detail", "panel");
+	const [sortField, setSortField] = useState<SortField>("time");
+	const [selectedSpan, setSelectedSpan] = useState<SpanBar | null>(null);
 
 	const stream = useStream(filters, enabled && live === "1");
 
@@ -265,12 +300,6 @@ export function TracesView({
         MIN(timestamp) as first_ts,
         COUNT(DISTINCT COALESCE(span_id, CAST(id AS VARCHAR))) as span_count,
         COALESCE(MAX(duration_ms), 0) as duration_ms,
-        MAX(CASE
-          WHEN level = 'fatal' THEN 5
-          WHEN level = 'error' THEN 4
-          WHEN level = 'warn' THEN 3
-          ELSE 2
-        END) as max_level_num,
         CASE MAX(CASE
           WHEN level = 'fatal' THEN 5
           WHEN level = 'error' THEN 4
@@ -282,7 +311,8 @@ export function TracesView({
           WHEN 3 THEN 'warn'
           ELSE 'info'
         END as max_level,
-        STRING_AGG(DISTINCT service, ',') as services
+        STRING_AGG(DISTINCT service, ',') as services,
+        FIRST(message ORDER BY created_at ASC) as root_message
       FROM logs
       ${where}
       GROUP BY trace_id
@@ -300,6 +330,7 @@ export function TracesView({
 						duration_ms: Number(r.duration_ms),
 						max_level: r.max_level as string,
 						services: (r.services as string) || "",
+						root_message: (r.root_message as string) || "",
 					})),
 				);
 			})
@@ -309,19 +340,19 @@ export function TracesView({
 
 	const expandTrace = useCallback(
 		(traceId: string) => {
+			setSelectedSpan(null);
 			setExpandedTrace(expandedTrace === traceId ? undefined : traceId);
 		},
 		[expandedTrace],
 	);
 
-	// Fetch trace logs whenever expandedTrace changes (covers both user clicks and URL restore).
-	// Always clear first to avoid showing stale logs from a previously expanded trace.
 	useEffect(() => {
 		setTraceLogs([]);
 		setTraceSpans([]);
+		setSelectedSpan(null);
 		if (!expandedTrace || live === "1" || !enabled) return;
-		// Sanitize trace_id: allow hex, dashes, colons, alphanumeric (covers OTEL hex + gha:123 patterns)
 		if (!/^[\w:.-]{1,256}$/.test(expandedTrace)) return;
+		setTraceLogsLoading(true);
 		const safe = expandedTrace.replace(/'/g, "''");
 		const sql = `SELECT * FROM logs WHERE trace_id = '${safe}' ORDER BY created_at ASC LIMIT 200`;
 		apiPost<QueryResult>("/query", { sql })
@@ -333,26 +364,25 @@ export function TracesView({
 			.catch(() => {
 				setTraceLogs([]);
 				setTraceSpans([]);
-			});
+			})
+			.finally(() => setTraceLogsLoading(false));
 	}, [expandedTrace, live, enabled]);
 
-	const statusDot = (level: string) => {
-		const colors: Record<string, string> = {
-			fatal: "bg-pink-400/75",
-			error: "bg-rose-400/75",
-			warn: "bg-amber-300/75",
-			info: "bg-cyan-400/75",
-		};
-		return colors[level] || colors.info;
-	};
-
 	const allTraces = live === "1" ? liveTraces : traces;
+	const sortedTraces = useMemo(() => sortTraces(allTraces, sortField), [allTraces, sortField]);
 	const displayTraces =
 		filters.bookmarked === "true"
-			? allTraces.filter((t) => isBookmarked(`trace:${t.trace_id}`))
-			: allTraces;
+			? sortedTraces.filter((t) => isBookmarked(`trace:${t.trace_id}`))
+			: sortedTraces;
 	const displayTraceLogs = live === "1" ? liveTraceLogs : traceLogs;
 	const displayTraceSpans = live === "1" ? liveTraceSpans : traceSpans;
+
+	const cycleSortField = useCallback(() => {
+		setSortField((prev) => {
+			const order: SortField[] = ["time", "duration", "spans"];
+			return order[(order.indexOf(prev) + 1) % order.length]!;
+		});
+	}, []);
 
 	return (
 		<div className="flex flex-1 flex-col overflow-hidden">
@@ -409,6 +439,44 @@ export function TracesView({
 
 						<div className="flex-1" />
 
+						<div className="flex items-center rounded-md border border-border overflow-hidden">
+							<button
+								type="button"
+								onClick={() => setDetailMode("inline")}
+								title="Inline detail"
+								className={`flex items-center px-1.5 py-0.5 transition-colors ${
+									detailMode === "inline"
+										? "bg-muted text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+							>
+								<AlignLeft className="h-3 w-3" />
+							</button>
+							<button
+								type="button"
+								onClick={() => setDetailMode("panel")}
+								title="Side panel"
+								className={`flex items-center px-1.5 py-0.5 transition-colors ${
+									detailMode === "panel"
+										? "bg-muted text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+							>
+								<PanelRight className="h-3 w-3" />
+							</button>
+						</div>
+
+						{/* Sort toggle */}
+						<button
+							type="button"
+							onClick={cycleSortField}
+							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+							title={`Sort by: ${sortField}`}
+						>
+							<ArrowUpDown className="h-3 w-3" />
+							{sortField === "time" ? "Newest" : sortField === "duration" ? "Slowest" : "Most spans"}
+						</button>
+
 						{live === "1" && (
 							<>
 								<button
@@ -457,136 +525,187 @@ export function TracesView({
 					</div>
 				)}
 				<div className="divide-y divide-border/50">
-					{displayTraces.map((t) => (
-						<div key={t.trace_id}>
-							<div className="group flex w-full items-center hover:bg-muted/50">
-								<button
-									type="button"
-									onClick={() => expandTrace(t.trace_id)}
-									className="flex flex-1 items-center gap-3 px-4 py-2 text-left text-xs"
-								>
-									{expandedTrace === t.trace_id ? (
-										<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-									) : (
-										<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-									)}
-									<span className="w-32 shrink-0 truncate text-primary">{t.trace_id}</span>
-									<span className="w-24 shrink-0 text-muted-foreground tabular-nums">
-										{new Date(t.first_ts).toLocaleTimeString("en-US", { hour12: false })}
-									</span>
-									<span className="w-16 shrink-0 tabular-nums">{t.span_count} spans</span>
-									<span className="w-20 shrink-0 tabular-nums">
-										{t.duration_ms > 0 ? `${Math.round(t.duration_ms)}ms` : "\u2014"}
-									</span>
-									<span className={`h-2 w-2 shrink-0 rounded-full ${statusDot(t.max_level)}`} />
-									<span className="min-w-0 flex-1 truncate text-muted-foreground">
-										{t.services}
-									</span>
-								</button>
-								<button
-									type="button"
-									onClick={() =>
-										toggle({
-											type: "trace",
-											label: t.trace_id,
-											timestamp: t.first_ts,
-											level: t.max_level,
-											traceId: t.trace_id,
-										})
-									}
-									className={`mr-2 shrink-0 rounded p-0.5 transition-colors ${isBookmarked(`trace:${t.trace_id}`) ? "text-amber-400" : "text-transparent group-hover:text-muted-foreground hover:!text-amber-400"}`}
-								>
-									{isBookmarked(`trace:${t.trace_id}`) ? (
-										<BookmarkCheck className="h-3 w-3" />
-									) : (
-										<Bookmark className="h-3 w-3" />
-									)}
-								</button>
-							</div>
+					{displayTraces.map((t) => {
+						const serviceList = t.services.split(",").filter(Boolean);
+						const isExpanded = expandedTrace === t.trace_id;
+						return (
+							<div key={t.trace_id}>
+								<div className="group flex w-full items-center hover:bg-muted/50">
+									<button
+										type="button"
+										onClick={() => expandTrace(t.trace_id)}
+										className="flex flex-1 items-center gap-3 px-4 py-2.5 text-left text-xs"
+									>
+										{isExpanded ? (
+											<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+										) : (
+											<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+										)}
 
-							{expandedTrace === t.trace_id && (
-								<div className="border-t border-border/50 bg-muted/20 px-4 py-4 space-y-4">
-									{/* Waterfall */}
-									{displayTraceSpans.length > 0 && (() => {
-									const maxEnd = Math.max(
-										...displayTraceSpans.map((s) => s.start + s.duration),
-										1,
-									);
-									return (
-										<div>
-											<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-												Waterfall
-											</div>
-											<div className="space-y-0.5">
-												{displayTraceSpans.map((span, i) => {
-													const leftPct = (span.start / maxEnd) * 100;
-													const widthPct = Math.max((span.duration / maxEnd) * 100, 0.5);
-													const isError = levelPriority(span.level) >= 4;
-													const indent = span.depth * 12;
-													return (
-														<div key={i} className="flex items-center gap-2">
-															<span
-																className="shrink-0 truncate text-[10px] text-muted-foreground"
-																style={{
-																	width: `${96 + indent}px`,
-																	paddingLeft: `${indent}px`,
+										{/* Level indicator */}
+										<LevelBadge
+											level={t.max_level as "trace" | "debug" | "info" | "warn" | "error" | "fatal"}
+											className="w-12 justify-center"
+										/>
+
+										{/* Root message + truncated ID */}
+										<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+											<span className="truncate font-medium text-foreground">
+												{t.root_message || truncateId(t.trace_id)}
+											</span>
+											<span className="truncate font-mono text-[10px] text-muted-foreground/60">
+												{truncateId(t.trace_id)}
+											</span>
+										</div>
+
+										{/* Services as colored dots */}
+										<div className="flex shrink-0 items-center gap-1">
+											{serviceList.slice(0, 4).map((svc) => (
+												<span
+													key={svc}
+													className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] ${getServiceColor(svc).bar} text-white`}
+													title={svc}
+												>
+													{svc}
+												</span>
+											))}
+											{serviceList.length > 4 && (
+												<span className="text-[9px] text-muted-foreground">
+													+{serviceList.length - 4}
+												</span>
+											)}
+										</div>
+
+										{/* Span count */}
+										<span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground">
+											{t.span_count} {t.span_count === 1 ? "span" : "spans"}
+										</span>
+
+										{/* Duration */}
+										<span className="w-20 shrink-0 text-right tabular-nums">
+											{t.duration_ms > 0 ? `${Math.round(t.duration_ms)}ms` : "\u2014"}
+										</span>
+
+										{/* Timestamp with sub-second precision */}
+										<span className="w-24 shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+											{formatTimestamp(t.first_ts)}
+										</span>
+									</button>
+									<button
+										type="button"
+										onClick={() =>
+											toggle({
+												type: "trace",
+												label: t.trace_id,
+												timestamp: t.first_ts,
+												level: t.max_level,
+												traceId: t.trace_id,
+											})
+										}
+										className={`mr-2 shrink-0 rounded p-0.5 transition-colors ${isBookmarked(`trace:${t.trace_id}`) ? "text-amber-400" : "text-transparent group-hover:text-muted-foreground hover:!text-amber-400"}`}
+									>
+										{isBookmarked(`trace:${t.trace_id}`) ? (
+											<BookmarkCheck className="h-3 w-3" />
+										) : (
+											<Bookmark className="h-3 w-3" />
+										)}
+									</button>
+								</div>
+
+								{isExpanded && (
+									<div className="border-t border-border/50 bg-muted/20 px-4 py-4 space-y-4">
+										{/* Waterfall + Span Detail side by side */}
+										<div className="flex gap-3">
+											<div className="min-w-0 flex-1">
+												{displayTraceSpans.length > 0 && (
+													<div>
+														<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+															Waterfall
+														</div>
+														<TraceWaterfall
+															spans={displayTraceSpans}
+															selectedSpanId={selectedSpan?.spanId}
+															onSelectSpan={setSelectedSpan}
+															inlineDetail={
+																detailMode === "inline"
+																	? (span) => (
+																			<SpanDetail
+																				span={span}
+																				logs={displayTraceLogs}
+																				onClose={() => setSelectedSpan(null)}
+																				variant="inline"
+																			/>
+																		)
+																	: undefined
+															}
+														/>
+													</div>
+												)}
+
+												{/* Trace logs */}
+												<div className={displayTraceSpans.length > 0 ? "mt-4" : ""}>
+													<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+														Logs ({displayTraceLogs.length})
+													</div>
+													<div className="rounded-md border border-border overflow-hidden divide-y divide-border/50">
+														{displayTraceLogs.length === 0 && (
+															<div className="flex items-center justify-center py-6 text-xs text-muted-foreground">
+																{traceLogsLoading ? "Loading logs..." : "No logs for this trace"}
+															</div>
+														)}
+														{displayTraceLogs.map((l) => (
+															<div
+																key={l.id}
+																className={`flex cursor-pointer items-center gap-3 px-3 py-1 text-xs transition-colors ${
+																	selectedSpan && l.span_id === selectedSpan.spanId
+																		? "bg-primary/10"
+																		: "hover:bg-muted/30"
+																}`}
+																onClick={() => {
+																	if (!l.span_id) return;
+																	const match = displayTraceSpans.find(
+																		(s) => s.spanId === l.span_id,
+																	);
+																	if (match) setSelectedSpan(match);
 																}}
 															>
-																{span.depth > 0 && (
-																	<span className="text-border mr-1">{"└"}</span>
+																<span className="shrink-0 text-muted-foreground tabular-nums font-mono text-[10px]">
+																	{formatTimestamp(l.timestamp)}
+																</span>
+																<LevelBadge level={l.level} />
+																{l.service && (
+																	<span
+																		className={`shrink-0 text-[10px] ${getServiceColor(l.service).label}`}
+																	>
+																		{l.service}
+																	</span>
 																)}
-																{span.service}
-															</span>
-															<div className="relative h-5 flex-1 rounded bg-muted/30">
-																<div
-																	className={`absolute top-0 h-full rounded text-[9px] flex items-center px-1 text-white font-medium truncate ${isError ? "bg-red-500/80" : "bg-primary/60"}`}
-																	style={{
-																		left: `${leftPct}%`,
-																		width: `${widthPct}%`,
-																		minWidth: "2px",
-																	}}
-																>
-																	{widthPct > 8 ? span.name : ""}
-																</div>
+																<span className="min-w-0 flex-1 truncate">{l.message}</span>
+																{l.span_id && (
+																	<span className="shrink-0 font-mono text-[9px] text-muted-foreground/40">
+																		{l.span_id.slice(0, 8)}
+																	</span>
+																)}
 															</div>
-															<span className="w-16 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
-																{Math.round(span.duration)}ms
-															</span>
-														</div>
-													);
-												})}
-											</div>
-										</div>
-									);
-								})()}
-
-									{/* Trace logs */}
-									<div>
-										<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-											Logs ({displayTraceLogs.length})
-										</div>
-										<div className="rounded-md border border-border overflow-hidden divide-y divide-border/50">
-											{displayTraceLogs.map((l) => (
-												<div key={l.id} className="flex items-center gap-3 px-3 py-1 text-xs">
-													<span className="shrink-0 text-muted-foreground tabular-nums">
-														{new Date(l.timestamp).toLocaleTimeString("en-US", {
-															hour12: false,
-															fractionalSecondDigits: 3,
-														})}
-													</span>
-													<LevelBadge level={l.level} />
-													{l.service && (
-														<span className="shrink-0 text-muted-foreground">{l.service}</span>
-													)}
-													<span className="min-w-0 flex-1 truncate">{l.message}</span>
+														))}
+													</div>
 												</div>
-											))}
+											</div>
+
+											{/* Span detail panel */}
+											{detailMode === "panel" && selectedSpan && (
+												<SpanDetail
+													span={selectedSpan}
+													logs={displayTraceLogs}
+													onClose={() => setSelectedSpan(null)}
+												/>
+											)}
 										</div>
 									</div>
-								</div>
-							)}
-						</div>
-					))}
+								)}
+							</div>
+						);
+					})}
 				</div>
 			</div>
 		</div>

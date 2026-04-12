@@ -355,9 +355,7 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 		}
 
 		// Optionally override service
-		const finalEntries = service
-			? entries.map((entry) => ({ ...entry, service }))
-			: entries;
+		const finalEntries = service ? entries.map((entry) => ({ ...entry, service })) : entries;
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
