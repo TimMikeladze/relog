@@ -10,6 +10,7 @@ import { type AuthKeys, type AuthResult, checkRole } from "./middleware/auth.ts"
 import { handleHealth } from "./routes/health.ts";
 import { handleIngest } from "./routes/ingest.ts";
 import { handleLogs } from "./routes/logs.ts";
+import { handleTraces } from "./routes/traces.ts";
 import { handlePrune } from "./routes/prune.ts";
 import { handleHistogram } from "./routes/histogram.ts";
 import { handleQuery, handleQueryStream } from "./routes/query.ts";
@@ -177,6 +178,13 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 						response = await handleOtelTraces(request, db, maxBatchSize, auth.keyPrefix);
 						if (response.status === 200) streamManager.notify();
 					}
+				} else if (method === "POST" && path === "/v1/metrics") {
+					// OTel metrics not yet implemented — respond explicitly so exporters
+					// get a clear signal instead of a generic 404 that looks like a route typo.
+					response = Response.json(
+						{ error: "OTLP metrics endpoint not implemented" },
+						{ status: 501 },
+					);
 				} else if (method === "POST" && path === "/v1/logs") {
 					auth = checkRole(request, "ingest", keys, prefixLen);
 					if (auth.error) return auth.error;
@@ -224,6 +232,10 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
 					response = await handleLogs(request, duckdb);
+				} else if (method === "GET" && path === "/traces") {
+					auth = checkRole(request, "read", keys, prefixLen);
+					if (auth.error) return auth.error;
+					response = await handleTraces(request, duckdb);
 				} else if (method === "GET" && path === "/stream") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;

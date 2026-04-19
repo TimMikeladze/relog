@@ -13,6 +13,8 @@ export const exportCommand: Command = command({
 		to: string().desc("End time (ISO 8601)"),
 		project: string().desc("Filter by project"),
 		branch: string().desc("Filter by branch"),
+		traceId: string("trace-id").desc("Filter by trace ID"),
+		spanId: string("span-id").desc("Filter by span ID"),
 		limit: number().desc("Max logs to export").default(10000),
 		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
@@ -22,6 +24,8 @@ export const exportCommand: Command = command({
 			to: opts.to,
 			project: opts.project,
 			branch: opts.branch,
+			trace_id: opts.traceId,
+			span_id: opts.spanId,
 			limit: opts.limit,
 		});
 

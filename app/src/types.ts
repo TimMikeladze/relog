@@ -104,4 +104,8 @@ export interface SpanBar {
 	duration: number;
 	level: string;
 	depth: number;
+	/** OTel span kind: server, client, producer, consumer, internal, unspecified */
+	kind?: string;
+	/** OTel status code: 0 unset, 1 ok, 2 error */
+	statusCode?: number;
 }

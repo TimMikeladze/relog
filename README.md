@@ -12,6 +12,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Real-time streaming** — SSE-based log tailing with server-side filtering
 - **Read-only SQL queries** — run arbitrary SELECT/EXPLAIN/PRAGMA against the log database
 - **Distributed tracing** — first-class `trace_id` and `span_id` support
+- **OpenTelemetry (OTLP) ingest** — standards-compliant `/v1/traces` and `/v1/logs` endpoints accept OTLP/JSON from any OTel SDK or collector, with gzip and hex/base64 ID handling. Span kind, status, scope, and resource attributes surface in the UI
 - **Project & branch tracking** — auto-detected from git, filterable across all endpoints
 - **Deployment context** — first-class `version` and `deployment_id` fields for tracking releases
 - **Child loggers** — inherit service, meta, and trace context from parent loggers
@@ -620,12 +621,13 @@ Stream logs in real-time via SSE. Automatically reconnects on connection loss wi
 relog.dev tail --level error --service my-app --project my-project --branch main
 ```
 
-| Option      | Description            |
-| ----------- | ---------------------- |
-| `--level`   | Filter by log level    |
-| `--service` | Filter by service name |
-| `--project` | Filter by project      |
-| `--branch`  | Filter by branch       |
+| Option       | Description            |
+| ------------ | ---------------------- |
+| `--level`    | Filter by log level    |
+| `--service`  | Filter by service name |
+| `--project`  | Filter by project      |
+| `--branch`   | Filter by branch       |
+| `--trace-id` | Filter by trace ID     |
 
 ### `relog.dev search`
 
@@ -635,16 +637,18 @@ Search logs with filters.
 relog.dev search --grep "timeout" --level error --from 1h --project my-app --branch main --limit 50
 ```
 
-| Option      | Default | Description                                                |
-| ----------- | ------- | ---------------------------------------------------------- |
-| `--grep`    | —       | Search message text                                        |
-| `--level`   | —       | Filter by log level                                        |
-| `--service` | —       | Filter by service name                                     |
-| `--project` | —       | Filter by project                                          |
-| `--branch`  | —       | Filter by branch                                           |
-| `--from`    | —       | Start time (ISO 8601 or relative: `30s`, `5m`, `1h`, `7d`) |
-| `--to`      | —       | End time (ISO 8601)                                        |
-| `--limit`   | `100`   | Max results to return                                      |
+| Option       | Default | Description                                                |
+| ------------ | ------- | ---------------------------------------------------------- |
+| `--grep`     | —       | Search message text                                        |
+| `--level`    | —       | Filter by log level                                        |
+| `--service`  | —       | Filter by service name                                     |
+| `--project`  | —       | Filter by project                                          |
+| `--branch`   | —       | Filter by branch                                           |
+| `--trace-id` | —       | Filter by trace ID                                         |
+| `--span-id`  | —       | Filter by span ID                                          |
+| `--from`     | —       | Start time (ISO 8601 or relative: `30s`, `5m`, `1h`, `7d`) |
+| `--to`       | —       | End time (ISO 8601)                                        |
+| `--limit`    | `100`   | Max results to return                                      |
 
 ### `relog.dev query`
 
@@ -677,15 +681,17 @@ relog.dev export --output logs.json
 relog.dev export --output logs.csv --format csv --from 2025-01-01T00:00:00Z --project my-app
 ```
 
-| Option      | Default    | Description                               |
-| ----------- | ---------- | ----------------------------------------- |
-| `--output`  | (required) | Output file path                          |
-| `--format`  | `json`     | Export format: `json`, `csv`, or `ndjson` |
-| `--from`    | —          | Start time (ISO 8601)                     |
-| `--to`      | —          | End time (ISO 8601)                       |
-| `--project` | —          | Filter by project                         |
-| `--branch`  | —          | Filter by branch                          |
-| `--limit`   | `10000`    | Max logs to export                        |
+| Option       | Default    | Description                               |
+| ------------ | ---------- | ----------------------------------------- |
+| `--output`   | (required) | Output file path                          |
+| `--format`   | `json`     | Export format: `json`, `csv`, or `ndjson` |
+| `--from`     | —          | Start time (ISO 8601)                     |
+| `--to`       | —          | End time (ISO 8601)                       |
+| `--project`  | —          | Filter by project                         |
+| `--branch`   | —          | Filter by branch                          |
+| `--trace-id` | —          | Filter by trace ID                        |
+| `--span-id`  | —          | Filter by span ID                         |
+| `--limit`    | `10000`    | Max logs to export                        |
 
 ### `relog.dev prune`
 
@@ -972,12 +978,86 @@ pageLog.info("step completed", { step: 2 });
 
 Child loggers share the parent's transport and inherit all bound metadata.
 
+## OpenTelemetry (OTLP)
+
+relog.dev speaks [OTLP/HTTP](https://opentelemetry.io/docs/specs/otlp/#otlphttp) with JSON encoding, so any OpenTelemetry SDK or the OpenTelemetry Collector can export traces and logs to it without relog-specific code. Spans, span events, resource attributes, span kind, and status codes are all preserved and surfaced in the UI's Traces view.
+
+### Endpoints
+
+| Endpoint            | What it accepts                                                                  |
+| ------------------- | -------------------------------------------------------------------------------- |
+| `POST /v1/traces`   | OTLP/JSON `ExportTraceServiceRequest` — `resourceSpans[]`                        |
+| `POST /v1/logs`     | OTLP/JSON `ExportLogsServiceRequest` — `resourceLogs[]`                          |
+| `POST /v1/metrics`  | Returns `501 Not Implemented` — metrics ingest is not yet supported              |
+
+Both endpoints require the `ingest` role (Bearer token) when API keys are configured. Responses follow the OTLP spec shape: `200 {"partialSuccess":{}}` on success, `415` for unsupported content types, `400` for malformed payloads.
+
+### What's supported
+
+- **Content type:** `application/json` (proto3 JSON encoding). `application/x-protobuf` returns 415 — use the HTTP/JSON protocol on the exporter side.
+- **Compression:** `Content-Encoding: gzip` on request bodies (per the OTLP/HTTP spec).
+- **Trace / span IDs:** Both hex strings and base64 (the proto3 JSON canonical form) are accepted and normalized to lowercase hex on write, so IDs are consistent regardless of which SDK you use.
+- **Spans → logs mapping:** Each span becomes one log entry — `message` = span name, `duration_ms` = span duration, `level` = `error` when `status.code = 2`, otherwise `info`. All span attributes land in `meta` alongside `span_kind`, `span_status_code`, `span_status_message`, and `instrumentation_scope`.
+- **Span events:** Each span event becomes its own log entry linked to the same `trace_id` + `span_id`, with `meta.otel_event = true`. Events named `exception` are auto-escalated to `error` level with the exception message.
+- **Resource attributes:** `service.name` and `host.name` map to the first-class `service` and `host` columns; all resource attributes (including `service.version`, `deployment.environment`, etc.) are preserved under `meta.resource`.
+- **Severity mapping (logs):** OTel `severityNumber` is mapped to relog levels — 1-4 → `trace`, 5-8 → `debug`, 9-12 → `info`, 13-16 → `warn`, 17-20 → `error`, 21+ → `fatal`.
+
+### Point any OTel exporter at relog
+
+Works with the standard `OTEL_EXPORTER_OTLP_*` env vars — no relog-specific client code required:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3485
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/json
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer my-ingest-key"
+```
+
+The Traces view groups records by `trace_id`, rebuilds the parent/child hierarchy, and shows a waterfall with span kind badges (SRV/CLI/PRD/CNS/INT) and error markers. The span detail panel surfaces span attributes, resource attributes, status, and instrumentation scope.
+
+### Example
+
+A runnable example lives in [`examples/otel/`](examples/otel/):
+
+- `otel-raw.ts` — zero-dependency OTLP/JSON over `fetch` (shows the wire format)
+- `otel-sdk.ts` — realistic path using `@opentelemetry/sdk-node` + OTLP/HTTP exporter
+
+```bash
+# terminal 1
+bunx relog.dev start
+
+# terminal 2
+bun examples/otel/otel-raw.ts
+```
+
+### Python client
+
+The Python client (`pip install relog.dev`) can emit the same OTel-shaped metadata through `EventBuilder`:
+
+```python
+from relog import create_logger, SpanKind, SpanStatusCode
+
+log = create_logger("http://localhost:3485", service="api")
+
+with log.event("http_request") as ev:
+    ev.kind(SpanKind.SERVER).scope("relog.http", "1.0.0").resource({
+        "service.name": "api",
+        "deployment.environment": "production",
+    })
+    # ...do work...
+    ev.status(SpanStatusCode.OK)
+```
+
+`ev.error(exc)` automatically sets `span_status_code=2` when any OTel field is present.
+
 ## HTTP API
 
 | Method   | Path              | Role   | Description                               |
 | -------- | ----------------- | ------ | ----------------------------------------- |
 | `POST`   | `/ingest`         | ingest | Send log records (single object or array) |
+| `POST`   | `/v1/traces`      | ingest | OTLP/JSON traces (OpenTelemetry)          |
+| `POST`   | `/v1/logs`        | ingest | OTLP/JSON logs (OpenTelemetry)            |
 | `GET`    | `/logs`           | read   | Search logs with query params             |
+| `GET`    | `/traces`         | read   | List traces grouped by `trace_id`         |
 | `GET`    | `/stream`         | read   | SSE stream of new logs                    |
 | `POST`   | `/query`          | read   | Run read-only SQL                         |
 | `POST`   | `/query/stream`   | read   | Streaming SQL query results (NDJSON)      |
@@ -1041,6 +1121,8 @@ curl "http://localhost:3485/logs?level=error&from=1h&service=api&project=my-app&
 | `branch`        | Filter by branch                                            |
 | `version`       | Filter by version                                           |
 | `deployment_id` | Filter by deployment ID                                     |
+| `trace_id`      | Filter by trace ID                                          |
+| `span_id`       | Filter by span ID                                           |
 | `grep`          | Text search in messages                                     |
 | `from`          | Start time — ISO 8601 or relative (`30s`, `5m`, `1h`, `7d`) |
 | `to`            | End time — ISO 8601 or relative                             |
@@ -1099,15 +1181,19 @@ curl -X POST http://localhost:3485/histogram \
   -d '{ "from": 1700000000000, "to": 1700086400000, "filters": { "level": "error" } }'
 ```
 
-| Field             | Required | Description                                      |
-| ----------------- | -------- | ------------------------------------------------ |
-| `from`            | yes      | Start time (epoch ms)                            |
-| `to`              | yes      | End time (epoch ms)                              |
-| `buckets`         | no       | Number of time buckets (1–1000, auto if omitted) |
-| `filters.level`   | no       | Filter by log level                              |
-| `filters.service` | no       | Filter by service                                |
-| `filters.project` | no       | Filter by project                                |
-| `filters.branch`  | no       | Filter by branch                                 |
+| Field                   | Required | Description                                              |
+| ----------------------- | -------- | -------------------------------------------------------- |
+| `from`                  | yes      | Start time (epoch ms)                                    |
+| `to`                    | yes      | End time (epoch ms)                                      |
+| `buckets`               | no       | Number of time buckets (1–1000, auto if omitted)         |
+| `filters.level`         | no       | Filter by log level (comma-separated for `IN` match)     |
+| `filters.service`       | no       | Filter by service                                        |
+| `filters.project`       | no       | Filter by project                                        |
+| `filters.branch`        | no       | Filter by branch                                         |
+| `filters.version`       | no       | Filter by version                                        |
+| `filters.deployment_id` | no       | Filter by deployment ID                                  |
+| `filters.trace_id`      | no       | Filter by trace ID                                       |
+| `filters.span_id`       | no       | Filter by span ID                                        |
 
 ### `POST /prune`
 

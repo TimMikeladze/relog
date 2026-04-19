@@ -1,10 +1,9 @@
-import type { SearchOptions } from "../../db/database.ts";
 import type { DuckDBReader } from "../../db/duckdb.ts";
 import { VALID_LEVELS } from "../../types.ts";
 
-export async function handleLogs(request: Request, duckdb: DuckDBReader): Promise<Response> {
+export async function handleTraces(request: Request, duckdb: DuckDBReader): Promise<Response> {
 	const url = new URL(request.url);
-	const opts: SearchOptions = {};
+	const opts: Parameters<DuckDBReader["listTraces"]>[0] = {};
 
 	const level = url.searchParams.get("level");
 	if (level) {
@@ -26,8 +25,6 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 	if (deploymentId) opts.deployment_id = deploymentId;
 	const traceId = url.searchParams.get("trace_id");
 	if (traceId) opts.trace_id = traceId;
-	const spanId = url.searchParams.get("span_id");
-	if (spanId) opts.span_id = spanId;
 	const grep = url.searchParams.get("grep");
 	if (grep) opts.grep = grep;
 
@@ -55,34 +52,15 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 		if (Number.isNaN(parsed) || parsed < 1) {
 			return Response.json({ error: "Invalid 'limit' value" }, { status: 400 });
 		}
-		opts.limit = Math.min(parsed, 10000);
-	}
-	const offset = url.searchParams.get("offset");
-	if (offset) {
-		const parsed = Number.parseInt(offset, 10);
-		if (Number.isNaN(parsed) || parsed < 0) {
-			return Response.json({ error: "Invalid 'offset' value" }, { status: 400 });
-		}
-		opts.offset = parsed;
+		opts.limit = Math.min(parsed, 1000);
 	}
 
-	const aroundId = url.searchParams.get("around_id");
-	if (aroundId) {
-		const parsed = Number.parseInt(aroundId, 10);
-		if (Number.isNaN(parsed) || parsed < 1) {
-			return Response.json({ error: "Invalid 'around_id' value" }, { status: 400 });
-		}
-		opts.around_id = parsed;
+	try {
+		const result = await duckdb.listTraces(opts);
+		return Response.json({ rows: result.rows, limit: opts.limit ?? 100 });
+	} catch {
+		return Response.json({ error: "Traces query failed" }, { status: 500 });
 	}
-
-	const result = await duckdb.searchLogs(opts);
-
-	return Response.json({
-		rows: result.rows,
-		total: result.total,
-		limit: opts.limit ?? 100,
-		offset: opts.offset ?? 0,
-	});
 }
 
 function parseTime(input: string): number {

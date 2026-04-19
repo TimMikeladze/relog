@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 if TYPE_CHECKING:
     from ._types import LogLevel, SamplingOptions
 
+from ._otel import SpanKind, SpanKindName, SpanStatusCode, otel_meta
 from ._types import LOG_LEVELS
 
 EventSink = Callable[["LogLevel", str, dict[str, Any] | None], None]
@@ -48,7 +49,38 @@ class EventBuilder:
         self._data["error_stack"] = "".join(
             traceback.format_exception(type(err), err, err.__traceback__)
         )
+        # If OTel shape is already in use, mark span status as error too.
+        if self._data.get("otel") is True:
+            self._data["span_status_code"] = SpanStatusCode.ERROR
+            if "span_status_message" not in self._data:
+                self._data["span_status_message"] = str(err)
         self._escalate("error")
+        return self
+
+    def kind(self, span_kind: SpanKindName) -> EventBuilder:
+        """Set the OTel span kind (server, client, internal, producer, consumer)."""
+        self._data.update(otel_meta(kind=span_kind))
+        return self
+
+    def status(
+        self, code: int = SpanStatusCode.OK, message: str | None = None
+    ) -> EventBuilder:
+        """Set the OTel span status code (0=unset, 1=ok, 2=error)."""
+        self._data.update(otel_meta(status_code=code, status_message=message))
+        if code == SpanStatusCode.ERROR:
+            self._escalate("error")
+        return self
+
+    def scope(self, name: str, version: str | None = None) -> EventBuilder:
+        """Set the OTel instrumentation scope name/version."""
+        self._data.update(otel_meta(scope_name=name, scope_version=version))
+        return self
+
+    def resource(self, attrs: dict[str, Any]) -> EventBuilder:
+        """Merge OTel resource attributes (service.name, deployment.environment, ...)."""
+        existing = self._data.get("resource")
+        merged = {**existing, **attrs} if isinstance(existing, dict) else dict(attrs)
+        self._data.update(otel_meta(resource=merged))
         return self
 
     def warn(self, message: str | None = None) -> EventBuilder:

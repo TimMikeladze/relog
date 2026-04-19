@@ -114,7 +114,19 @@ interface TraceContext {
 	trace_id: string;
 	span_id: string;
 	parent_span_id?: string;
+	kind: string;
+	depth: number;
 }
+
+const SPAN_KINDS = ["server", "client", "internal", "producer", "consumer"] as const;
+const SCOPE_NAMES = [
+	"@opentelemetry/instrumentation-http",
+	"@opentelemetry/instrumentation-express",
+	"@opentelemetry/instrumentation-fetch",
+	"@opentelemetry/instrumentation-pg",
+	"@opentelemetry/instrumentation-redis",
+];
+const ENVIRONMENTS = ["production", "staging", "development"];
 
 // Generate correlated trace groups — multiple spans sharing a trace_id
 const activeTraces: TraceContext[] = [];
@@ -123,22 +135,57 @@ function getOrCreateTrace(): TraceContext {
 	// 40% chance to reuse an existing trace (creates child span)
 	if (activeTraces.length > 0 && Math.random() < 0.4) {
 		const parent = pick(activeTraces);
+		// Children tend to be internal/client/db; root tends to be server
+		const kind = pick(["internal", "internal", "client", "client", "producer"]);
 		return {
 			trace_id: parent.trace_id,
 			span_id: hexId(16),
 			parent_span_id: parent.span_id,
+			kind,
+			depth: parent.depth + 1,
 		};
 	}
-	// New root trace
-	const ctx: TraceContext = { trace_id: hexId(32), span_id: hexId(16) };
+	// New root trace — usually server-kind
+	const ctx: TraceContext = {
+		trace_id: hexId(32),
+		span_id: hexId(16),
+		kind: pick(["server", "server", "server", "consumer"]),
+		depth: 0,
+	};
 	activeTraces.push(ctx);
 	// Keep pool bounded
 	if (activeTraces.length > 20) activeTraces.shift();
 	return ctx;
 }
 
-function randomMeta(level: string, message: string): Record<string, unknown> {
+function randomMeta(
+	level: string,
+	message: string,
+	trace: TraceContext,
+	service: string,
+	version: string,
+	environment: string,
+): Record<string, unknown> {
 	const meta: Record<string, unknown> = {};
+
+	// Mark as OTel-shaped so UI badges (span_kind, status, scope) light up.
+	// ~70% of seeded spans carry the OTel-shaped fields; remainder mimic
+	// non-OTel logs so the UI stays honest about mixed input.
+	const otelShaped = Math.random() < 0.7;
+	if (otelShaped) {
+		meta.otel = true;
+		meta.span_kind = trace.kind;
+		meta.span_status_code = level === "error" || level === "fatal" ? 2 : 0;
+		if (level === "error" || level === "fatal") {
+			meta.span_status_message = "span ended with error";
+		}
+		meta.instrumentation_scope = { name: pick(SCOPE_NAMES), version: "1.0.0" };
+		meta.resource = {
+			"service.name": service,
+			"service.version": version,
+			"deployment.environment": environment,
+		};
+	}
 
 	// Wide event metadata for http_request / checkout / process_payment
 	const isWideEvent = WIDE_EVENT_NAMES.includes(message);
@@ -223,21 +270,24 @@ export const seedCommand: Command = command({
 				const messages = MESSAGES[level] ?? MESSAGES.info!;
 				const message = pick(messages);
 				const trace = getOrCreateTrace();
+				const service = pick(SERVICES);
+				const version = pick(VERSIONS);
+				const environment = pick(ENVIRONMENTS);
 
 				return {
 					level,
 					message,
-					service: pick(SERVICES),
+					service,
 					project: pick(PROJECTS),
 					branch: pick(BRANCHES),
-					version: pick(VERSIONS),
+					version,
 					deployment_id: pick(DEPLOYMENT_IDS),
 					host: pick(HOSTS),
 					pid: Math.floor(Math.random() * 50000) + 1000,
 					trace_id: trace.trace_id,
 					span_id: trace.span_id,
 					parent_span_id: trace.parent_span_id,
-					meta: randomMeta(level, message),
+					meta: randomMeta(level, message, trace, service, version, environment),
 				};
 			});
 

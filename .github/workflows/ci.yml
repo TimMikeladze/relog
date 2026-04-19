@@ -62,6 +62,10 @@ jobs:
           MINIO_SECRET_KEY: password
           MINIO_BUCKET: relog-test
 
+      - name: Run app UI tests
+        working-directory: app
+        run: bun run test
+
       - name: Build docs
         working-directory: docs
         run: bun run build

@@ -10,6 +10,10 @@ interface HistogramBody {
 		service?: string;
 		project?: string;
 		branch?: string;
+		version?: string;
+		deployment_id?: string;
+		trace_id?: string;
+		span_id?: string;
 	};
 }
 
@@ -42,8 +46,11 @@ export async function handleHistogram(request: Request, duckdb: DuckDBReader): P
 		return Response.json({ error: "'to' must be greater than 'from'" }, { status: 400 });
 	}
 
-	if (body.filters?.level && !VALID_LEVELS.has(body.filters.level)) {
-		return Response.json({ error: `Invalid level '${body.filters.level}'` }, { status: 400 });
+	if (body.filters?.level) {
+		const levels = body.filters.level.split(",");
+		if (levels.some((l) => !VALID_LEVELS.has(l))) {
+			return Response.json({ error: `Invalid level '${body.filters.level}'` }, { status: 400 });
+		}
 	}
 
 	const rangeMs = body.to - body.from;

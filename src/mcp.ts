@@ -36,7 +36,7 @@ export function createMcpServer(opts: McpOptions): McpServer {
 
 	server.tool(
 		"search_logs",
-		"Search and filter logs. Supports level, service, project, branch, version, deployment_id, text search, and time ranges.",
+		"Search and filter logs. Supports level, service, project, branch, version, deployment_id, trace_id, span_id, text search, and time ranges.",
 		{
 			level: z.string().optional().describe("Log level: trace, debug, info, warn, error, fatal"),
 			service: z.string().optional().describe("Filter by service name"),
@@ -44,6 +44,8 @@ export function createMcpServer(opts: McpOptions): McpServer {
 			branch: z.string().optional().describe("Filter by git branch"),
 			version: z.string().optional().describe("Filter by app version"),
 			deployment_id: z.string().optional().describe("Filter by deployment ID"),
+			trace_id: z.string().optional().describe("Filter by trace ID (distributed tracing)"),
+			span_id: z.string().optional().describe("Filter by span ID"),
 			grep: z.string().optional().describe("Search text in log messages"),
 			from: z
 				.string()
@@ -113,6 +115,8 @@ export function createMcpServer(opts: McpOptions): McpServer {
 			branch: z.string().optional().describe("Filter by branch"),
 			version: z.string().optional().describe("Filter by version"),
 			deployment_id: z.string().optional().describe("Filter by deployment ID"),
+			trace_id: z.string().optional().describe("Filter by trace ID"),
+			span_id: z.string().optional().describe("Filter by span ID"),
 		},
 		async (args) => {
 			const params = buildParams(args);

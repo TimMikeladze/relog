@@ -36,6 +36,23 @@ function isErrorLevel(level: string): boolean {
 	return level === "error" || level === "fatal";
 }
 
+const KIND_ABBREV: Record<string, string> = {
+	server: "SRV",
+	client: "CLI",
+	producer: "PRD",
+	consumer: "CNS",
+	internal: "INT",
+	unspecified: "",
+};
+
+const KIND_COLOR: Record<string, string> = {
+	server: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+	client: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+	producer: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+	consumer: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+	internal: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400",
+};
+
 const LEVEL_BADGE_COLORS: Record<string, string> = {
 	trace: "bg-zinc-500/15 text-zinc-500 dark:bg-zinc-400/15 dark:text-zinc-400",
 	debug: "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-400",
@@ -71,6 +88,20 @@ function SpanTooltip({ span, x, y }: TooltipState) {
 				>
 					{span.level}
 				</span>
+				{span.kind && span.kind !== "unspecified" && (
+					<span
+						className={`inline-flex rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+							KIND_COLOR[span.kind] ?? "bg-muted text-muted-foreground"
+						}`}
+					>
+						{KIND_ABBREV[span.kind] ?? span.kind}
+					</span>
+				)}
+				{span.statusCode === 2 && (
+					<span className="inline-flex rounded bg-rose-500/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+						Err
+					</span>
+				)}
 			</div>
 		</div>
 	);
@@ -187,7 +218,10 @@ function TreeConnectors({
 	);
 
 	return (
-		<div className="relative" style={{ width: span.depth * indentPx, minWidth: span.depth * indentPx }}>
+		<div
+			className="relative"
+			style={{ width: span.depth * indentPx, minWidth: span.depth * indentPx }}
+		>
 			{elements}
 		</div>
 	);
@@ -267,84 +301,79 @@ export function TraceWaterfall({
 
 					return (
 						<Fragment key={span.spanId + "-" + i}>
-						<div
-							className={`flex cursor-pointer items-center transition-colors hover:bg-muted/40 focus:bg-muted/40 focus:outline-none ${
-								isSelected ? "bg-primary/10" : ""
-							}`}
-							style={{ height: 26 }}
-							role="button"
-							tabIndex={0}
-							aria-label={`${span.service} ${span.name} ${formatDuration(span.duration)}`}
-							onClick={() => onSelectSpan?.(span)}
-							onKeyDown={(e) => {
-								if (e.key === "Enter" || e.key === " ") {
-									e.preventDefault();
-									onSelectSpan?.(span);
-								}
-							}}
-						>
-							{/* Left column: tree connectors + service/span name */}
 							<div
-								className="flex shrink-0 items-center overflow-hidden"
-								style={{ width: 180 }}
+								className={`flex cursor-pointer items-center transition-colors hover:bg-muted/40 focus:bg-muted/40 focus:outline-none ${
+									isSelected ? "bg-primary/10" : ""
+								}`}
+								style={{ height: 26 }}
+								role="button"
+								tabIndex={0}
+								aria-label={`${span.service} ${span.name} ${formatDuration(span.duration)}`}
+								onClick={() => onSelectSpan?.(span)}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.preventDefault();
+										onSelectSpan?.(span);
+									}
+								}}
 							>
-								<TreeConnectors
-									span={span}
-									spans={spans}
-									isLastChild={isLastChild}
-									parentIndex={parentIndex}
-								/>
-								<span className={`min-w-0 truncate text-[10px] font-medium pr-2 ${color.label}`}>
-									{span.service}
-								</span>
-							</div>
+								{/* Left column: tree connectors + service/span name */}
+								<div className="flex shrink-0 items-center overflow-hidden" style={{ width: 180 }}>
+									<TreeConnectors
+										span={span}
+										spans={spans}
+										isLastChild={isLastChild}
+										parentIndex={parentIndex}
+									/>
+									<span className={`min-w-0 truncate text-[10px] font-medium pr-2 ${color.label}`}>
+										{span.service}
+									</span>
+								</div>
 
-							{/* Timeline bar area */}
-							<div className="relative flex-1 self-stretch">
-								<div className="absolute inset-0 bg-muted/30" />
-								<div
-									className={`absolute top-1 bottom-1 flex items-center rounded px-1 ${barClass}`}
-									style={{
-										left: `${leftPct}%`,
-										width: `${widthPct}%`,
-										minWidth: BAR_MIN_WIDTH_PX,
-									}}
-									onMouseEnter={(e) => handleMouseEnter(span, e)}
-									onMouseLeave={handleMouseLeave}
-								>
-									{showTextInside && (
-										<span className="truncate text-[9px] font-medium text-white">
+								{/* Timeline bar area */}
+								<div className="relative flex-1 self-stretch">
+									<div className="absolute inset-0 bg-muted/30" />
+									<div
+										className={`absolute top-1 bottom-1 flex items-center rounded px-1 ${barClass}`}
+										style={{
+											left: `${leftPct}%`,
+											width: `${widthPct}%`,
+											minWidth: BAR_MIN_WIDTH_PX,
+										}}
+										onMouseEnter={(e) => handleMouseEnter(span, e)}
+										onMouseLeave={handleMouseLeave}
+									>
+										{showTextInside && (
+											<span className="truncate text-[9px] font-medium text-white">
+												{span.name}
+											</span>
+										)}
+									</div>
+
+									{/* Span name outside bar when bar is too narrow */}
+									{!showTextInside && (
+										<span
+											className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground"
+											style={{
+												left: `calc(${leftPct + widthPct}% + 4px)`,
+												maxWidth: `calc(${100 - leftPct - widthPct}% - 8px)`,
+											}}
+										>
 											{span.name}
 										</span>
 									)}
 								</div>
 
-								{/* Span name outside bar when bar is too narrow */}
-								{!showTextInside && (
-									<span
-										className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground"
-										style={{
-											left: `calc(${leftPct + widthPct}% + 4px)`,
-											maxWidth: `calc(${100 - leftPct - widthPct}% - 8px)`,
-										}}
-									>
-										{span.name}
+								{/* Duration label */}
+								<div className="shrink-0 text-right" style={{ width: 60 }}>
+									<span className="text-[10px] tabular-nums text-muted-foreground">
+										{formatDuration(span.duration)}
 									</span>
-								)}
+								</div>
 							</div>
-
-							{/* Duration label */}
-							<div className="shrink-0 text-right" style={{ width: 60 }}>
-								<span className="text-[10px] tabular-nums text-muted-foreground">
-									{formatDuration(span.duration)}
-								</span>
-							</div>
-						</div>
-						{isSelected && inlineDetail && (
-							<div className="relative z-10 px-2 py-2 bg-background">
-								{inlineDetail(span)}
-							</div>
-						)}
+							{isSelected && inlineDetail && (
+								<div className="relative z-10 px-2 py-2 bg-background">{inlineDetail(span)}</div>
+							)}
 						</Fragment>
 					);
 				})}

@@ -185,6 +185,8 @@ export class DuckDBReader {
 			"branch",
 			"version",
 			"deployment_id",
+			"trace_id",
+			"span_id",
 		] as const) {
 			const val = opts[col];
 			if (!val) continue;
@@ -294,11 +296,145 @@ export class DuckDBReader {
 		}
 	}
 
+	async listTraces(opts: {
+		level?: string;
+		service?: string;
+		project?: string;
+		branch?: string;
+		version?: string;
+		deployment_id?: string;
+		trace_id?: string;
+		grep?: string;
+		from?: number;
+		to?: number;
+		limit?: number;
+	}): Promise<{
+		rows: {
+			trace_id: string;
+			first_ts: string;
+			span_count: number;
+			duration_ms: number;
+			max_level: string;
+			services: string;
+			root_message: string;
+		}[];
+	}> {
+		const conditions: string[] = ["trace_id IS NOT NULL", "trace_id != ''"];
+		const params: (string | number | bigint)[] = [];
+
+		for (const col of [
+			"level",
+			"service",
+			"project",
+			"branch",
+			"version",
+			"deployment_id",
+			"trace_id",
+		] as const) {
+			const val = opts[col];
+			if (!val) continue;
+			const values = val.split(",").filter(Boolean);
+			if (values.length === 1) {
+				conditions.push(`${col} = ?`);
+				params.push(values[0]!);
+			} else if (values.length > 1) {
+				conditions.push(`${col} IN (${values.map(() => "?").join(", ")})`);
+				params.push(...values);
+			}
+		}
+		if (opts.grep) {
+			conditions.push("message LIKE ? ESCAPE '\\'");
+			params.push(`%${escapeLike(opts.grep)}%`);
+		}
+		if (opts.from) {
+			const ts = Math.floor(Number(opts.from));
+			if (!Number.isFinite(ts)) throw new Error("Invalid 'from' timestamp");
+			conditions.push("created_at >= ?");
+			params.push(BigInt(ts));
+		}
+		if (opts.to) {
+			const ts = Math.floor(Number(opts.to));
+			if (!Number.isFinite(ts)) throw new Error("Invalid 'to' timestamp");
+			conditions.push("created_at <= ?");
+			params.push(BigInt(ts));
+		}
+
+		const where = `WHERE ${conditions.join(" AND ")}`;
+		const limit = Math.min(Math.max(opts.limit ?? 100, 1), 1000);
+
+		const sql = `
+			SELECT
+				trace_id,
+				MIN(timestamp) as first_ts,
+				COUNT(DISTINCT COALESCE(span_id, CAST(id AS VARCHAR))) as span_count,
+				COALESCE(MAX(duration_ms), 0) as duration_ms,
+				CASE MAX(CASE
+					WHEN level = 'fatal' THEN 5
+					WHEN level = 'error' THEN 4
+					WHEN level = 'warn' THEN 3
+					ELSE 2
+				END)
+					WHEN 5 THEN 'fatal'
+					WHEN 4 THEN 'error'
+					WHEN 3 THEN 'warn'
+					ELSE 'info'
+				END as max_level,
+				STRING_AGG(DISTINCT service, ',') as services,
+				FIRST(message ORDER BY created_at ASC) as root_message
+			FROM logs
+			${where}
+			GROUP BY trace_id
+			ORDER BY MIN(created_at) DESC
+			LIMIT ${limit}
+		`;
+
+		const conn = await this.acquire();
+		let errored = false;
+		try {
+			const reader = await conn.runAndReadAll(sql, params as (string | number | bigint)[]);
+			const rawRows = reader.getRowObjects() as Record<string, unknown>[];
+			const rows = rawRows.map(coerceRow) as unknown as {
+				trace_id: string;
+				first_ts: string;
+				span_count: number;
+				duration_ms: number;
+				max_level: string;
+				services: string | null;
+				root_message: string | null;
+			}[];
+			return {
+				rows: rows.map((r) => ({
+					trace_id: r.trace_id,
+					first_ts: r.first_ts,
+					span_count: Number(r.span_count),
+					duration_ms: Number(r.duration_ms),
+					max_level: r.max_level,
+					services: r.services ?? "",
+					root_message: r.root_message ?? "",
+				})),
+			};
+		} catch (err) {
+			errored = true;
+			throw err;
+		} finally {
+			this.release(conn, errored);
+		}
+	}
+
 	async histogram(opts: {
 		from: number;
 		to: number;
 		buckets: number;
-		filters?: { level?: string; service?: string; project?: string; branch?: string };
+		filters?: {
+			level?: string;
+			service?: string;
+			project?: string;
+			branch?: string;
+			version?: string;
+			deployment_id?: string;
+			trace_id?: string;
+			span_id?: string;
+		};
 	}): Promise<{
 		buckets: {
 			time: number;
@@ -319,27 +455,35 @@ export class DuckDBReader {
 		const conditions: string[] = ["created_at >= ?", "created_at <= ?"];
 		const params: (string | number | bigint)[] = [BigInt(Math.floor(from)), BigInt(Math.floor(to))];
 
-		if (opts.filters?.level) {
-			conditions.push("level = ?");
-			params.push(opts.filters.level);
-		}
-		if (opts.filters?.service) {
-			conditions.push("service = ?");
-			params.push(opts.filters.service);
-		}
-		if (opts.filters?.project) {
-			conditions.push("project = ?");
-			params.push(opts.filters.project);
-		}
-		if (opts.filters?.branch) {
-			conditions.push("branch = ?");
-			params.push(opts.filters.branch);
+		for (const col of [
+			"level",
+			"service",
+			"project",
+			"branch",
+			"version",
+			"deployment_id",
+			"trace_id",
+			"span_id",
+		] as const) {
+			const val = opts.filters?.[col];
+			if (!val) continue;
+			const values = val.split(",").filter(Boolean);
+			if (values.length === 1) {
+				conditions.push(`${col} = ?`);
+				params.push(values[0]!);
+			} else if (values.length > 1) {
+				conditions.push(`${col} IN (${values.map(() => "?").join(", ")})`);
+				params.push(...values);
+			}
 		}
 
 		const where = `WHERE ${conditions.join(" AND ")}`;
+		// FLOOR (not CAST(... AS INTEGER)) because DuckDB rounds on numeric→integer
+		// cast, which would push records at the upper bound into a non-existent
+		// bucketCount-th bucket and silently drop them.
 		const sql = `
 			SELECT
-				CAST((created_at - ${Math.floor(from)}) / ${bucketMs} AS INTEGER) as bucket,
+				CAST(FLOOR((created_at - ${Math.floor(from)}) / ${bucketMs}) AS INTEGER) as bucket,
 				level,
 				COUNT(*) as count
 			FROM logs
@@ -387,7 +531,11 @@ export class DuckDBReader {
 			}
 
 			for (const row of rows) {
-				const idx = Number(row.bucket);
+				// Clamp: a record exactly at `to` lands in bucket==bucketCount due to
+				// integer division rounding at the upper boundary; fold it into the
+				// last visible bucket rather than dropping it.
+				const rawIdx = Number(row.bucket);
+				const idx = Math.min(Math.max(rawIdx, 0), bucketCount - 1);
 				const bucket = bucketMap.get(idx);
 				if (!bucket) continue;
 				const level = row.level as string;

@@ -1,9 +1,13 @@
+import { createGunzip } from "node:zlib";
 import type { RelogDatabase } from "../../db/database.ts";
 import type { IngestPayload, LogLevel } from "../../types.ts";
 
 const MAX_MESSAGE_LENGTH = 1_048_576;
 const MAX_STRING_FIELD_LENGTH = 1024;
 const MAX_META_JSON_LENGTH = 1_048_576;
+// Guard against gzip bombs. OTLP batches are small; 50MB decompressed is well
+// above any realistic exporter flush and below Node's default heap budget.
+const MAX_DECOMPRESSED_BYTES = 50 * 1024 * 1024;
 
 // ── OTLP/JSON types ────────────────────────────────────────────────
 
@@ -96,6 +100,71 @@ const SPAN_KINDS: Record<number, string> = {
 };
 
 const MAX_ATTR_DEPTH = 10;
+const TRACE_ID_BYTES = 16;
+const SPAN_ID_BYTES = 8;
+
+const HEX_RE = /^[0-9a-fA-F]+$/;
+const BASE64_RE = /^[A-Za-z0-9+/]+=*$/;
+
+/**
+ * OTLP/JSON encodes trace/span IDs as base64 per proto3 JSON spec, but many
+ * exporters and the OpenTelemetry Collector emit hex strings. Accept both and
+ * normalize to lowercase hex so IDs are consistent in the database.
+ */
+function normalizeId(id: string | undefined, byteLength: number): string | undefined {
+	if (!id) return undefined;
+	if (HEX_RE.test(id) && id.length === byteLength * 2) {
+		return id.toLowerCase();
+	}
+	if (BASE64_RE.test(id)) {
+		try {
+			const buf = Buffer.from(id, "base64");
+			if (buf.length === byteLength) {
+				return buf.toString("hex");
+			}
+		} catch {
+			// fall through
+		}
+	}
+	// Non-standard length or encoding — return lowercase and trust the sender
+	return id.toLowerCase();
+}
+
+class DecompressionTooLarge extends Error {}
+
+function gunzipWithLimit(input: Uint8Array, limit: number): Promise<Uint8Array> {
+	return new Promise((resolve, reject) => {
+		const gunzip = createGunzip();
+		const chunks: Buffer[] = [];
+		let total = 0;
+		gunzip.on("data", (chunk: Buffer) => {
+			total += chunk.length;
+			if (total > limit) {
+				gunzip.destroy();
+				reject(new DecompressionTooLarge(`Decompressed payload exceeds ${limit} bytes`));
+				return;
+			}
+			chunks.push(chunk);
+		});
+		gunzip.on("end", () => resolve(new Uint8Array(Buffer.concat(chunks))));
+		gunzip.on("error", reject);
+		gunzip.end(input);
+	});
+}
+
+async function readJsonBody<T>(request: Request): Promise<T> {
+	const encoding = (request.headers.get("content-encoding") ?? "").toLowerCase();
+	if (encoding.includes("gzip")) {
+		const buf = new Uint8Array(await request.arrayBuffer());
+		const decompressed = await gunzipWithLimit(buf, MAX_DECOMPRESSED_BYTES);
+		return JSON.parse(new TextDecoder().decode(decompressed)) as T;
+	}
+	return (await request.json()) as T;
+}
+
+export function isDecompressionTooLarge(err: unknown): boolean {
+	return err instanceof DecompressionTooLarge;
+}
 
 function extractValue(val: OtelAnyValue, depth = 0): unknown {
 	if (!val || depth > MAX_ATTR_DEPTH) return undefined;
@@ -204,8 +273,11 @@ export async function handleOtelTraces(
 
 	let payload: OtelTracesPayload;
 	try {
-		payload = (await request.json()) as OtelTracesPayload;
-	} catch {
+		payload = await readJsonBody<OtelTracesPayload>(request);
+	} catch (err) {
+		if (isDecompressionTooLarge(err)) {
+			return Response.json({ error: "Decompressed payload too large" }, { status: 413 });
+		}
 		return Response.json({ error: "Invalid JSON" }, { status: 400 });
 	}
 
@@ -224,6 +296,10 @@ export async function handleOtelTraces(
 			for (const span of ss.spans ?? []) {
 				// Skip spans with empty identifiers
 				if (!span.traceId || !span.spanId) continue;
+
+				const traceId = normalizeId(span.traceId, TRACE_ID_BYTES);
+				const spanId = normalizeId(span.spanId, SPAN_ID_BYTES);
+				const parentSpanId = normalizeId(span.parentSpanId, SPAN_ID_BYTES);
 
 				const spanAttrs = flattenAttributes(span.attributes);
 				const startMs = nanoToMs(span.startTimeUnixNano);
@@ -259,9 +335,9 @@ export async function handleOtelTraces(
 						meta,
 						service: serviceName,
 						host: hostName,
-						trace_id: span.traceId,
-						span_id: span.spanId,
-						parent_span_id: span.parentSpanId || undefined,
+						trace_id: traceId,
+						span_id: spanId,
+						parent_span_id: parentSpanId,
 						duration_ms: durationMs,
 					}),
 				);
@@ -288,8 +364,8 @@ export async function handleOtelTraces(
 								meta: { ...eventAttrs, otel: true, otel_event: true },
 								service: serviceName,
 								host: hostName,
-								trace_id: span.traceId,
-								span_id: span.spanId,
+								trace_id: traceId,
+								span_id: spanId,
 							}),
 						);
 					}
@@ -332,8 +408,11 @@ export async function handleOtelLogs(
 
 	let payload: OtelLogsPayload;
 	try {
-		payload = (await request.json()) as OtelLogsPayload;
-	} catch {
+		payload = await readJsonBody<OtelLogsPayload>(request);
+	} catch (err) {
+		if (isDecompressionTooLarge(err)) {
+			return Response.json({ error: "Decompressed payload too large" }, { status: 413 });
+		}
 		return Response.json({ error: "Invalid JSON" }, { status: 400 });
 	}
 
@@ -381,8 +460,8 @@ export async function handleOtelLogs(
 						meta,
 						service: serviceName,
 						host: hostName,
-						trace_id: log.traceId || undefined,
-						span_id: log.spanId || undefined,
+						trace_id: normalizeId(log.traceId, TRACE_ID_BYTES),
+						span_id: normalizeId(log.spanId, SPAN_ID_BYTES),
 					}),
 				);
 			}

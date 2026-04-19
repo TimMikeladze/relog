@@ -1,6 +1,10 @@
 const SERVICE_PALETTE = [
 	{ bar: "bg-blue-500/70", dot: "bg-blue-400", label: "text-blue-600 dark:text-blue-300" },
-	{ bar: "bg-emerald-500/70", dot: "bg-emerald-400", label: "text-emerald-600 dark:text-emerald-300" },
+	{
+		bar: "bg-emerald-500/70",
+		dot: "bg-emerald-400",
+		label: "text-emerald-600 dark:text-emerald-300",
+	},
 	{ bar: "bg-violet-500/70", dot: "bg-violet-400", label: "text-violet-600 dark:text-violet-300" },
 	{ bar: "bg-amber-500/70", dot: "bg-amber-400", label: "text-amber-600 dark:text-amber-300" },
 	{ bar: "bg-cyan-500/70", dot: "bg-cyan-400", label: "text-cyan-600 dark:text-cyan-300" },

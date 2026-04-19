@@ -13,6 +13,7 @@ export const tailCommand: Command = command({
 		service: string().desc("Filter by service name"),
 		project: string().desc("Filter by project"),
 		branch: string().desc("Filter by branch"),
+		traceId: string("trace-id").desc("Filter by trace ID"),
 		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
@@ -21,6 +22,7 @@ export const tailCommand: Command = command({
 			service: opts.service,
 			project: opts.project,
 			branch: opts.branch,
+			trace_id: opts.traceId,
 		});
 
 		const qs = params.toString();

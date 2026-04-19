@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHashParam } from "@/hooks/use-hash-param";
-import { apiPost } from "@/api/client";
+import { apiGet } from "@/api/client";
 import { useStream } from "@/hooks/use-stream";
 import { TimelineChart, HoverStats } from "@/components/timeline-chart";
 import { LevelBadge } from "@/components/level-badge";
 import { TraceWaterfall } from "@/components/trace-waterfall";
 import { SpanDetail } from "@/components/span-detail";
 import { getServiceColor } from "@/components/service-colors";
-import type { Filters, LogRecord, QueryResult, SpanBar } from "@/types";
+import type { Filters, LogRecord, SpanBar } from "@/types";
 
 import {
 	ChevronRight,
@@ -128,6 +128,10 @@ function buildSpans(logs: LogRecord[]): SpanBar[] {
 			"info",
 		);
 
+		const kind = typeof meta.span_kind === "string" ? meta.span_kind : undefined;
+		const statusCode =
+			typeof meta.span_status_code === "number" ? meta.span_status_code : undefined;
+
 		raw.push({
 			name: representative.message,
 			service: representative.service || "unknown",
@@ -136,6 +140,8 @@ function buildSpans(logs: LogRecord[]): SpanBar[] {
 			start: Math.max(0, startMs),
 			duration: durationMs,
 			level: maxLevel,
+			kind,
+			statusCode,
 		});
 	}
 
@@ -260,77 +266,29 @@ export function TracesView({
 		if (!enabled || live === "1") return;
 		setLoading(true);
 
-		let where = "WHERE trace_id IS NOT NULL AND trace_id != ''";
-		const inClause = (col: string, val?: string) => {
-			if (!val) return;
-			const vals = val.split(",").map((v) => `'${v.replace(/'/g, "''")}'`);
-			where +=
-				vals.length === 1 ? ` AND ${col} = ${vals[0]}` : ` AND ${col} IN (${vals.join(", ")})`;
-		};
-		inClause("trace_id", filters.trace_id);
-		inClause("service", filters.service);
-		inClause("project", filters.project);
-		inClause("branch", filters.branch);
-		inClause("version", filters.version);
-		inClause("deployment_id", filters.deployment_id);
-		inClause("level", filters.level);
-		if (filters.grep) {
-			const escaped = filters.grep.replace(/'/g, "''").replace(/[%_\\]/g, "\\$&");
-			where += ` AND message LIKE '%${escaped}%' ESCAPE '\\'`;
-		}
-		if (filters.from) {
-			const match = filters.from.match(/^(\d+)([smhdwMy])$/);
-			if (match) {
-				const ms: Record<string, number> = {
-					s: 1000,
-					m: 60_000,
-					h: 3600_000,
-					d: 86400_000,
-					w: 604_800_000,
-					M: 2_592_000_000,
-					y: 31_536_000_000,
-				};
-				where += ` AND created_at > ${Date.now() - parseInt(match[1]) * (ms[match[2]] ?? 3600_000)}`;
-			}
-		}
+		const params: Record<string, string> = { limit: "100" };
+		if (filters.trace_id) params.trace_id = filters.trace_id;
+		if (filters.service) params.service = filters.service;
+		if (filters.project) params.project = filters.project;
+		if (filters.branch) params.branch = filters.branch;
+		if (filters.version) params.version = filters.version;
+		if (filters.deployment_id) params.deployment_id = filters.deployment_id;
+		if (filters.level) params.level = filters.level;
+		if (filters.grep) params.grep = filters.grep;
+		if (filters.from) params.from = filters.from;
+		if (filters.to) params.to = filters.to;
 
-		const sql = `
-      SELECT
-        trace_id,
-        MIN(timestamp) as first_ts,
-        COUNT(DISTINCT COALESCE(span_id, CAST(id AS VARCHAR))) as span_count,
-        COALESCE(MAX(duration_ms), 0) as duration_ms,
-        CASE MAX(CASE
-          WHEN level = 'fatal' THEN 5
-          WHEN level = 'error' THEN 4
-          WHEN level = 'warn' THEN 3
-          ELSE 2
-        END)
-          WHEN 5 THEN 'fatal'
-          WHEN 4 THEN 'error'
-          WHEN 3 THEN 'warn'
-          ELSE 'info'
-        END as max_level,
-        STRING_AGG(DISTINCT service, ',') as services,
-        FIRST(message ORDER BY created_at ASC) as root_message
-      FROM logs
-      ${where}
-      GROUP BY trace_id
-      ORDER BY MIN(created_at) DESC
-      LIMIT 100
-    `;
-
-		apiPost<QueryResult>("/query", { sql })
+		apiGet<{ rows: TraceRow[] }>("/traces", params)
 			.then((res) => {
 				setTraces(
 					res.rows.map((r) => ({
-						trace_id: r.trace_id as string,
-						first_ts: r.first_ts as string,
+						trace_id: r.trace_id,
+						first_ts: r.first_ts,
 						span_count: Number(r.span_count),
 						duration_ms: Number(r.duration_ms),
-						max_level: r.max_level as string,
-						services: (r.services as string) || "",
-						root_message: (r.root_message as string) || "",
+						max_level: r.max_level,
+						services: r.services || "",
+						root_message: r.root_message || "",
 					})),
 				);
 			})
@@ -353,11 +311,14 @@ export function TracesView({
 		if (!expandedTrace || live === "1" || !enabled) return;
 		if (!/^[\w:.-]{1,256}$/.test(expandedTrace)) return;
 		setTraceLogsLoading(true);
-		const safe = expandedTrace.replace(/'/g, "''");
-		const sql = `SELECT * FROM logs WHERE trace_id = '${safe}' ORDER BY created_at ASC LIMIT 200`;
-		apiPost<QueryResult>("/query", { sql })
+		apiGet<{ rows: LogRecord[] }>("/logs", {
+			trace_id: expandedTrace,
+			limit: "200",
+		})
 			.then((res) => {
-				const logs = res.rows as unknown as LogRecord[];
+				const logs = [...res.rows].sort(
+					(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+				);
 				setTraceLogs(logs);
 				setTraceSpans(buildSpans(logs));
 			})
@@ -474,7 +435,11 @@ export function TracesView({
 							title={`Sort by: ${sortField}`}
 						>
 							<ArrowUpDown className="h-3 w-3" />
-							{sortField === "time" ? "Newest" : sortField === "duration" ? "Slowest" : "Most spans"}
+							{sortField === "time"
+								? "Newest"
+								: sortField === "duration"
+									? "Slowest"
+									: "Most spans"}
 						</button>
 
 						{live === "1" && (

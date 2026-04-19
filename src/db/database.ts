@@ -13,6 +13,8 @@ export interface SearchOptions {
 	branch?: string;
 	version?: string;
 	deployment_id?: string;
+	trace_id?: string;
+	span_id?: string;
 	grep?: string;
 	from?: number;
 	to?: number;

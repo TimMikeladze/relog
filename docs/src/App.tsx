@@ -667,8 +667,8 @@ const MOCK_LOGS: MockLog[] = [
 		timestamp: "14:22:57",
 		level: "warn",
 		service: "api",
-		message: "deprecated_endpoint GET /v1/logs use /v2/logs",
-		meta: { endpoint: "/v1/logs", replacement: "/v2/logs", caller: "sdk-python/0.3.1" },
+		message: "deprecated_endpoint GET /api/users/legacy use /api/v2/users",
+		meta: { endpoint: "/api/users/legacy", replacement: "/api/v2/users", caller: "sdk-python/0.3.1" },
 	},
 	{
 		timestamp: "14:22:57",
