@@ -143,8 +143,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 			isOtel: m.otel === true,
 			kind: typeof m.span_kind === "string" ? m.span_kind : undefined,
 			statusCode: typeof m.span_status_code === "number" ? m.span_status_code : undefined,
-			statusMessage:
-				typeof m.span_status_message === "string" ? m.span_status_message : undefined,
+			statusMessage: typeof m.span_status_message === "string" ? m.span_status_message : undefined,
 			scope: typeof m.instrumentation_scope === "string" ? m.instrumentation_scope : undefined,
 			resource:
 				m.resource && typeof m.resource === "object"
@@ -239,9 +238,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 				{/* Resource attributes (OTel) */}
 				{otelFields.resource && Object.keys(otelFields.resource).length > 0 && (
 					<>
-						<SectionHeader>
-							Resource ({Object.keys(otelFields.resource).length})
-						</SectionHeader>
+						<SectionHeader>Resource ({Object.keys(otelFields.resource).length})</SectionHeader>
 						<div className="rounded-md border border-border/50 overflow-hidden">
 							<JsonViewer data={otelFields.resource} className="!p-2 !text-[10px]" />
 						</div>

@@ -60,8 +60,7 @@ describe("examples/otel/otel-sdk.ts", () => {
 
 		// Verify OTel metadata made it through
 		const rootRow = body.rows.find((r: { message: string }) => r.message === "handle-request");
-		const meta =
-			typeof rootRow.meta === "string" ? JSON.parse(rootRow.meta) : rootRow.meta;
+		const meta = typeof rootRow.meta === "string" ? JSON.parse(rootRow.meta) : rootRow.meta;
 		expect(meta.otel).toBe(true);
 		expect(meta.span_kind).toBe("server");
 		expect(meta["http.method"]).toBe("GET");
@@ -99,9 +98,7 @@ describe("examples/otel/otel-raw.ts", () => {
 		expect(body.rows.length).toBeGreaterThanOrEqual(5);
 
 		// Pick out the span rows (those with a trace_id)
-		const spans = body.rows.filter(
-			(r: { trace_id?: string | null }) => r.trace_id != null,
-		);
+		const spans = body.rows.filter((r: { trace_id?: string | null }) => r.trace_id != null);
 		expect(spans.length).toBeGreaterThanOrEqual(4);
 
 		// All spans share the same trace_id and it must be 32 hex chars
@@ -111,9 +108,7 @@ describe("examples/otel/otel-raw.ts", () => {
 		expect(traceId).toMatch(/^[0-9a-f]{32}$/);
 
 		// Root span: POST /checkout, server kind, status ok, duration ~240ms
-		const root = spans.find(
-			(r: { message: string }) => r.message === "POST /checkout",
-		);
+		const root = spans.find((r: { message: string }) => r.message === "POST /checkout");
 		expect(root).toBeTruthy();
 		expect(root.duration_ms).toBe(240);
 		const rootMeta = typeof root.meta === "string" ? JSON.parse(root.meta) : root.meta;
@@ -123,18 +118,14 @@ describe("examples/otel/otel-raw.ts", () => {
 		expect(rootMeta.resource["deployment.environment"]).toBe("production");
 
 		// DB span has a child event
-		const event = spans.find(
-			(r: { message: string }) => r.message === "slow_query_warning",
-		);
+		const event = spans.find((r: { message: string }) => r.message === "slow_query_warning");
 		expect(event).toBeTruthy();
 		const eventMeta = typeof event.meta === "string" ? JSON.parse(event.meta) : event.meta;
 		expect(eventMeta.otel_event).toBe(true);
 		expect(eventMeta.threshold_ms).toBe(150);
 
 		// Log record from /v1/logs
-		const logRow = body.rows.find(
-			(r: { message: string }) => r.message === "checkout completed",
-		);
+		const logRow = body.rows.find((r: { message: string }) => r.message === "checkout completed");
 		expect(logRow).toBeTruthy();
 		expect(logRow.level).toBe("info");
 		const logMeta = typeof logRow.meta === "string" ? JSON.parse(logRow.meta) : logRow.meta;

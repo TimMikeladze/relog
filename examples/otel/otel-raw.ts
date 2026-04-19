@@ -108,7 +108,10 @@ async function sendTrace(): Promise<void> {
 								endTimeUnixNano: nano(t0 + 210),
 								attributes: [
 									{ key: "db.system", value: { stringValue: "postgresql" } },
-									{ key: "db.statement", value: { stringValue: "SELECT * FROM orders WHERE id=$1" } },
+									{
+										key: "db.statement",
+										value: { stringValue: "SELECT * FROM orders WHERE id=$1" },
+									},
 									{ key: "db.rows_affected", value: { intValue: "1" } },
 								],
 								events: [

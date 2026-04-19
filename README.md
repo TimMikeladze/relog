@@ -984,11 +984,11 @@ relog.dev speaks [OTLP/HTTP](https://opentelemetry.io/docs/specs/otlp/#otlphttp)
 
 ### Endpoints
 
-| Endpoint            | What it accepts                                                                  |
-| ------------------- | -------------------------------------------------------------------------------- |
-| `POST /v1/traces`   | OTLP/JSON `ExportTraceServiceRequest` — `resourceSpans[]`                        |
-| `POST /v1/logs`     | OTLP/JSON `ExportLogsServiceRequest` — `resourceLogs[]`                          |
-| `POST /v1/metrics`  | Returns `501 Not Implemented` — metrics ingest is not yet supported              |
+| Endpoint           | What it accepts                                                     |
+| ------------------ | ------------------------------------------------------------------- |
+| `POST /v1/traces`  | OTLP/JSON `ExportTraceServiceRequest` — `resourceSpans[]`           |
+| `POST /v1/logs`    | OTLP/JSON `ExportLogsServiceRequest` — `resourceLogs[]`             |
+| `POST /v1/metrics` | Returns `501 Not Implemented` — metrics ingest is not yet supported |
 
 Both endpoints require the `ingest` role (Bearer token) when API keys are configured. Responses follow the OTLP spec shape: `200 {"partialSuccess":{}}` on success, `415` for unsupported content types, `400` for malformed payloads.
 
@@ -1181,19 +1181,19 @@ curl -X POST http://localhost:3485/histogram \
   -d '{ "from": 1700000000000, "to": 1700086400000, "filters": { "level": "error" } }'
 ```
 
-| Field                   | Required | Description                                              |
-| ----------------------- | -------- | -------------------------------------------------------- |
-| `from`                  | yes      | Start time (epoch ms)                                    |
-| `to`                    | yes      | End time (epoch ms)                                      |
-| `buckets`               | no       | Number of time buckets (1–1000, auto if omitted)         |
-| `filters.level`         | no       | Filter by log level (comma-separated for `IN` match)     |
-| `filters.service`       | no       | Filter by service                                        |
-| `filters.project`       | no       | Filter by project                                        |
-| `filters.branch`        | no       | Filter by branch                                         |
-| `filters.version`       | no       | Filter by version                                        |
-| `filters.deployment_id` | no       | Filter by deployment ID                                  |
-| `filters.trace_id`      | no       | Filter by trace ID                                       |
-| `filters.span_id`       | no       | Filter by span ID                                        |
+| Field                   | Required | Description                                          |
+| ----------------------- | -------- | ---------------------------------------------------- |
+| `from`                  | yes      | Start time (epoch ms)                                |
+| `to`                    | yes      | End time (epoch ms)                                  |
+| `buckets`               | no       | Number of time buckets (1–1000, auto if omitted)     |
+| `filters.level`         | no       | Filter by log level (comma-separated for `IN` match) |
+| `filters.service`       | no       | Filter by service                                    |
+| `filters.project`       | no       | Filter by project                                    |
+| `filters.branch`        | no       | Filter by branch                                     |
+| `filters.version`       | no       | Filter by version                                    |
+| `filters.deployment_id` | no       | Filter by deployment ID                              |
+| `filters.trace_id`      | no       | Filter by trace ID                                   |
+| `filters.span_id`       | no       | Filter by span ID                                    |
 
 ### `POST /prune`
 

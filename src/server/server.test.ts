@@ -1041,9 +1041,7 @@ describe("OTLP /v1/traces", () => {
 
 		const logsRes = await fetch(url(`/logs?trace_id=${evTrace}`), { headers: bearerHeaders() });
 		const data = await logsRes.json();
-		const exception = data.rows.find((r: { message: string }) =>
-			r.message.startsWith("exception"),
-		);
+		const exception = data.rows.find((r: { message: string }) => r.message.startsWith("exception"));
 		expect(exception).toBeTruthy();
 		expect(exception.level).toBe("error");
 	});
@@ -1242,7 +1240,9 @@ describe("OTLP trace metadata preservation", () => {
 		const payload = {
 			resourceSpans: [
 				{
-					resource: { attributes: [{ key: "service.name", value: { stringValue: "anyvalue-svc" } }] },
+					resource: {
+						attributes: [{ key: "service.name", value: { stringValue: "anyvalue-svc" } }],
+					},
 					scopeSpans: [
 						{
 							spans: [
@@ -1510,7 +1510,9 @@ describe("OTLP structural shapes", () => {
 		const payload = {
 			resourceSpans: [
 				{
-					resource: { attributes: [{ key: "service.name", value: { stringValue: "multi-scope" } }] },
+					resource: {
+						attributes: [{ key: "service.name", value: { stringValue: "multi-scope" } }],
+					},
 					scopeSpans: [
 						{
 							scope: { name: "@opentelemetry/instrumentation-http" },
@@ -1546,7 +1548,9 @@ describe("OTLP structural shapes", () => {
 			body: JSON.stringify(payload),
 		});
 
-		const rows = (await (await fetch(url(`/logs?trace_id=${traceId}`), { headers: bearerHeaders() })).json()).rows;
+		const rows = (
+			await (await fetch(url(`/logs?trace_id=${traceId}`), { headers: bearerHeaders() })).json()
+		).rows;
 		const scopes = new Set(
 			rows.map((r: { meta: unknown }) => {
 				const m = typeof r.meta === "string" ? JSON.parse(r.meta) : r.meta;
@@ -1586,7 +1590,9 @@ describe("OTLP structural shapes", () => {
 		});
 		// Server should ingest and default to Date.now() rather than reject
 		expect(res.status).toBe(200);
-		const rows = (await (await fetch(url(`/logs?trace_id=${traceId}`), { headers: bearerHeaders() })).json()).rows;
+		const rows = (
+			await (await fetch(url(`/logs?trace_id=${traceId}`), { headers: bearerHeaders() })).json()
+		).rows;
 		expect(rows.length).toBeGreaterThanOrEqual(1);
 	});
 
@@ -1668,7 +1674,9 @@ describe("OTLP structural shapes", () => {
 		});
 		expect(res.status).toBe(200);
 
-		const rows = (await (await fetch(url(`/logs?trace_id=${traceId}`), { headers: bearerHeaders() })).json()).rows;
+		const rows = (
+			await (await fetch(url(`/logs?trace_id=${traceId}`), { headers: bearerHeaders() })).json()
+		).rows;
 		const row = rows.find((r: { span_id?: string }) => r.span_id === spanId);
 		expect(row).toBeTruthy();
 		expect(row.service).toBe("sdk-shape");
