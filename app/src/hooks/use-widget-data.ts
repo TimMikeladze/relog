@@ -61,10 +61,7 @@ export function useWidgetData(
 			const sql = substituteVars(widget.sql, vars);
 			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 			const timeoutPromise = new Promise<QueryResult>((_, reject) => {
-				timeoutHandle = setTimeout(
-					() => reject(new Error("__timeout__")),
-					QUERY_TIMEOUT_MS,
-				);
+				timeoutHandle = setTimeout(() => reject(new Error("__timeout__")), QUERY_TIMEOUT_MS);
 			});
 			let result: QueryResult;
 			try {

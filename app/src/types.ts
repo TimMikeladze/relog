@@ -130,6 +130,7 @@ export interface LineOptions {
 	xField: string;
 	yFields: string[];
 	yFormat?: "number" | "ms" | "percent";
+	seriesField?: string;
 }
 
 export interface BarOptions {

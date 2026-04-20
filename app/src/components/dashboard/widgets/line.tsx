@@ -23,13 +23,50 @@ export function LineWidget({
 	if (rows.length && !(options.xField in rows[0])) {
 		return <WidgetError message={`Missing x column: ${options.xField}`} />;
 	}
-	const missingY = options.yFields.find((f) => rows.length && !(f in rows[0]));
-	if (missingY) return <WidgetError message={`Missing y column: ${missingY}`} />;
+
+	const pivoting = !!options.seriesField && options.yFields.length === 1;
+
+	if (pivoting) {
+		const valueField = options.yFields[0];
+		if (rows.length && !(valueField in rows[0])) {
+			return <WidgetError message={`Missing y column: ${valueField}`} />;
+		}
+		if (rows.length && options.seriesField && !(options.seriesField in rows[0])) {
+			return <WidgetError message={`Missing series column: ${options.seriesField}`} />;
+		}
+	} else {
+		const missingY = options.yFields.find((f) => rows.length && !(f in rows[0]));
+		if (missingY) return <WidgetError message={`Missing y column: ${missingY}`} />;
+	}
+
+	let chartRows: Record<string, unknown>[] = rows;
+	let seriesKeys: string[] = options.yFields;
+
+	if (pivoting && options.seriesField) {
+		const seriesField = options.seriesField;
+		const valueField = options.yFields[0];
+		const buckets = new Map<string, Record<string, unknown>>();
+		const seen = new Set<string>();
+		for (const r of rows) {
+			const x = r[options.xField];
+			const key = String(x);
+			const s = String(r[seriesField] ?? "—");
+			seen.add(s);
+			let row = buckets.get(key);
+			if (!row) {
+				row = { [options.xField]: x };
+				buckets.set(key, row);
+			}
+			row[s] = r[valueField];
+		}
+		chartRows = Array.from(buckets.values());
+		seriesKeys = Array.from(seen).sort();
+	}
 
 	return (
 		<div className="h-full w-full p-1">
 			<ResponsiveContainer width="100%" height="100%">
-				<LineChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+				<LineChart data={chartRows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
 					<CartesianGrid stroke="var(--color-border)" strokeOpacity={0.3} vertical={false} />
 					<XAxis
 						dataKey={options.xField}
@@ -55,7 +92,7 @@ export function LineWidget({
 						labelFormatter={(v) => formatValue(v, "timestamp")}
 						formatter={(v: unknown) => formatValue(v, options.yFormat ?? "number")}
 					/>
-					{options.yFields.map((f, i) => (
+					{seriesKeys.map((f, i) => (
 						<Line
 							key={f}
 							type="monotone"

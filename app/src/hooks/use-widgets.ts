@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/api/client";
 import type { Widget } from "@/types";
 
 export function useWidgets() {
@@ -45,4 +45,26 @@ export function useWidgets() {
 	}, []);
 
 	return { widgets, loading, error, refetch, create, update, remove };
+}
+
+export function useCanEditWidgets(): boolean {
+	const [canEdit, setCanEdit] = useState(false);
+	useEffect(() => {
+		let cancelled = false;
+		apiPost("/widgets", {})
+			.then(() => {
+				if (!cancelled) setCanEdit(true);
+			})
+			.catch((err: unknown) => {
+				if (cancelled) return;
+				const status = err instanceof ApiError ? err.status : 0;
+				// 400 = validation error -> we're authenticated as admin (server accepted the call)
+				// 401 / 403 = not admin -> no edit
+				setCanEdit(status === 400);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	return canEdit;
 }

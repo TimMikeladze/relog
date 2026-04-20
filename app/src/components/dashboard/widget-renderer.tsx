@@ -1,4 +1,14 @@
-import type { Widget } from "@/types";
+import type {
+	BarOptions,
+	GaugeOptions,
+	HeatmapOptions,
+	LineOptions,
+	SparklineOptions,
+	StatOptions,
+	StatusGridOptions,
+	TableOptions,
+	Widget,
+} from "@/types";
 import { Loader2 } from "lucide-react";
 import { BarWidget } from "./widgets/bar";
 import { GaugeWidget } from "./widgets/gauge";
@@ -24,24 +34,23 @@ export function WidgetRenderer(props: WidgetRenderProps) {
 	if (loading && rows.length === 0) return <WidgetLoading />;
 	if (!loading && rows.length === 0) return <WidgetEmpty />;
 
-	const options = widget.options as never;
 	switch (widget.kind) {
 		case "stat":
-			return <StatWidget rows={rows} options={options} />;
+			return <StatWidget rows={rows} options={widget.options as StatOptions} />;
 		case "line":
-			return <LineWidget rows={rows} options={options} />;
+			return <LineWidget rows={rows} options={widget.options as LineOptions} />;
 		case "bar":
-			return <BarWidget rows={rows} options={options} />;
+			return <BarWidget rows={rows} options={widget.options as BarOptions} />;
 		case "table":
-			return <TableWidget rows={rows} options={options} />;
+			return <TableWidget rows={rows} options={widget.options as TableOptions} />;
 		case "status-grid":
-			return <StatusGridWidget rows={rows} options={options} />;
+			return <StatusGridWidget rows={rows} options={widget.options as StatusGridOptions} />;
 		case "heatmap":
-			return <HeatmapWidget rows={rows} options={options} />;
+			return <HeatmapWidget rows={rows} options={widget.options as HeatmapOptions} />;
 		case "gauge":
-			return <GaugeWidget rows={rows} options={options} />;
+			return <GaugeWidget rows={rows} options={widget.options as GaugeOptions} />;
 		case "sparkline":
-			return <SparklineWidget rows={rows} options={options} />;
+			return <SparklineWidget rows={rows} options={widget.options as SparklineOptions} />;
 	}
 }
 

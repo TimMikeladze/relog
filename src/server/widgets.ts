@@ -197,7 +197,7 @@ export const DEFAULT_WIDGETS: Widget[] = [
 			GROUP BY bucket, service
 			ORDER BY bucket
 		`,
-		options: { xField: "bucket", yFields: ["count"], yFormat: "number" },
+		options: { xField: "bucket", yFields: ["count"], yFormat: "number", seriesField: "service" },
 		layout: { x: 6, y: 6, w: 6, h: 4 },
 		createdAt: BUILTIN_TS,
 		updatedAt: BUILTIN_TS,

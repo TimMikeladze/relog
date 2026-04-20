@@ -74,7 +74,12 @@ export async function handleWidgets(
 			const updated = await widgetsManager.update(id, { layout });
 			return Response.json({ widget: updated });
 		}
-		const { id: _ignoredId, createdAt: _ignoredCreatedAt, builtin: _ignoredBuiltin, ...safePatch } = body;
+		const {
+			id: _ignoredId,
+			createdAt: _ignoredCreatedAt,
+			builtin: _ignoredBuiltin,
+			...safePatch
+		} = body;
 		const updated = await widgetsManager.update(id, safePatch);
 		if (!updated) {
 			return Response.json({ error: "Widget not found" }, { status: 404 });

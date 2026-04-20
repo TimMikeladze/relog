@@ -62,6 +62,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		props.initial?.sql ??
 			"SELECT COUNT(*) AS value FROM logs WHERE created_at BETWEEN ${from} AND ${to}",
 	);
+	const [timeRange, setTimeRange] = useState<string | undefined>(props.initial?.timeRange);
 	const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
 	const [previewCols, setPreviewCols] = useState<string[]>([]);
 	const [previewError, setPreviewError] = useState<string | null>(null);
@@ -158,10 +159,10 @@ export function WidgetEditor(props: WidgetEditorProps) {
 			sql: sqlText,
 			options,
 			layout: props.initial?.layout ?? { x: 0, y: 0, w: 6, h: 4 },
-			timeRange: props.initial?.timeRange,
+			timeRange,
 			builtin: false,
 		});
-	}, [id, name, description, kind, sqlText, options, optionsError, props]);
+	}, [id, name, description, kind, sqlText, options, optionsError, timeRange, props]);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
@@ -213,6 +214,21 @@ export function WidgetEditor(props: WidgetEditorProps) {
 								))}
 							</select>
 						</label>
+						<label className="flex flex-col gap-1">
+							<span className="text-muted-foreground">Time range</span>
+							<select
+								value={timeRange ?? ""}
+								onChange={(e) => setTimeRange(e.target.value || undefined)}
+								className="rounded-md border border-border bg-background px-2 py-1"
+							>
+								<option value="">Inherit (dashboard default)</option>
+								<option value="1h">1h</option>
+								<option value="6h">6h</option>
+								<option value="24h">24h</option>
+								<option value="7d">7d</option>
+								<option value="30d">30d</option>
+							</select>
+						</label>
 						<div className="flex flex-col gap-1">
 							<span className="text-muted-foreground">SQL</span>
 							<div
@@ -240,9 +256,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 								rows={6}
 								className="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs"
 							/>
-							{optionsError && (
-								<span className="text-[10px] text-destructive">{optionsError}</span>
-							)}
+							{optionsError && <span className="text-[10px] text-destructive">{optionsError}</span>}
 							<span className="text-[10px] text-muted-foreground">
 								Available columns: {previewCols.join(", ") || "—"}
 							</span>

@@ -3,7 +3,7 @@ import { Copy, EyeOff, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useHashParam } from "@/hooks/use-hash-param";
 import { useHealth } from "@/hooks/use-health";
 import { useWidgetData } from "@/hooks/use-widget-data";
-import { useWidgets } from "@/hooks/use-widgets";
+import { useCanEditWidgets, useWidgets } from "@/hooks/use-widgets";
 import { FilterBar, TIME_RANGES } from "@/components/dashboard/filter-bar";
 import { WidgetGrid } from "@/components/dashboard/widget-grid";
 import { WidgetRenderer } from "@/components/dashboard/widget-renderer";
@@ -34,8 +34,7 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [hidden, setHidden] = useState<Set<string>>(() => readHidden());
 	const [editor, setEditor] = useState<
-		| { open: true; widget?: Widget; snapshot: { from: number; to: number } }
-		| { open: false }
+		{ open: true; widget?: Widget; snapshot: { from: number; to: number } } | { open: false }
 	>({
 		open: false,
 	});
@@ -111,15 +110,7 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		[remove],
 	);
 
-	if (widgetsLoading && widgets.length === 0) {
-		return (
-			<div className="flex flex-1 items-center justify-center">
-				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-			</div>
-		);
-	}
-
-	const canEdit = true;
+	const canEdit = useCanEditWidgets();
 
 	const filters = useMemo(
 		() => ({
@@ -129,6 +120,14 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		}),
 		[timeRange.label, service, project],
 	);
+
+	if (widgetsLoading && widgets.length === 0) {
+		return (
+			<div className="flex flex-1 items-center justify-center">
+				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+			</div>
+		);
+	}
 
 	return (
 		<div className="flex flex-1 flex-col gap-3 overflow-hidden p-4">

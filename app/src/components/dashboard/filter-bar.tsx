@@ -52,22 +52,27 @@ export function FilterBar(props: FilterBarProps) {
 
 	useEffect(() => {
 		let cancelled = false;
-		Promise.all([
-			apiPost<QueryResult>("/query", {
-				sql: "SELECT DISTINCT service FROM logs WHERE service IS NOT NULL ORDER BY service LIMIT 500",
-			}),
-			apiPost<QueryResult>("/query", {
-				sql: "SELECT DISTINCT project FROM logs WHERE project IS NOT NULL ORDER BY project LIMIT 500",
-			}),
-		])
-			.then(([s, p]) => {
-				if (cancelled) return;
-				setServices(s.rows.map((r) => String(r.service)));
-				setProjects(p.rows.map((r) => String(r.project)));
-			})
-			.catch(() => {});
+		const load = () => {
+			Promise.all([
+				apiPost<QueryResult>("/query", {
+					sql: "SELECT DISTINCT service FROM logs WHERE service IS NOT NULL ORDER BY service LIMIT 500",
+				}),
+				apiPost<QueryResult>("/query", {
+					sql: "SELECT DISTINCT project FROM logs WHERE project IS NOT NULL ORDER BY project LIMIT 500",
+				}),
+			])
+				.then(([s, p]) => {
+					if (cancelled) return;
+					setServices(s.rows.map((r) => String(r.service)));
+					setProjects(p.rows.map((r) => String(r.project)));
+				})
+				.catch(() => {});
+		};
+		load();
+		const id = setInterval(load, 60_000);
 		return () => {
 			cancelled = true;
+			clearInterval(id);
 		};
 	}, []);
 
