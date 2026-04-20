@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, EyeOff, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useHashParam } from "@/hooks/use-hash-param";
 import { useHealth } from "@/hooks/use-health";
@@ -38,9 +38,6 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	>({
 		open: false,
 	});
-	const gridContainerRef = useRef<HTMLDivElement | null>(null);
-	const [gridWidth, setGridWidth] = useState(1200);
-
 	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
 	const timeRange = TIME_RANGES.find((t) => t.label === timeRangeLabel) ?? TIME_RANGES[2];
 
@@ -57,15 +54,6 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	);
 
 	const { data: health } = useHealth(enabled, 15_000);
-
-	useEffect(() => {
-		if (!gridContainerRef.current) return;
-		const ro = new ResizeObserver((entries) => {
-			for (const e of entries) setGridWidth(e.contentRect.width);
-		});
-		ro.observe(gridContainerRef.current);
-		return () => ro.disconnect();
-	}, []);
 
 	useEffect(() => {
 		if (!refreshMs) return;
@@ -177,11 +165,10 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 				</div>
 			)}
 
-			<div ref={gridContainerRef} className="flex-1 overflow-auto">
+			<div className="flex-1 overflow-auto">
 				<WidgetGrid
 					widgets={visibleWidgets}
 					editMode={editMode}
-					width={gridWidth}
 					onLayoutChange={handleLayoutChange}
 					renderWidget={(w) => (
 						<WidgetTile

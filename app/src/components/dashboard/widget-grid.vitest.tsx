@@ -8,8 +8,8 @@ type Layout = { i: string; x: number; y: number; w: number; h: number };
 type MockCaller = (layout: Layout[]) => void;
 let triggerLayoutChange: MockCaller | null = null;
 
-vi.mock("react-grid-layout/legacy", () => ({
-	default: ({
+vi.mock("react-grid-layout/legacy", () => {
+	const MockGrid = ({
 		children,
 		onLayoutChange,
 	}: {
@@ -18,8 +18,13 @@ vi.mock("react-grid-layout/legacy", () => ({
 	}) => {
 		triggerLayoutChange = (l) => onLayoutChange?.(l);
 		return <div data-testid="rgl-mock">{children}</div>;
-	},
-}));
+	};
+	return {
+		default: MockGrid,
+		ReactGridLayout: MockGrid,
+		WidthProvider: (C: unknown) => C,
+	};
+});
 
 vi.mock("react-grid-layout/css/styles.css", () => ({}));
 vi.mock("react-resizable/css/styles.css", () => ({}));
@@ -49,7 +54,6 @@ describe("WidgetGrid", () => {
 			<WidgetGrid
 				widgets={[makeWidget("a")]}
 				editMode={false}
-				width={1000}
 				onLayoutChange={onLayoutChange}
 				renderWidget={(w) => <span>{w.name}</span>}
 			/>,
@@ -70,7 +74,6 @@ describe("WidgetGrid", () => {
 			<WidgetGrid
 				widgets={[makeWidget("a")]}
 				editMode={true}
-				width={1000}
 				onLayoutChange={onLayoutChange}
 				renderWidget={(w) => <span>{w.name}</span>}
 			/>,
@@ -90,7 +93,6 @@ describe("WidgetGrid", () => {
 			<WidgetGrid
 				widgets={[makeWidget("a"), makeWidget("b")]}
 				editMode={false}
-				width={1000}
 				onLayoutChange={vi.fn()}
 				renderWidget={(w) => <span data-testid={`tile-${w.id}`}>{w.name}</span>}
 			/>,

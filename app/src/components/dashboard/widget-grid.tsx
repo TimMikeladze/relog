@@ -1,5 +1,10 @@
-import { useCallback, useEffect, useRef } from "react";
-import ReactGridLayout, { type Layout, type LayoutItem } from "react-grid-layout/legacy";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+	type Layout,
+	type LayoutItem,
+	ReactGridLayout as RGLBase,
+	WidthProvider,
+} from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import type { Widget } from "@/types";
@@ -8,10 +13,11 @@ const COLS = 12;
 const ROW_HEIGHT = 60;
 const MARGIN: readonly [number, number] = [12, 12];
 
+const ReactGridLayoutWithWidth = WidthProvider(RGLBase);
+
 export interface WidgetGridProps {
 	widgets: Widget[];
 	editMode: boolean;
-	width: number;
 	onLayoutChange: (updates: { id: string; layout: Widget["layout"] }[]) => void;
 	renderWidget: (w: Widget) => React.ReactNode;
 }
@@ -19,7 +25,6 @@ export interface WidgetGridProps {
 export function WidgetGrid({
 	widgets,
 	editMode,
-	width,
 	onLayoutChange,
 	renderWidget,
 }: WidgetGridProps) {
@@ -76,23 +81,26 @@ export function WidgetGrid({
 		[widgets, editMode, flush],
 	);
 
-	const layout: LayoutItem[] = widgets.map((w) => ({
-		i: w.id,
-		x: w.layout.x,
-		y: w.layout.y,
-		w: w.layout.w,
-		h: w.layout.h,
-		minW: 2,
-		minH: 2,
-	}));
+	const layout: LayoutItem[] = useMemo(
+		() =>
+			widgets.map((w) => ({
+				i: w.id,
+				x: w.layout.x,
+				y: w.layout.y,
+				w: w.layout.w,
+				h: w.layout.h,
+				minW: 2,
+				minH: 2,
+			})),
+		[widgets],
+	);
 
 	return (
-		<ReactGridLayout
+		<ReactGridLayoutWithWidth
 			className="layout"
 			layout={layout}
 			cols={COLS}
 			rowHeight={ROW_HEIGHT}
-			width={width}
 			isDraggable={editMode}
 			isResizable={editMode}
 			onLayoutChange={handleLayoutChange}
@@ -105,6 +113,6 @@ export function WidgetGrid({
 					{renderWidget(w)}
 				</div>
 			))}
-		</ReactGridLayout>
+		</ReactGridLayoutWithWidth>
 	);
 }
