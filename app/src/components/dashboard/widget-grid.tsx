@@ -22,12 +22,7 @@ export interface WidgetGridProps {
 	renderWidget: (w: Widget) => React.ReactNode;
 }
 
-export function WidgetGrid({
-	widgets,
-	editMode,
-	onLayoutChange,
-	renderWidget,
-}: WidgetGridProps) {
+export function WidgetGrid({ widgets, editMode, onLayoutChange, renderWidget }: WidgetGridProps) {
 	const pendingRef = useRef<Map<string, Widget["layout"]>>(new Map());
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
