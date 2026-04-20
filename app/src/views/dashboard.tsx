@@ -1,154 +1,108 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Copy, EyeOff, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useHashParam } from "@/hooks/use-hash-param";
 import { useHealth } from "@/hooks/use-health";
-import { StatCard } from "@/components/stat-card";
-import { LevelBadge } from "@/components/level-badge";
-import { TimelineStrip } from "@/components/timeline-strip";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { apiPost } from "@/api/client";
-import type { LogLevel, QueryResult } from "@/types";
-import { Loader2, RefreshCw } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { useWidgetData } from "@/hooks/use-widget-data";
+import { useWidgets } from "@/hooks/use-widgets";
+import { FilterBar, TIME_RANGES } from "@/components/dashboard/filter-bar";
+import { WidgetGrid } from "@/components/dashboard/widget-grid";
+import { WidgetRenderer } from "@/components/dashboard/widget-renderer";
+import { WidgetEditor } from "@/components/dashboard/widget-editor";
+import type { Widget } from "@/types";
 
-const TIME_RANGES = [
-	{ label: "1h", ms: 3600_000 },
-	{ label: "6h", ms: 6 * 3600_000 },
-	{ label: "24h", ms: 24 * 3600_000 },
-	{ label: "7d", ms: 7 * 86400_000 },
-	{ label: "30d", ms: 30 * 86400_000 },
-];
+const HIDDEN_KEY = "relog:hidden-widgets";
 
-const REFRESH_OPTIONS = [
-	{ label: "Off", ms: 0 },
-	{ label: "10s", ms: 10_000 },
-	{ label: "30s", ms: 30_000 },
-	{ label: "60s", ms: 60_000 },
-];
-
-const LEVEL_BAR_COLORS: Record<string, string> = {
-	trace: "#a1a1aa",
-	debug: "#60a5fa",
-	info: "#34d399",
-	warn: "#fbbf24",
-	error: "#f87171",
-	fatal: "#e879f9",
-};
-
-function formatBytes(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function formatUptime(ms: number): string {
-	const seconds = Math.floor(ms / 1000);
-	const days = Math.floor(seconds / 86400);
-	const hours = Math.floor((seconds % 86400) / 3600);
-	const minutes = Math.floor((seconds % 3600) / 60);
-	if (days > 0) return `${days}d ${hours}h`;
-	if (hours > 0) return `${hours}h ${minutes}m`;
-	return `${minutes}m`;
-}
-
-interface LevelCount {
-	level: string;
-	count: number;
-}
-interface ServiceCount {
-	service: string;
-	count: number;
-}
-interface RecentError {
-	id: number;
-	timestamp: string;
-	level: LogLevel;
-	message: string;
-	service?: string;
-}
-
-export function DashboardView({
-	enabled,
-	onZoom,
-}: {
-	enabled: boolean;
-	onZoom?: (from: string, to: string) => void;
-}) {
-	const [timeRangeLabel, setTimeRangeLabel] = useHashParam("range", "24h");
-	const timeRange = TIME_RANGES.find((tr) => tr.label === timeRangeLabel) ?? TIME_RANGES[2];
-	const [refreshMsStr, setRefreshMsStr] = useHashParam("refresh", "0");
-	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
-	const [showRefreshMenu, setShowRefreshMenu] = useState(false);
-	const [chartRefreshKey, setChartRefreshKey] = useState(0);
-	const [levelCounts, setLevelCounts] = useState<LevelCount[]>([]);
-	const [serviceCounts, setServiceCounts] = useState<ServiceCount[]>([]);
-	const [recentErrors, setRecentErrors] = useState<RecentError[]>([]);
-	const [loadingCharts, setLoadingCharts] = useState(false);
-	const refreshTimerRef = useRef<ReturnType<typeof setInterval>>(undefined);
-
-	const { data: health, error: healthError } = useHealth(enabled, 15_000);
-
-	const fetchCharts = useCallback(async () => {
-		const since = Date.now() - timeRange.ms;
-		setLoadingCharts(true);
-
-		try {
-			const [levelRes, serviceRes, errorRes] = await Promise.all([
-				apiPost<QueryResult>("/query", {
-					sql: `SELECT level, COUNT(*) as count FROM logs WHERE created_at > ${since} GROUP BY level ORDER BY count DESC`,
-				}),
-				apiPost<QueryResult>("/query", {
-					sql: `SELECT service, COUNT(*) as count FROM logs WHERE created_at > ${since} AND service IS NOT NULL GROUP BY service ORDER BY count DESC LIMIT 10`,
-				}),
-				apiPost<QueryResult>("/query", {
-					sql: `SELECT id, timestamp, level, message, service FROM logs WHERE level IN ('error', 'fatal') ORDER BY created_at DESC LIMIT 10`,
-				}),
-			]);
-
-			setChartRefreshKey((k) => k + 1);
-
-			// Levels
-			setLevelCounts(
-				levelRes.rows.map((r) => ({ level: r.level as string, count: Number(r.count) })),
-			);
-
-			// Services
-			setServiceCounts(
-				serviceRes.rows.map((r) => ({ service: r.service as string, count: Number(r.count) })),
-			);
-
-			// Errors
-			setRecentErrors(errorRes.rows as unknown as RecentError[]);
-		} catch {
-			// silent
-		} finally {
-			setLoadingCharts(false);
-		}
-	}, [timeRange]);
-
-	useEffect(() => {
-		if (!enabled) return;
-		fetchCharts();
-	}, [enabled, fetchCharts]);
-
-	// Auto-refresh
-	useEffect(() => {
-		clearInterval(refreshTimerRef.current);
-		if (refreshMs > 0) {
-			refreshTimerRef.current = setInterval(fetchCharts, refreshMs);
-		}
-		return () => clearInterval(refreshTimerRef.current);
-	}, [refreshMs, fetchCharts]);
-
-	if (healthError) {
-		return (
-			<div className="flex flex-1 items-center justify-center text-sm text-destructive">
-				{healthError}
-			</div>
-		);
+function readHidden(): Set<string> {
+	try {
+		return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]") as string[]);
+	} catch {
+		return new Set();
 	}
+}
 
-	if (!health) {
+function writeHidden(set: Set<string>): void {
+	localStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(set)));
+}
+
+export function DashboardView({ enabled }: { enabled: boolean }) {
+	const { widgets, loading: widgetsLoading, create, update, remove, refetch } = useWidgets();
+	const [timeRangeLabel, setTimeRangeLabel] = useHashParam("range", "24h");
+	const [service, setService] = useHashParam("service", "");
+	const [project, setProject] = useHashParam("project", "");
+	const [refreshMsStr, setRefreshMsStr] = useHashParam("refresh", "0");
+	const [editMode, setEditMode] = useState(false);
+	const [refreshKey, setRefreshKey] = useState(0);
+	const [hidden, setHidden] = useState<Set<string>>(() => readHidden());
+	const [editor, setEditor] = useState<
+		{ open: true; widget?: Widget } | { open: false }
+	>({ open: false });
+	const gridContainerRef = useRef<HTMLDivElement | null>(null);
+	const [gridWidth, setGridWidth] = useState(1200);
+
+	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
+	const timeRange = TIME_RANGES.find((t) => t.label === timeRangeLabel) ?? TIME_RANGES[2];
+	const now = Date.now();
+	const filterFrom = now - timeRange.ms;
+	const filterTo = now;
+
+	const { data: health } = useHealth(enabled, 15_000);
+
+	useEffect(() => {
+		if (!gridContainerRef.current) return;
+		const ro = new ResizeObserver((entries) => {
+			for (const e of entries) setGridWidth(e.contentRect.width);
+		});
+		ro.observe(gridContainerRef.current);
+		return () => ro.disconnect();
+	}, []);
+
+	useEffect(() => {
+		if (!refreshMs) return;
+		const t = setInterval(() => setRefreshKey((k) => k + 1), refreshMs);
+		return () => clearInterval(t);
+	}, [refreshMs]);
+
+	const visibleWidgets = useMemo(
+		() => widgets.filter((w) => !hidden.has(w.id)),
+		[widgets, hidden],
+	);
+
+	const handleLayoutChange = useCallback(
+		(updates: { id: string; layout: Widget["layout"] }[]) => {
+			for (const { id, layout } of updates) {
+				update(id, { layout }).catch(() => {});
+			}
+		},
+		[update],
+	);
+
+	const toggleHidden = useCallback((id: string) => {
+		setHidden((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			writeHidden(next);
+			return next;
+		});
+	}, []);
+
+	const handleDuplicate = useCallback((w: Widget) => {
+		setEditor({
+			open: true,
+			widget: { ...w, id: "", builtin: false, createdAt: 0, updatedAt: 0 },
+		});
+	}, []);
+
+	const handleDelete = useCallback(
+		async (w: Widget) => {
+			if (w.builtin) return;
+			if (!confirm(`Delete widget "${w.name}"?`)) return;
+			await remove(w.id);
+		},
+		[remove],
+	);
+
+	if (widgetsLoading && widgets.length === 0) {
 		return (
 			<div className="flex flex-1 items-center justify-center">
 				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -156,210 +110,179 @@ export function DashboardView({
 		);
 	}
 
+	const canEdit = true;
+
+	const filters = {
+		timeRange: timeRange.label,
+		service: service || null,
+		project: project || null,
+	};
+
 	return (
-		<div className="flex-1 overflow-y-auto p-4 space-y-4">
-			{/* Time range + auto-refresh */}
-			<div className="flex items-center gap-2">
-				<div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-					{TIME_RANGES.map((tr) => (
-						<button
-							key={tr.label}
-							type="button"
-							onClick={() => setTimeRangeLabel(tr.label)}
-							className={`rounded-sm px-2.5 py-1 text-xs font-medium transition-colors ${
-								timeRange.label === tr.label
-									? "bg-background text-foreground shadow-sm"
-									: "text-muted-foreground hover:text-foreground"
-							}`}
-						>
-							{tr.label}
-						</button>
-					))}
-				</div>
-				<div className="flex-1" />
-				{loadingCharts && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-				<button
-					type="button"
-					onClick={fetchCharts}
-					className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-				>
-					<RefreshCw className="h-3.5 w-3.5" />
-				</button>
-				<div className="relative">
+		<div className="flex flex-1 flex-col gap-3 overflow-hidden p-4">
+			<FilterBar
+				timeRange={timeRange.label}
+				onTimeRange={setTimeRangeLabel}
+				service={service || null}
+				onService={(v) => setService(v ?? "")}
+				project={project || null}
+				onProject={(v) => setProject(v ?? "")}
+				refreshMs={refreshMs}
+				onRefreshMs={(v) => setRefreshMsStr(String(v))}
+				loading={widgetsLoading}
+				onManualRefresh={() => {
+					refetch();
+					setRefreshKey((k) => k + 1);
+				}}
+				editMode={editMode}
+				onEditMode={setEditMode}
+				onAddWidget={() => setEditor({ open: true })}
+				canEdit={canEdit}
+				status={health ? { ok: health.ok, uptime: health.uptime } : null}
+			/>
+
+			{hidden.size > 0 && (
+				<div className="text-xs text-muted-foreground">
+					{hidden.size} hidden ·{" "}
 					<button
 						type="button"
-						onClick={() => setShowRefreshMenu(!showRefreshMenu)}
-						className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+						onClick={() => {
+							setHidden(new Set());
+							writeHidden(new Set());
+						}}
+						className="underline"
 					>
-						Auto: {REFRESH_OPTIONS.find((o) => o.ms === refreshMs)?.label || "Off"}
+						show all
 					</button>
-					{showRefreshMenu && (
-						<div className="absolute right-0 top-full z-10 mt-1 rounded-md border border-border bg-popover p-1 shadow-md">
-							{REFRESH_OPTIONS.map((o) => (
-								<button
-									key={o.label}
-									type="button"
-									onClick={() => {
-										setRefreshMsStr(String(o.ms));
-										setShowRefreshMenu(false);
-									}}
-									className={`block w-full rounded px-3 py-1.5 text-left text-xs hover:bg-muted ${refreshMs === o.ms ? "text-foreground font-medium" : "text-popover-foreground"}`}
-								>
-									{o.label}
-								</button>
-							))}
-						</div>
+				</div>
+			)}
+
+			<div ref={gridContainerRef} className="flex-1 overflow-auto">
+				<WidgetGrid
+					widgets={visibleWidgets}
+					editMode={editMode}
+					width={gridWidth}
+					onLayoutChange={handleLayoutChange}
+					renderWidget={(w) => (
+						<WidgetTile
+							widget={w}
+							filters={filters}
+							refreshKey={refreshKey}
+							editMode={editMode}
+							onEdit={() => setEditor({ open: true, widget: w })}
+							onDuplicate={() => handleDuplicate(w)}
+							onDelete={() => handleDelete(w)}
+							onHide={() => toggleHidden(w.id)}
+						/>
+					)}
+				/>
+			</div>
+
+			{editor.open && (
+				<WidgetEditor
+					initial={editor.widget}
+					filterFrom={filterFrom}
+					filterTo={filterTo}
+					service={service || null}
+					project={project || null}
+					onCancel={() => setEditor({ open: false })}
+					onSave={async (w) => {
+						if (editor.widget?.id && w.id === editor.widget.id) {
+							await update(w.id, w);
+						} else {
+							await create(w);
+						}
+						setEditor({ open: false });
+					}}
+				/>
+			)}
+		</div>
+	);
+}
+
+function WidgetTile({
+	widget,
+	filters,
+	refreshKey,
+	editMode,
+	onEdit,
+	onDuplicate,
+	onDelete,
+	onHide,
+}: {
+	widget: Widget;
+	filters: { timeRange: string; service: string | null; project: string | null };
+	refreshKey: number;
+	editMode: boolean;
+	onEdit: () => void;
+	onDuplicate: () => void;
+	onDelete: () => void;
+	onHide: () => void;
+}) {
+	const data = useWidgetData(widget, filters, refreshKey);
+	return (
+		<div className="group relative flex h-full flex-col">
+			<div className="widget-no-drag flex items-center justify-between border-b border-border/40 px-3 py-1.5">
+				<div className="flex min-w-0 flex-col">
+					<span className="truncate text-xs font-medium">{widget.name}</span>
+					{widget.description && (
+						<span className="truncate text-[10px] text-muted-foreground">
+							{widget.description}
+						</span>
 					)}
 				</div>
+				{editMode && (
+					<div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+						{!widget.builtin && (
+							<button
+								type="button"
+								onClick={onEdit}
+								title="Edit"
+								className="rounded p-1 hover:bg-muted"
+							>
+								<Pencil className="h-3 w-3" />
+							</button>
+						)}
+						<button
+							type="button"
+							onClick={onDuplicate}
+							title="Duplicate"
+							className="rounded p-1 hover:bg-muted"
+						>
+							<Copy className="h-3 w-3" />
+						</button>
+						{widget.builtin ? (
+							<button
+								type="button"
+								onClick={onHide}
+								title="Hide"
+								className="rounded p-1 hover:bg-muted"
+							>
+								<EyeOff className="h-3 w-3" />
+							</button>
+						) : (
+							<button
+								type="button"
+								onClick={onDelete}
+								title="Delete"
+								className="rounded p-1 text-destructive hover:bg-destructive/10"
+							>
+								<Trash2 className="h-3 w-3" />
+							</button>
+						)}
+					</div>
+				)}
 			</div>
-
-			{/* Stat cards */}
-			<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-				<StatCard label="Status" value={health.ok ? "Online" : "Degraded"} />
-				<StatCard label="Total Logs" value={health.log_count.toLocaleString()} />
-				<StatCard
-					label="Database Size"
-					value={formatBytes(health.db_size_bytes)}
-					detail={
-						health.auto_prune?.db_usage_pct !== undefined
-							? `${Math.round(health.auto_prune.db_usage_pct)}% of limit`
-							: undefined
-					}
+			<div className="flex-1 overflow-hidden">
+				<WidgetRenderer
+					widget={widget}
+					rows={data.rows}
+					columns={data.columns}
+					loading={data.loading}
+					error={data.error}
+					onReload={data.reload}
 				/>
-				<StatCard label="Uptime" value={formatUptime(health.uptime)} />
 			</div>
-
-			{/* Log Volume chart */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm">Log Volume</CardTitle>
-				</CardHeader>
-				<CardContent>
-					<TimelineStrip
-						from={timeRange.label}
-						buckets={40}
-						height={192}
-						bare
-						refreshKey={chartRefreshKey}
-						onTimeRangeSelect={onZoom}
-					/>
-				</CardContent>
-			</Card>
-
-			{/* Side by side: By Level + By Service */}
-			<div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-				<Card>
-					<CardHeader>
-						<CardTitle className="text-sm">By Level</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="h-48">
-							<ResponsiveContainer width="100%" height="100%">
-								<BarChart
-									data={levelCounts}
-									layout="vertical"
-									margin={{ top: 0, right: 0, bottom: 0, left: 50 }}
-								>
-									<XAxis type="number" hide />
-									<YAxis
-										type="category"
-										dataKey="level"
-										tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-										axisLine={false}
-										tickLine={false}
-										width={45}
-									/>
-									<Tooltip
-										contentStyle={{
-											fontSize: 11,
-											background: "var(--color-popover)",
-											border: "1px solid var(--color-border)",
-											borderRadius: 6,
-										}}
-									/>
-									<Bar dataKey="count" radius={[0, 4, 4, 0]}>
-										{levelCounts.map((entry) => (
-											<Cell
-												key={entry.level}
-												fill={LEVEL_BAR_COLORS[entry.level] || "#888"}
-												fillOpacity={0.8}
-											/>
-										))}
-									</Bar>
-								</BarChart>
-							</ResponsiveContainer>
-						</div>
-					</CardContent>
-				</Card>
-
-				<Card>
-					<CardHeader>
-						<CardTitle className="text-sm">By Service</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<div className="h-48">
-							<ResponsiveContainer width="100%" height="100%">
-								<BarChart
-									data={serviceCounts}
-									layout="vertical"
-									margin={{ top: 0, right: 0, bottom: 0, left: 60 }}
-								>
-									<XAxis type="number" hide />
-									<YAxis
-										type="category"
-										dataKey="service"
-										tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-										axisLine={false}
-										tickLine={false}
-										width={55}
-									/>
-									<Tooltip
-										contentStyle={{
-											fontSize: 11,
-											background: "var(--color-popover)",
-											border: "1px solid var(--color-border)",
-											borderRadius: 6,
-										}}
-									/>
-									<Bar
-										dataKey="count"
-										fill="var(--color-primary)"
-										fillOpacity={0.6}
-										radius={[0, 4, 4, 0]}
-									/>
-								</BarChart>
-							</ResponsiveContainer>
-						</div>
-					</CardContent>
-				</Card>
-			</div>
-
-			{/* Recent Errors */}
-			<Card>
-				<CardHeader>
-					<CardTitle className="text-sm">Recent Errors</CardTitle>
-				</CardHeader>
-				<CardContent>
-					{recentErrors.length === 0 ? (
-						<span className="text-xs text-muted-foreground italic">No recent errors</span>
-					) : (
-						<div className="divide-y divide-border/50">
-							{recentErrors.map((err) => (
-								<div key={err.id} className="flex items-center gap-3 py-1.5 text-xs">
-									<span className="shrink-0 text-muted-foreground tabular-nums">
-										{new Date(err.timestamp).toLocaleTimeString("en-US", { hour12: false })}
-									</span>
-									<LevelBadge level={err.level} />
-									{err.service && (
-										<span className="shrink-0 text-muted-foreground">{err.service}</span>
-									)}
-									<span className="min-w-0 flex-1 truncate">{err.message}</span>
-								</div>
-							))}
-						</div>
-					)}
-				</CardContent>
-			</Card>
 		</div>
 	);
 }

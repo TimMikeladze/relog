@@ -223,15 +223,7 @@ function AppContent() {
 							}}
 						/>
 					)}
-					{view === "dashboard" && (
-						<DashboardView
-							enabled={view === "dashboard"}
-							onZoom={(from, to) => {
-								updateFilters({ from, to });
-								setView("explore" as View);
-							}}
-						/>
-					)}
+					{view === "dashboard" && <DashboardView enabled={view === "dashboard"} />}
 				</Panel>
 			</PanelGroup>
 			<StatusBar
