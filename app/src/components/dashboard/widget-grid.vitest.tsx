@@ -82,9 +82,7 @@ describe("WidgetGrid", () => {
 		act(() => {
 			vi.advanceTimersByTime(2000);
 		});
-		expect(onLayoutChange).toHaveBeenCalledWith([
-			{ id: "a", layout: { x: 2, y: 2, w: 6, h: 3 } },
-		]);
+		expect(onLayoutChange).toHaveBeenCalledWith([{ id: "a", layout: { x: 2, y: 2, w: 6, h: 3 } }]);
 	});
 
 	test("renders each widget via renderWidget", () => {

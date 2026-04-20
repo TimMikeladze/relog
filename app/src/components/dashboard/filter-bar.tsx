@@ -33,7 +33,7 @@ export interface FilterBarProps {
 	onEditMode: (v: boolean) => void;
 	onAddWidget: () => void;
 	canEdit: boolean;
-	status: { ok: boolean; uptime: number } | null;
+	status: { ok: boolean; uptime: number; dbSizeBytes: number; logCount: number } | null;
 }
 
 function formatUptime(ms: number): string {
@@ -44,6 +44,13 @@ function formatUptime(ms: number): string {
 	if (d > 0) return `${d}d ${h}h`;
 	if (h > 0) return `${h}h ${m}m`;
 	return `${m}m`;
+}
+
+function formatBytes(n: number): string {
+	if (n < 1024) return `${n} B`;
+	if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
+	if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+	return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
 
 export function FilterBar(props: FilterBarProps) {
@@ -125,7 +132,8 @@ export function FilterBar(props: FilterBarProps) {
 
 			{props.status && (
 				<span className="text-xs text-muted-foreground">
-					{props.status.ok ? "online" : "degraded"} · {formatUptime(props.status.uptime)}
+					{props.status.ok ? "online" : "degraded"} · {formatUptime(props.status.uptime)} ·{" "}
+					{props.status.logCount.toLocaleString()} logs · {formatBytes(props.status.dbSizeBytes)}
 				</span>
 			)}
 

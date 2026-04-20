@@ -103,18 +103,6 @@ export const DEFAULT_WIDGETS: Widget[] = [
 		builtin: true,
 	},
 	{
-		id: "db-size",
-		name: "Database Size",
-		description: "On-disk size of the SQLite database",
-		kind: "stat",
-		sql: "SELECT page_count * page_size AS value FROM pragma_page_count(), pragma_page_size()",
-		options: { valueField: "value", format: "bytes" },
-		layout: { x: 4, y: 0, w: 4, h: 2 },
-		createdAt: BUILTIN_TS,
-		updatedAt: BUILTIN_TS,
-		builtin: true,
-	},
-	{
 		id: "error-rate",
 		name: "Error Rate",
 		description: "Percent of logs at error or fatal level",
@@ -130,7 +118,7 @@ export const DEFAULT_WIDGETS: Widget[] = [
 				AND (\${project} IS NULL OR project = \${project})
 		`,
 		options: { valueField: "value", format: "percent" },
-		layout: { x: 8, y: 0, w: 4, h: 2 },
+		layout: { x: 4, y: 0, w: 8, h: 2 },
 		createdAt: BUILTIN_TS,
 		updatedAt: BUILTIN_TS,
 		builtin: true,
@@ -142,7 +130,7 @@ export const DEFAULT_WIDGETS: Widget[] = [
 		kind: "line",
 		sql: `
 			SELECT
-				CAST(created_at / 60000 AS INTEGER) * 60000 AS bucket,
+				CAST(created_at / 60000 AS BIGINT) * 60000 AS bucket,
 				COUNT(*) AS count
 			FROM logs
 			WHERE created_at BETWEEN \${from} AND \${to}
@@ -164,7 +152,7 @@ export const DEFAULT_WIDGETS: Widget[] = [
 		kind: "line",
 		sql: `
 			SELECT
-				CAST(created_at / 60000 AS INTEGER) * 60000 AS bucket,
+				CAST(created_at / 60000 AS BIGINT) * 60000 AS bucket,
 				COUNT(*) AS errors
 			FROM logs
 			WHERE created_at BETWEEN \${from} AND \${to}
@@ -187,7 +175,7 @@ export const DEFAULT_WIDGETS: Widget[] = [
 		kind: "line",
 		sql: `
 			SELECT
-				CAST(created_at / 60000 AS INTEGER) * 60000 AS bucket,
+				CAST(created_at / 60000 AS BIGINT) * 60000 AS bucket,
 				service,
 				COUNT(*) AS count
 			FROM logs
@@ -211,7 +199,7 @@ export const DEFAULT_WIDGETS: Widget[] = [
 		sql: `
 			WITH durations AS (
 				SELECT
-					CAST(created_at / 60000 AS INTEGER) * 60000 AS bucket,
+					CAST(created_at / 60000 AS BIGINT) * 60000 AS bucket,
 					CAST(json_extract(meta, '$.duration_ms') AS REAL) AS d
 				FROM logs
 				WHERE created_at BETWEEN \${from} AND \${to}

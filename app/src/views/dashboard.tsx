@@ -149,7 +149,16 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 				onEditMode={setEditMode}
 				onAddWidget={() => openEditor()}
 				canEdit={canEdit}
-				status={health ? { ok: health.ok, uptime: health.uptime } : null}
+				status={
+					health
+						? {
+								ok: health.ok,
+								uptime: health.uptime,
+								dbSizeBytes: health.db_size_bytes,
+								logCount: health.log_count,
+							}
+						: null
+				}
 			/>
 
 			{hidden.size > 0 && (
