@@ -33,9 +33,9 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	const [editMode, setEditMode] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [hidden, setHidden] = useState<Set<string>>(() => readHidden());
-	const [editor, setEditor] = useState<
-		{ open: true; widget?: Widget } | { open: false }
-	>({ open: false });
+	const [editor, setEditor] = useState<{ open: true; widget?: Widget } | { open: false }>({
+		open: false,
+	});
 	const gridContainerRef = useRef<HTMLDivElement | null>(null);
 	const [gridWidth, setGridWidth] = useState(1200);
 
@@ -62,10 +62,7 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		return () => clearInterval(t);
 	}, [refreshMs]);
 
-	const visibleWidgets = useMemo(
-		() => widgets.filter((w) => !hidden.has(w.id)),
-		[widgets, hidden],
-	);
+	const visibleWidgets = useMemo(() => widgets.filter((w) => !hidden.has(w.id)), [widgets, hidden]);
 
 	const handleLayoutChange = useCallback(
 		(updates: { id: string; layout: Widget["layout"] }[]) => {
@@ -226,9 +223,7 @@ function WidgetTile({
 				<div className="flex min-w-0 flex-col">
 					<span className="truncate text-xs font-medium">{widget.name}</span>
 					{widget.description && (
-						<span className="truncate text-[10px] text-muted-foreground">
-							{widget.description}
-						</span>
+						<span className="truncate text-[10px] text-muted-foreground">{widget.description}</span>
 					)}
 				</div>
 				{editMode && (

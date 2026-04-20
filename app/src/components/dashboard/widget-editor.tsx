@@ -152,14 +152,8 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
 			<div className="flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl">
 				<div className="flex items-center justify-between border-b border-border p-3">
-					<h2 className="text-sm font-semibold">
-						{props.initial ? "Edit widget" : "New widget"}
-					</h2>
-					<button
-						type="button"
-						onClick={props.onCancel}
-						className="rounded p-1 hover:bg-muted"
-					>
+					<h2 className="text-sm font-semibold">{props.initial ? "Edit widget" : "New widget"}</h2>
+					<button type="button" onClick={props.onCancel} className="rounded p-1 hover:bg-muted">
 						<X className="h-4 w-4" />
 					</button>
 				</div>

@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import ReactGridLayout, {
-	type Layout,
-	type LayoutItem,
-} from "react-grid-layout/legacy";
+import ReactGridLayout, { type Layout, type LayoutItem } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import type { Widget } from "@/types";
@@ -27,18 +24,14 @@ export function WidgetGrid({
 	renderWidget,
 }: WidgetGridProps) {
 	const pendingRef = useRef<Map<string, Widget["layout"]>>(new Map());
-	const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-		undefined,
-	);
+	const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 	const flush = useCallback(() => {
 		if (pendingRef.current.size === 0) return;
-		const updates = Array.from(pendingRef.current.entries()).map(
-			([id, layout]) => ({
-				id,
-				layout,
-			}),
-		);
+		const updates = Array.from(pendingRef.current.entries()).map(([id, layout]) => ({
+			id,
+			layout,
+		}));
 		pendingRef.current.clear();
 		onLayoutChange(updates);
 	}, [onLayoutChange]);
@@ -97,10 +90,7 @@ export function WidgetGrid({
 			draggableCancel=".widget-no-drag"
 		>
 			{widgets.map((w) => (
-				<div
-					key={w.id}
-					className="overflow-hidden rounded-lg border border-border bg-card"
-				>
+				<div key={w.id} className="overflow-hidden rounded-lg border border-border bg-card">
 					{renderWidget(w)}
 				</div>
 			))}

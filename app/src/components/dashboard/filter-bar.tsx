@@ -156,11 +156,7 @@ export function FilterBar(props: FilterBarProps) {
 							props.editMode ? "bg-primary/10 text-primary" : "text-muted-foreground"
 						}`}
 					>
-						{props.editMode ? (
-							<Pencil className="h-3 w-3" />
-						) : (
-							<Lock className="h-3 w-3" />
-						)}
+						{props.editMode ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
 						{props.editMode ? "Editing" : "Locked"}
 					</button>
 					{props.editMode && (
