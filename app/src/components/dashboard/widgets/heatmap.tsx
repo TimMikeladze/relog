@@ -22,10 +22,7 @@ export function HeatmapWidget({
 	const max = rows.reduce((m, r) => Math.max(m, Number(r[options.valueField]) || 0), 0) || 1;
 	const cellMap = new Map<string, number>();
 	for (const r of rows) {
-		cellMap.set(
-			`${r[options.xField]}::${r[options.yField]}`,
-			Number(r[options.valueField]) || 0,
-		);
+		cellMap.set(`${r[options.xField]}::${r[options.yField]}`, Number(r[options.valueField]) || 0);
 	}
 	return (
 		<div className="h-full w-full overflow-auto p-2">

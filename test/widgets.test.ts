@@ -138,10 +138,7 @@ describe("handleWidgets", () => {
 	test("POST /widgets creates a widget", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", makeWidget("custom")),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", makeWidget("custom")), m);
 		expect(res.status).toBe(201);
 		expect(m.get("custom")).not.toBeNull();
 		expect(m.get("custom")!.builtin).toBe(false);
@@ -150,30 +147,21 @@ describe("handleWidgets", () => {
 	test("POST /widgets rejects missing fields", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", { id: "x" }),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", { id: "x" }), m);
 		expect(res.status).toBe(400);
 	});
 
 	test("POST /widgets rejects bad id", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", makeWidget("bad id!")),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", makeWidget("bad id!")), m);
 		expect(res.status).toBe(400);
 	});
 
 	test("POST /widgets with existing builtin id returns 409", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", makeWidget("total-logs")),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", makeWidget("total-logs")), m);
 		expect(res.status).toBe(409);
 	});
 
@@ -181,10 +169,7 @@ describe("handleWidgets", () => {
 		const m = new WidgetsManager();
 		await m.init();
 		await m.add(makeWidget("u"));
-		const res = await handleWidgets(
-			await req("PUT", "/widgets/u", { name: "Renamed" }),
-			m,
-		);
+		const res = await handleWidgets(await req("PUT", "/widgets/u", { name: "Renamed" }), m);
 		expect(res.status).toBe(200);
 		expect(m.get("u")!.name).toBe("Renamed");
 	});

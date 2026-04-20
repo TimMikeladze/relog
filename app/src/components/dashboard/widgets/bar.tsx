@@ -9,14 +9,9 @@ export function BarWidget({
 	rows: Record<string, unknown>[];
 	options: BarOptions;
 }) {
-	if (
-		rows.length &&
-		(!(options.categoryField in rows[0]) || !(options.valueField in rows[0]))
-	) {
+	if (rows.length && (!(options.categoryField in rows[0]) || !(options.valueField in rows[0]))) {
 		return (
-			<WidgetError
-				message={`Missing column: ${options.categoryField} or ${options.valueField}`}
-			/>
+			<WidgetError message={`Missing column: ${options.categoryField} or ${options.valueField}`} />
 		);
 	}
 	const horizontal = options.orientation !== "vertical";

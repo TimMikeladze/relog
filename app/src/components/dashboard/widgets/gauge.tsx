@@ -23,14 +23,7 @@ export function GaugeWidget({
 		<div className="flex h-full flex-col items-center justify-center gap-2 p-3">
 			<div className="relative h-20 w-20">
 				<svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
-					<circle
-						cx="18"
-						cy="18"
-						r="16"
-						fill="none"
-						stroke="var(--color-border)"
-						strokeWidth="3"
-					/>
+					<circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-border)" strokeWidth="3" />
 					<circle
 						cx="18"
 						cy="18"

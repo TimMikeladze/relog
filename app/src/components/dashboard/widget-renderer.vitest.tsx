@@ -19,17 +19,13 @@ function widgetOf(kind: Widget["kind"], opts: object): Widget {
 describe("WidgetRenderer", () => {
 	test("shows error state", () => {
 		const w = widgetOf("stat", { valueField: "v" });
-		render(
-			<WidgetRenderer widget={w} rows={[]} columns={[]} loading={false} error="boom" />,
-		);
+		render(<WidgetRenderer widget={w} rows={[]} columns={[]} loading={false} error="boom" />);
 		expect(screen.getByText("boom")).toBeInTheDocument();
 	});
 
 	test("shows empty state on zero rows", () => {
 		const w = widgetOf("stat", { valueField: "v" });
-		render(
-			<WidgetRenderer widget={w} rows={[]} columns={[]} loading={false} error={null} />,
-		);
+		render(<WidgetRenderer widget={w} rows={[]} columns={[]} loading={false} error={null} />);
 		expect(screen.getByText(/no data/i)).toBeInTheDocument();
 	});
 

@@ -15,14 +15,9 @@ export function StatusGridWidget({
 	rows: Record<string, unknown>[];
 	options: StatusGridOptions;
 }) {
-	if (
-		rows.length &&
-		(!(options.labelField in rows[0]) || !(options.statusField in rows[0]))
-	) {
+	if (rows.length && (!(options.labelField in rows[0]) || !(options.statusField in rows[0]))) {
 		return (
-			<WidgetError
-				message={`Missing column: ${options.labelField} or ${options.statusField}`}
-			/>
+			<WidgetError message={`Missing column: ${options.labelField} or ${options.statusField}`} />
 		);
 	}
 	return (

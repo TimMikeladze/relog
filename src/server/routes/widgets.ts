@@ -32,14 +32,7 @@ export async function handleWidgets(
 		} catch {
 			return Response.json({ error: "Invalid request body" }, { status: 400 });
 		}
-		if (
-			!body?.id ||
-			!body?.name ||
-			!body?.kind ||
-			!body?.sql ||
-			!body?.options ||
-			!body?.layout
-		) {
+		if (!body?.id || !body?.name || !body?.kind || !body?.sql || !body?.options || !body?.layout) {
 			return Response.json(
 				{ error: "Missing required fields: id, name, kind, sql, options, layout" },
 				{ status: 400 },
@@ -50,10 +43,7 @@ export async function handleWidgets(
 		}
 		const existing = widgetsManager.get(body.id);
 		if (existing?.builtin) {
-			return Response.json(
-				{ error: "Cannot overwrite builtin widget" },
-				{ status: 409 },
-			);
+			return Response.json({ error: "Cannot overwrite builtin widget" }, { status: 409 });
 		}
 		const widget = await widgetsManager.add({ ...body, builtin: false });
 		return Response.json({ widget }, { status: 201 });
@@ -100,10 +90,7 @@ export async function handleWidgets(
 			return Response.json({ error: "Widget not found" }, { status: 404 });
 		}
 		if (existing.builtin) {
-			return Response.json(
-				{ error: "Cannot delete builtin widget" },
-				{ status: 403 },
-			);
+			return Response.json({ error: "Cannot delete builtin widget" }, { status: 403 });
 		}
 		await widgetsManager.delete(id);
 		return Response.json({ success: true });

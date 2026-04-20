@@ -14,10 +14,7 @@ export function TableWidget({
 				<thead className="sticky top-0 bg-background">
 					<tr className="border-b border-border">
 						{options.columns.map((c) => (
-							<th
-								key={c.field}
-								className="px-2 py-1 text-left font-medium text-muted-foreground"
-							>
+							<th key={c.field} className="px-2 py-1 text-left font-medium text-muted-foreground">
 								{c.label ?? c.field}
 							</th>
 						))}
