@@ -23,7 +23,8 @@ export class WidgetsManager {
 					this.widgets.set(w.id, w);
 				}
 			} catch {
-				// missing or invalid file — keep defaults
+				// missing or invalid file — write seeds so the file exists going forward
+				await this.persist();
 			}
 		}
 	}

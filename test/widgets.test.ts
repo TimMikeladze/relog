@@ -98,6 +98,15 @@ describe("WidgetsManager", () => {
 			expect(m.get(id)!.builtin).toBe(true);
 		}
 	});
+
+	test("init persists seeds when file is absent", async () => {
+		const { existsSync } = await import("node:fs");
+		const path = tmpFile();
+		created.push(path);
+		const m = new WidgetsManager(path);
+		await m.init();
+		expect(existsSync(path)).toBe(true);
+	});
 });
 
 async function req(method: string, path: string, body?: unknown): Promise<Request> {
@@ -201,8 +210,30 @@ describe("handleWidgets", () => {
 		await m.init();
 		await m.add(makeWidget("rm"));
 		const res = await handleWidgets(await req("DELETE", "/widgets/rm"), m);
-		expect(res.status).toBe(200);
+		expect(res.status).toBe(204);
 		expect(m.get("rm")).toBeNull();
+	});
+
+	test("PUT /widgets/:id strips builtin/id/createdAt from body", async () => {
+		const m = new WidgetsManager();
+		await m.init();
+		await m.add(makeWidget("u"));
+		const before = m.get("u")!;
+		const res = await handleWidgets(
+			await req("PUT", "/widgets/u", {
+				name: "Renamed",
+				builtin: true,
+				id: "different-id",
+				createdAt: 1,
+			}),
+			m,
+		);
+		expect(res.status).toBe(200);
+		const after = m.get("u")!;
+		expect(after.id).toBe("u");
+		expect(after.name).toBe("Renamed");
+		expect(after.builtin).toBeFalsy();
+		expect(after.createdAt).toBe(before.createdAt);
 	});
 
 	test("DELETE /widgets/:id on builtin returns 403", async () => {

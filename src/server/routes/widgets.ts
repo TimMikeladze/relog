@@ -53,9 +53,9 @@ export async function handleWidgets(
 		if (!id) {
 			return Response.json({ error: "Missing widget ID" }, { status: 400 });
 		}
-		let body: Partial<Omit<Widget, "id" | "createdAt">>;
+		let body: Partial<Widget>;
 		try {
-			body = (await request.json()) as Partial<Omit<Widget, "id" | "createdAt">>;
+			body = (await request.json()) as Partial<Widget>;
 		} catch {
 			return Response.json({ error: "Invalid request body" }, { status: 400 });
 		}
@@ -74,7 +74,8 @@ export async function handleWidgets(
 			const updated = await widgetsManager.update(id, { layout });
 			return Response.json({ widget: updated });
 		}
-		const updated = await widgetsManager.update(id, body);
+		const { id: _ignoredId, createdAt: _ignoredCreatedAt, builtin: _ignoredBuiltin, ...safePatch } = body;
+		const updated = await widgetsManager.update(id, safePatch);
 		if (!updated) {
 			return Response.json({ error: "Widget not found" }, { status: 404 });
 		}
@@ -93,7 +94,7 @@ export async function handleWidgets(
 			return Response.json({ error: "Cannot delete builtin widget" }, { status: 403 });
 		}
 		await widgetsManager.delete(id);
-		return Response.json({ success: true });
+		return new Response(null, { status: 204 });
 	}
 
 	return Response.json({ error: "Method not allowed" }, { status: 405 });
