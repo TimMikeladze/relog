@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
-import { getAggregatesPath } from "../paths.ts";
+import { getAggregatesPath, getWidgetsPath } from "../paths.ts";
 import { type PruneHandle, startAutoPrune } from "../pruner.ts";
 import { type SourcesHandle, startSources } from "../sources/runner.ts";
 import { loadSourcesConfig } from "../sources/config.ts";
@@ -17,6 +17,8 @@ import { handleQuery, handleQueryStream } from "./routes/query.ts";
 import { StreamManager, handleStream } from "./routes/stream.ts";
 import { AggregatesManager } from "./aggregates.ts";
 import { handleAggregates } from "./routes/aggregates.ts";
+import { WidgetsManager } from "./widgets.ts";
+import { handleWidgets } from "./routes/widgets.ts";
 import { handleOtelTraces, handleOtelLogs } from "./routes/otel.ts";
 
 const DEFAULT_MAX_BODY = 5 * 1024 * 1024;
@@ -98,6 +100,7 @@ export interface ServerInstance {
 	duckdb: DuckDBReader;
 	streamManager: StreamManager;
 	aggregatesManager: AggregatesManager;
+	widgetsManager: WidgetsManager;
 	shutdown: () => Promise<void>;
 	pruneHandle?: PruneHandle;
 	sourcesHandle?: SourcesHandle;
@@ -111,6 +114,8 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const streamManager = new StreamManager(db, config.streamDebounceMs);
 	const aggregatesManager = new AggregatesManager(getAggregatesPath());
 	await aggregatesManager.init();
+	const widgetsManager = new WidgetsManager(getWidgetsPath());
+	await widgetsManager.init();
 	const ingestLimiter = new RateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
 
 	const duckdb = new DuckDBReader(config.dbPath, config.archive);
@@ -249,6 +254,14 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					}
 					if (auth.error) return auth.error;
 					response = await handleAggregates(request, aggregatesManager);
+				} else if (path.startsWith("/widgets")) {
+					if (method === "GET") {
+						auth = checkRole(request, "read", keys, prefixLen);
+					} else {
+						auth = checkRole(request, "admin", keys, prefixLen);
+					}
+					if (auth.error) return auth.error;
+					response = await handleWidgets(request, widgetsManager);
 				} else if (method === "GET" && config.uiDistPath) {
 					// Serve the bundled web UI with SPA fallback
 					// Prevent path traversal by resolving and checking the path stays within root
@@ -309,6 +322,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		duckdb,
 		streamManager,
 		aggregatesManager,
+		widgetsManager,
 		shutdown,
 		pruneHandle,
 		sourcesHandle,
