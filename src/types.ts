@@ -188,3 +188,101 @@ export interface Aggregate {
 	createdAt: number;
 	updatedAt: number;
 }
+
+export type WidgetKind =
+	| "stat"
+	| "line"
+	| "bar"
+	| "table"
+	| "status-grid"
+	| "heatmap"
+	| "gauge"
+	| "sparkline";
+
+export interface StatOptions {
+	valueField: string;
+	deltaField?: string;
+	format?: "number" | "bytes" | "ms" | "percent";
+}
+
+export interface LineOptions {
+	xField: string;
+	yFields: string[];
+	yFormat?: "number" | "ms" | "percent";
+}
+
+export interface BarOptions {
+	categoryField: string;
+	valueField: string;
+	orientation?: "horizontal" | "vertical";
+}
+
+export interface TableColumn {
+	field: string;
+	label?: string;
+	format?: "number" | "bytes" | "ms" | "timestamp";
+}
+
+export interface TableOptions {
+	columns: TableColumn[];
+}
+
+export interface StatusGridOptions {
+	labelField: string;
+	statusField: string;
+	thresholds: { healthy: number; degraded: number };
+}
+
+export interface HeatmapOptions {
+	xField: string;
+	yField: string;
+	valueField: string;
+}
+
+export interface GaugeOptions {
+	valueField: string;
+	min?: number;
+	max: number;
+	thresholds?: { warn: number; crit: number };
+}
+
+export interface SparklineOptions {
+	xField: string;
+	yField: string;
+}
+
+export type WidgetOptions =
+	| StatOptions
+	| LineOptions
+	| BarOptions
+	| TableOptions
+	| StatusGridOptions
+	| HeatmapOptions
+	| GaugeOptions
+	| SparklineOptions;
+
+export interface WidgetLayout {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+
+export interface Widget {
+	id: string;
+	name: string;
+	description?: string;
+	kind: WidgetKind;
+	sql: string;
+	options: WidgetOptions;
+	layout: WidgetLayout;
+	timeRange?: string;
+	createdAt: number;
+	updatedAt: number;
+	builtin?: boolean;
+}
+
+export interface WidgetsFile {
+	version: 1;
+	widgets: Widget[];
+}
