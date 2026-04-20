@@ -66,9 +66,9 @@ describe("WidgetEditor", () => {
 		expect(textarea).not.toBeNull();
 		fireEvent.change(textarea, { target: { value: "{not-valid-json" } });
 		// Error appears inline somewhere in the document.
-		expect(
-			screen.getAllByText((t) => /expected|unexpected|json/i.test(t)).length,
-		).toBeGreaterThan(0);
+		expect(screen.getAllByText((t) => /expected|unexpected|json/i.test(t)).length).toBeGreaterThan(
+			0,
+		);
 	});
 
 	test("save fires with expected payload", async () => {
@@ -78,10 +78,13 @@ describe("WidgetEditor", () => {
 		fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Good" } });
 		fireEvent.click(screen.getByRole("button", { name: /save/i }));
 		expect(onSave).toHaveBeenCalledTimes(1);
-		const payload = onSave.mock.calls[0][0];
-		expect(payload.id).toBe("good-id");
-		expect(payload.name).toBe("Good");
-		expect(payload.kind).toBe("stat");
-		expect(payload.builtin).toBe(false);
+		expect(onSave).toHaveBeenCalledWith(
+			expect.objectContaining({
+				id: "good-id",
+				name: "Good",
+				kind: "stat",
+				builtin: false,
+			}),
+		);
 	});
 });
