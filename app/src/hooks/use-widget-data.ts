@@ -59,12 +59,22 @@ export function useWidgetData(
 		try {
 			const vars = resolveVars(widget, filters);
 			const sql = substituteVars(widget.sql, vars);
-			const result = await Promise.race<QueryResult>([
-				apiPost<QueryResult>("/query", { sql }),
-				new Promise<QueryResult>((_, reject) =>
-					setTimeout(() => reject(new Error("__timeout__")), QUERY_TIMEOUT_MS),
-				),
-			]);
+			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+			const timeoutPromise = new Promise<QueryResult>((_, reject) => {
+				timeoutHandle = setTimeout(
+					() => reject(new Error("__timeout__")),
+					QUERY_TIMEOUT_MS,
+				);
+			});
+			let result: QueryResult;
+			try {
+				result = await Promise.race<QueryResult>([
+					apiPost<QueryResult>("/query", { sql }),
+					timeoutPromise,
+				]);
+			} finally {
+				if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+			}
 			if (myRunId !== runIdRef.current) return;
 			const nextRows = result.rows ?? [];
 			setRows(nextRows);

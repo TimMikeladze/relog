@@ -33,7 +33,10 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	const [editMode, setEditMode] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [hidden, setHidden] = useState<Set<string>>(() => readHidden());
-	const [editor, setEditor] = useState<{ open: true; widget?: Widget } | { open: false }>({
+	const [editor, setEditor] = useState<
+		| { open: true; widget?: Widget; snapshot: { from: number; to: number } }
+		| { open: false }
+	>({
 		open: false,
 	});
 	const gridContainerRef = useRef<HTMLDivElement | null>(null);
@@ -41,9 +44,18 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 
 	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
 	const timeRange = TIME_RANGES.find((t) => t.label === timeRangeLabel) ?? TIME_RANGES[2];
-	const now = Date.now();
-	const filterFrom = now - timeRange.ms;
-	const filterTo = now;
+
+	const openEditor = useCallback(
+		(widget?: Widget) => {
+			const now = Date.now();
+			setEditor({
+				open: true,
+				widget,
+				snapshot: { from: now - timeRange.ms, to: now },
+			});
+		},
+		[timeRange.ms],
+	);
 
 	const { data: health } = useHealth(enabled, 15_000);
 
@@ -83,12 +95,12 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		});
 	}, []);
 
-	const handleDuplicate = useCallback((w: Widget) => {
-		setEditor({
-			open: true,
-			widget: { ...w, id: "", builtin: false, createdAt: 0, updatedAt: 0 },
-		});
-	}, []);
+	const handleDuplicate = useCallback(
+		(w: Widget) => {
+			openEditor({ ...w, id: "", builtin: false, createdAt: 0, updatedAt: 0 });
+		},
+		[openEditor],
+	);
 
 	const handleDelete = useCallback(
 		async (w: Widget) => {
@@ -109,11 +121,14 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 
 	const canEdit = true;
 
-	const filters = {
-		timeRange: timeRange.label,
-		service: service || null,
-		project: project || null,
-	};
+	const filters = useMemo(
+		() => ({
+			timeRange: timeRange.label,
+			service: service || null,
+			project: project || null,
+		}),
+		[timeRange.label, service, project],
+	);
 
 	return (
 		<div className="flex flex-1 flex-col gap-3 overflow-hidden p-4">
@@ -133,7 +148,7 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 				}}
 				editMode={editMode}
 				onEditMode={setEditMode}
-				onAddWidget={() => setEditor({ open: true })}
+				onAddWidget={() => openEditor()}
 				canEdit={canEdit}
 				status={health ? { ok: health.ok, uptime: health.uptime } : null}
 			/>
@@ -166,7 +181,7 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 							filters={filters}
 							refreshKey={refreshKey}
 							editMode={editMode}
-							onEdit={() => setEditor({ open: true, widget: w })}
+							onEdit={() => openEditor(w)}
 							onDuplicate={() => handleDuplicate(w)}
 							onDelete={() => handleDelete(w)}
 							onHide={() => toggleHidden(w.id)}
@@ -178,8 +193,8 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 			{editor.open && (
 				<WidgetEditor
 					initial={editor.widget}
-					filterFrom={filterFrom}
-					filterTo={filterTo}
+					filterFrom={editor.snapshot.from}
+					filterTo={editor.snapshot.to}
 					service={service || null}
 					project={project || null}
 					onCancel={() => setEditor({ open: false })}
@@ -219,7 +234,7 @@ function WidgetTile({
 	const data = useWidgetData(widget, filters, refreshKey);
 	return (
 		<div className="group relative flex h-full flex-col">
-			<div className="widget-no-drag flex items-center justify-between border-b border-border/40 px-3 py-1.5">
+			<div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5">
 				<div className="flex min-w-0 flex-col">
 					<span className="truncate text-xs font-medium">{widget.name}</span>
 					{widget.description && (
@@ -268,7 +283,7 @@ function WidgetTile({
 					</div>
 				)}
 			</div>
-			<div className="flex-1 overflow-hidden">
+			<div className="widget-no-drag flex-1 overflow-hidden">
 				<WidgetRenderer
 					widget={widget}
 					rows={data.rows}

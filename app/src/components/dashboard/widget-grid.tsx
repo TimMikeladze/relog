@@ -40,6 +40,7 @@ export function WidgetGrid({
 		if (!editMode) flush();
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
+			flush(); // preserve queued changes on unmount
 		};
 	}, [editMode, flush]);
 

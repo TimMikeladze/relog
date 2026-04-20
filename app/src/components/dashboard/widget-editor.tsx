@@ -54,6 +54,10 @@ export function WidgetEditor(props: WidgetEditorProps) {
 	const [options, setOptions] = useState<WidgetOptions>(
 		props.initial?.options ?? DEFAULT_OPTIONS.stat,
 	);
+	const [optionsDraft, setOptionsDraft] = useState(() =>
+		JSON.stringify(props.initial?.options ?? DEFAULT_OPTIONS.stat, null, 2),
+	);
+	const [optionsError, setOptionsError] = useState<string | null>(null);
 	const [sqlText, setSqlText] = useState(
 		props.initial?.sql ??
 			"SELECT COUNT(*) AS value FROM logs WHERE created_at BETWEEN ${from} AND ${to}",
@@ -126,7 +130,18 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		setOptions(DEFAULT_OPTIONS[k]);
 	}, []);
 
+	// Keep draft in sync when kind changes reset options
+	useEffect(() => {
+		setOptionsDraft(JSON.stringify(options, null, 2));
+		setOptionsError(null);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [kind]);
+
 	const save = useCallback(async () => {
+		if (optionsError) {
+			setPreviewError(`Fix options JSON: ${optionsError}`);
+			return;
+		}
 		if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
 			setPreviewError("Invalid id — use letters, digits, _ or -");
 			return;
@@ -146,7 +161,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 			timeRange: props.initial?.timeRange,
 			builtin: false,
 		});
-	}, [id, name, description, kind, sqlText, options, props]);
+	}, [id, name, description, kind, sqlText, options, optionsError, props]);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
@@ -211,17 +226,23 @@ export function WidgetEditor(props: WidgetEditorProps) {
 						<label className="flex flex-col gap-1">
 							<span className="text-muted-foreground">Options (JSON)</span>
 							<textarea
-								value={JSON.stringify(options, null, 2)}
+								value={optionsDraft}
 								onChange={(e) => {
+									const v = e.target.value;
+									setOptionsDraft(v);
 									try {
-										setOptions(JSON.parse(e.target.value));
-									} catch {
-										/* keep typing */
+										setOptions(JSON.parse(v));
+										setOptionsError(null);
+									} catch (err) {
+										setOptionsError(err instanceof Error ? err.message : "Invalid JSON");
 									}
 								}}
 								rows={6}
 								className="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs"
 							/>
+							{optionsError && (
+								<span className="text-[10px] text-destructive">{optionsError}</span>
+							)}
 							<span className="text-[10px] text-muted-foreground">
 								Available columns: {previewCols.join(", ") || "—"}
 							</span>
