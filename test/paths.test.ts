@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join, isAbsolute, dirname } from "node:path";
 import { existsSync, statSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
-import { getDataDir, getDefaultDbPath } from "../src/paths.ts";
+import { getDataDir, getDefaultDbPath, getWidgetsPath } from "../src/paths.ts";
 
 describe("getDataDir", () => {
 	test("returns path inside home directory", () => {
@@ -50,5 +50,17 @@ describe("getDefaultDbPath", () => {
 	test("filename is relog.db", () => {
 		const dbPath = getDefaultDbPath();
 		expect(dbPath.endsWith("relog.db")).toBe(true);
+	});
+});
+
+describe("getWidgetsPath", () => {
+	test("returns widgets.json inside data directory", () => {
+		const p = getWidgetsPath();
+		expect(p).toBe(join(homedir(), ".relog", "widgets.json"));
+	});
+
+	test("returns an absolute path", () => {
+		const p = getWidgetsPath();
+		expect(isAbsolute(p)).toBe(true);
 	});
 });
