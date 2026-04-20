@@ -6,10 +6,7 @@ import { WidgetsManager } from "../src/server/widgets.ts";
 import type { Widget } from "../src/types.ts";
 
 function tmpFile(): string {
-	return join(
-		tmpdir(),
-		`relog-widgets-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
-	);
+	return join(tmpdir(), `relog-widgets-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
 }
 
 function makeWidget(
@@ -86,5 +83,18 @@ describe("WidgetsManager", () => {
 		await m.add({ ...makeWidget("bi"), builtin: true });
 		expect(await m.delete("bi")).toBe(false);
 		expect(m.get("bi")).not.toBeNull();
+	});
+
+	test("init on empty file seeds DEFAULT_WIDGETS", async () => {
+		const path = tmpFile();
+		created.push(path);
+		const m = new WidgetsManager(path);
+		await m.init();
+		const all = m.getAll();
+		expect(all.length).toBeGreaterThanOrEqual(11);
+		for (const id of ["total-logs", "error-rate", "errors-over-time", "top-errors"]) {
+			expect(m.get(id)).not.toBeNull();
+			expect(m.get(id)!.builtin).toBe(true);
+		}
 	});
 });
