@@ -25,6 +25,7 @@ export default defineConfig({
 			"/prune": "http://localhost:3485",
 			"/archive": "http://localhost:3485",
 			"/aggregates": "http://localhost:3485",
+			"/widgets": "http://localhost:3485",
 			"/v1": "http://localhost:3485",
 		},
 	},
