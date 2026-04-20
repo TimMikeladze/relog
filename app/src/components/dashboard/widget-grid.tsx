@@ -36,13 +36,23 @@ export function WidgetGrid({
 		onLayoutChange(updates);
 	}, [onLayoutChange]);
 
+	const flushRef = useRef(flush);
+	useEffect(() => {
+		flushRef.current = flush;
+	}, [flush]);
+
 	useEffect(() => {
 		if (!editMode) flush();
 		return () => {
 			if (debounceRef.current) clearTimeout(debounceRef.current);
-			flush(); // preserve queued changes on unmount
 		};
 	}, [editMode, flush]);
+
+	useEffect(() => {
+		return () => {
+			flushRef.current();
+		};
+	}, []);
 
 	const handleLayoutChange = useCallback(
 		(layouts: Layout) => {

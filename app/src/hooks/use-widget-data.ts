@@ -86,8 +86,10 @@ export function useWidgetData(
 		} finally {
 			if (myRunId === runIdRef.current) setLoading(false);
 		}
-	}, [widget, filters, tick]);
+	}, [widget.id, widget.sql, widget.timeRange, filters, tick]);
 
+	// refreshKey is a dep so the auto-refresh interval triggers re-runs;
+	// run already captures filter/widget via its own closure.
 	useEffect(() => {
 		run();
 		return () => {

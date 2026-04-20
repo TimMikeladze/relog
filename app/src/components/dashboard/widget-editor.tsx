@@ -178,7 +178,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 						<label className="flex flex-col gap-1">
 							<span className="text-muted-foreground">ID</span>
 							<input
-								disabled={!!props.initial}
+								disabled={!!props.initial?.id}
 								value={id}
 								onChange={(e) => setId(e.target.value)}
 								className="rounded-md border border-border bg-background px-2 py-1"
