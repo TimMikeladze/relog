@@ -253,134 +253,141 @@ export function TraceWaterfall({
 	const { isLastChild, parentIndex } = buildTreeConnectorInfo(spans);
 
 	return (
-		<div className="relative w-full">
-			{/* Time axis ruler */}
-			<div className="flex items-end" style={{ height: 20 }}>
-				<div className="shrink-0" style={{ width: 180 }} />
-				<div className="relative flex-1">
-					{timeMarks.map((ms) => {
-						const leftPct = (ms / maxEnd) * 100;
-						return (
-							<span
-								key={ms}
-								className="absolute bottom-0 text-[9px] tabular-nums text-muted-foreground"
-								style={{ left: `${leftPct}%`, transform: "translateX(-50%)" }}
-							>
-								{formatDuration(ms)}
-							</span>
-						);
-					})}
-				</div>
-				<div className="shrink-0" style={{ width: 60 }} />
-			</div>
-
-			{/* Span rows */}
-			<div className="relative">
-				{/* Dashed vertical grid lines */}
-				<div className="pointer-events-none absolute inset-0" style={{ left: 180, right: 60 }}>
-					{timeMarks.map((ms) => {
-						const leftPct = (ms / maxEnd) * 100;
-						return (
-							<div
-								key={ms}
-								className="absolute top-0 h-full border-l border-dashed border-border/30"
-								style={{ left: `${leftPct}%` }}
-							/>
-						);
-					})}
+		<div className="w-full overflow-x-auto">
+			<div className="relative" style={{ minWidth: 1200 }}>
+				{/* Time axis ruler */}
+				<div className="flex items-end" style={{ height: 20 }}>
+					<div className="shrink-0" style={{ width: 180 }} />
+					<div className="relative flex-1">
+						{timeMarks.map((ms) => {
+							const leftPct = (ms / maxEnd) * 100;
+							return (
+								<span
+									key={ms}
+									className="absolute bottom-0 text-[9px] tabular-nums text-muted-foreground"
+									style={{ left: `${leftPct}%`, transform: "translateX(-50%)" }}
+								>
+									{formatDuration(ms)}
+								</span>
+							);
+						})}
+					</div>
+					<div className="shrink-0" style={{ width: 60 }} />
 				</div>
 
-				{spans.map((span, i) => {
-					const leftPct = (span.start / maxEnd) * 100;
-					const widthPct = Math.max((span.duration / maxEnd) * 100, 0.3);
-					const isError = isErrorLevel(span.level);
-					const color = getServiceColor(span.service);
-					const barClass = isError ? "bg-red-500/80" : color.bar;
-					const isSelected = span.spanId === selectedSpanId;
-					const showTextInside = widthPct > BAR_TEXT_THRESHOLD_PCT;
+				{/* Span rows */}
+				<div className="relative">
+					{/* Dashed vertical grid lines */}
+					<div className="pointer-events-none absolute inset-0" style={{ left: 180, right: 60 }}>
+						{timeMarks.map((ms) => {
+							const leftPct = (ms / maxEnd) * 100;
+							return (
+								<div
+									key={ms}
+									className="absolute top-0 h-full border-l border-dashed border-border/30"
+									style={{ left: `${leftPct}%` }}
+								/>
+							);
+						})}
+					</div>
 
-					return (
-						<Fragment key={span.spanId + "-" + i}>
-							<div
-								className={`flex cursor-pointer items-center transition-colors hover:bg-muted/40 focus:bg-muted/40 focus:outline-none ${
-									isSelected ? "bg-primary/10" : ""
-								}`}
-								style={{ height: 26 }}
-								role="button"
-								tabIndex={0}
-								aria-label={`${span.service} ${span.name} ${formatDuration(span.duration)}`}
-								onClick={() => onSelectSpan?.(span)}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.preventDefault();
-										onSelectSpan?.(span);
-									}
-								}}
-							>
-								{/* Left column: tree connectors + service/span name */}
-								<div className="flex shrink-0 items-center overflow-hidden" style={{ width: 180 }}>
-									<TreeConnectors
-										span={span}
-										spans={spans}
-										isLastChild={isLastChild}
-										parentIndex={parentIndex}
-									/>
-									<span className={`min-w-0 truncate text-[10px] font-medium pr-2 ${color.label}`}>
-										{span.service}
-									</span>
-								</div>
+					{spans.map((span, i) => {
+						const leftPct = (span.start / maxEnd) * 100;
+						const widthPct = Math.max((span.duration / maxEnd) * 100, 0.3);
+						const isError = isErrorLevel(span.level);
+						const color = getServiceColor(span.service);
+						const barClass = isError ? "bg-red-500/80" : color.bar;
+						const isSelected = span.spanId === selectedSpanId;
+						const showTextInside = widthPct > BAR_TEXT_THRESHOLD_PCT;
 
-								{/* Timeline bar area */}
-								<div className="relative flex-1 self-stretch">
-									<div className="absolute inset-0 bg-muted/30" />
+						return (
+							<Fragment key={span.spanId + "-" + i}>
+								<div
+									className={`flex cursor-pointer items-center transition-colors hover:bg-muted/40 focus:bg-muted/40 focus:outline-none ${
+										isSelected ? "bg-primary/10" : ""
+									}`}
+									style={{ height: 26 }}
+									role="button"
+									tabIndex={0}
+									aria-label={`${span.service} ${span.name} ${formatDuration(span.duration)}`}
+									onClick={() => onSelectSpan?.(span)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.preventDefault();
+											onSelectSpan?.(span);
+										}
+									}}
+								>
+									{/* Left column: tree connectors + service/span name */}
 									<div
-										className={`absolute top-1 bottom-1 flex items-center rounded px-1 ${barClass}`}
-										style={{
-											left: `${leftPct}%`,
-											width: `${widthPct}%`,
-											minWidth: BAR_MIN_WIDTH_PX,
-										}}
-										onMouseEnter={(e) => handleMouseEnter(span, e)}
-										onMouseLeave={handleMouseLeave}
+										className="flex shrink-0 items-center overflow-hidden"
+										style={{ width: 180 }}
 									>
-										{showTextInside && (
-											<span className="truncate text-[9px] font-medium text-white">
+										<TreeConnectors
+											span={span}
+											spans={spans}
+											isLastChild={isLastChild}
+											parentIndex={parentIndex}
+										/>
+										<span
+											className={`min-w-0 truncate text-[10px] font-medium pr-2 ${color.label}`}
+										>
+											{span.service}
+										</span>
+									</div>
+
+									{/* Timeline bar area */}
+									<div className="relative flex-1 self-stretch">
+										<div className="absolute inset-0 bg-muted/30" />
+										<div
+											className={`absolute top-1 bottom-1 flex items-center rounded px-1 ${barClass}`}
+											style={{
+												left: `${leftPct}%`,
+												width: `${widthPct}%`,
+												minWidth: BAR_MIN_WIDTH_PX,
+											}}
+											onMouseEnter={(e) => handleMouseEnter(span, e)}
+											onMouseLeave={handleMouseLeave}
+										>
+											{showTextInside && (
+												<span className="truncate text-[9px] font-medium text-white">
+													{span.name}
+												</span>
+											)}
+										</div>
+
+										{/* Span name outside bar when bar is too narrow */}
+										{!showTextInside && (
+											<span
+												className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground"
+												style={{
+													left: `calc(${leftPct + widthPct}% + 4px)`,
+													maxWidth: `calc(${100 - leftPct - widthPct}% - 8px)`,
+												}}
+											>
 												{span.name}
 											</span>
 										)}
 									</div>
 
-									{/* Span name outside bar when bar is too narrow */}
-									{!showTextInside && (
-										<span
-											className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground"
-											style={{
-												left: `calc(${leftPct + widthPct}% + 4px)`,
-												maxWidth: `calc(${100 - leftPct - widthPct}% - 8px)`,
-											}}
-										>
-											{span.name}
+									{/* Duration label */}
+									<div className="shrink-0 text-right" style={{ width: 60 }}>
+										<span className="text-[10px] tabular-nums text-muted-foreground">
+											{formatDuration(span.duration)}
 										</span>
-									)}
+									</div>
 								</div>
+								{isSelected && inlineDetail && (
+									<div className="relative z-10 px-2 py-2 bg-background">{inlineDetail(span)}</div>
+								)}
+							</Fragment>
+						);
+					})}
+				</div>
 
-								{/* Duration label */}
-								<div className="shrink-0 text-right" style={{ width: 60 }}>
-									<span className="text-[10px] tabular-nums text-muted-foreground">
-										{formatDuration(span.duration)}
-									</span>
-								</div>
-							</div>
-							{isSelected && inlineDetail && (
-								<div className="relative z-10 px-2 py-2 bg-background">{inlineDetail(span)}</div>
-							)}
-						</Fragment>
-					);
-				})}
+				{/* Tooltip */}
+				{tooltip && <SpanTooltip {...tooltip} />}
 			</div>
-
-			{/* Tooltip */}
-			{tooltip && <SpanTooltip {...tooltip} />}
 		</div>
 	);
 }

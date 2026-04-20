@@ -56,7 +56,7 @@
 	},
 	"scripts": {
 		"build": "cd app && bun run build && cd .. && bunup && cp -r app/dist dist/app",
-		"dev": "bunup --watch & bun --watch src/cli.ts start & sleep 2 && bun run src/cli.ts seed --count 0 --rate 0.0083 --batch-size 1 & (cd app && bun run dev:watch) & (cd docs && bun run dev) & wait",
+		"dev": "bun --watch src/cli.ts start --no-ui --no-open & sleep 2 && bun run src/cli.ts seed --count 0 --rate 0.0083 --batch-size 1 & (cd app && bun run dev) & (cd docs && bun run dev) & wait",
 		"dev:build": "bunup --watch",
 		"dev:server": "bun --watch src/cli.ts start",
 		"dev:seed": "bun run src/cli.ts seed --count 0 --rate 0.05 --batch-size 1",

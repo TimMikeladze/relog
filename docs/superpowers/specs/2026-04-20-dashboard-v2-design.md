@@ -30,46 +30,65 @@ Replace the current hardcoded dashboard (`app/src/views/dashboard.tsx`) with a w
 
 ```ts
 type WidgetKind =
-  | "stat"
-  | "line"
-  | "bar"
-  | "table"
-  | "status-grid"
-  | "heatmap"
-  | "gauge"
-  | "sparkline";
+	| "stat"
+	| "line"
+	| "bar"
+	| "table"
+	| "status-grid"
+	| "heatmap"
+	| "gauge"
+	| "sparkline";
 
 type Widget = {
-  id: string;                      // slug, regex /^[a-zA-Z0-9_-]{1,128}$/
-  name: string;
-  description?: string;
-  kind: WidgetKind;
-  sql: string;                     // may reference ${from}, ${to}, ${service}, ${project}
-  options: WidgetOptions;          // kind-specific (see below)
-  layout: { x: number; y: number; w: number; h: number }; // react-grid-layout units
-  timeRange?: string;              // optional override, e.g. "1h" | "24h" | "7d"
-  createdAt: number;
-  updatedAt: number;
-  builtin?: boolean;               // true for OOTB seeds; user edits clone to a non-builtin copy
+	id: string; // slug, regex /^[a-zA-Z0-9_-]{1,128}$/
+	name: string;
+	description?: string;
+	kind: WidgetKind;
+	sql: string; // may reference ${from}, ${to}, ${service}, ${project}
+	options: WidgetOptions; // kind-specific (see below)
+	layout: { x: number; y: number; w: number; h: number }; // react-grid-layout units
+	timeRange?: string; // optional override, e.g. "1h" | "24h" | "7d"
+	createdAt: number;
+	updatedAt: number;
+	builtin?: boolean; // true for OOTB seeds; user edits clone to a non-builtin copy
 };
 
 type WidgetOptions =
-  | StatOptions
-  | LineOptions
-  | BarOptions
-  | TableOptions
-  | StatusGridOptions
-  | HeatmapOptions
-  | GaugeOptions
-  | SparklineOptions;
+	| StatOptions
+	| LineOptions
+	| BarOptions
+	| TableOptions
+	| StatusGridOptions
+	| HeatmapOptions
+	| GaugeOptions
+	| SparklineOptions;
 
-type StatOptions   = { valueField: string; deltaField?: string; format?: "number" | "bytes" | "ms" | "percent" };
-type LineOptions   = { xField: string; yFields: string[]; yFormat?: "number" | "ms" | "percent" };
-type BarOptions    = { categoryField: string; valueField: string; orientation?: "horizontal" | "vertical" };
-type TableOptions  = { columns: { field: string; label?: string; format?: "number" | "bytes" | "ms" | "timestamp" }[] };
-type StatusGridOptions = { labelField: string; statusField: string; thresholds: { healthy: number; degraded: number } };
+type StatOptions = {
+	valueField: string;
+	deltaField?: string;
+	format?: "number" | "bytes" | "ms" | "percent";
+};
+type LineOptions = { xField: string; yFields: string[]; yFormat?: "number" | "ms" | "percent" };
+type BarOptions = {
+	categoryField: string;
+	valueField: string;
+	orientation?: "horizontal" | "vertical";
+};
+type TableOptions = {
+	columns: { field: string; label?: string; format?: "number" | "bytes" | "ms" | "timestamp" }[];
+};
+type StatusGridOptions = {
+	labelField: string;
+	statusField: string;
+	thresholds: { healthy: number; degraded: number };
+};
 type HeatmapOptions = { xField: string; yField: string; valueField: string };
-type GaugeOptions  = { valueField: string; min?: number; max: number; thresholds?: { warn: number; crit: number } };
+type GaugeOptions = {
+	valueField: string;
+	min?: number;
+	max: number;
+	thresholds?: { warn: number; crit: number };
+};
 type SparklineOptions = { xField: string; yField: string };
 ```
 
@@ -84,13 +103,13 @@ type SparklineOptions = { xField: string; yField: string };
 
 `src/server/routes/widgets.ts`, mirroring `routes/aggregates.ts`:
 
-| Method | Path             | Auth  | Body                          | Returns              |
-|--------|------------------|-------|-------------------------------|----------------------|
-| GET    | `/widgets`       | read  | –                             | `{ widgets: Widget[] }` |
-| GET    | `/widgets/:id`   | read  | –                             | `{ widget: Widget }` |
-| POST   | `/widgets`       | admin | `Omit<Widget, createdAt\|updatedAt>` | `{ widget: Widget }` 201 |
-| PUT    | `/widgets/:id`   | admin | `Partial<Omit<Widget, id\|createdAt>>` | `{ widget: Widget }` |
-| DELETE | `/widgets/:id`   | admin | –                             | 204                  |
+| Method | Path           | Auth  | Body                                   | Returns                  |
+| ------ | -------------- | ----- | -------------------------------------- | ------------------------ |
+| GET    | `/widgets`     | read  | –                                      | `{ widgets: Widget[] }`  |
+| GET    | `/widgets/:id` | read  | –                                      | `{ widget: Widget }`     |
+| POST   | `/widgets`     | admin | `Omit<Widget, createdAt\|updatedAt>`   | `{ widget: Widget }` 201 |
+| PUT    | `/widgets/:id` | admin | `Partial<Omit<Widget, id\|createdAt>>` | `{ widget: Widget }`     |
+| DELETE | `/widgets/:id` | admin | –                                      | 204                      |
 
 Id validation: `^[a-zA-Z0-9_-]{1,128}$`. Deleting a builtin id is rejected (hide via localStorage instead).
 
@@ -115,6 +134,7 @@ substituteVars(sql: string, vars: { from: number; to: number; service?: string; 
 ```
 
 Rules:
+
 - `${from}` / `${to}` → epoch-ms integer literals.
 - `${service}` / `${project}` → quoted SQLite string literal (`'my-service'`) if set; literal `NULL` if unset. Single-quote escaping (`'` → `''`).
 - Unknown `${...}` reference → throw; widget surfaces error badge.
@@ -127,14 +147,22 @@ Rules:
 
 ```tsx
 switch (kind) {
-  case "stat":        return <StatWidget rows options />;
-  case "line":        return <LineWidget rows options />;
-  case "bar":         return <BarWidget rows options />;
-  case "table":       return <TableWidget rows options />;
-  case "status-grid": return <StatusGridWidget rows options />;
-  case "heatmap":     return <HeatmapWidget rows options />;
-  case "gauge":       return <GaugeWidget rows options />;
-  case "sparkline":   return <SparklineWidget rows options />;
+	case "stat":
+		return <StatWidget rows options />;
+	case "line":
+		return <LineWidget rows options />;
+	case "bar":
+		return <BarWidget rows options />;
+	case "table":
+		return <TableWidget rows options />;
+	case "status-grid":
+		return <StatusGridWidget rows options />;
+	case "heatmap":
+		return <HeatmapWidget rows options />;
+	case "gauge":
+		return <GaugeWidget rows options />;
+	case "sparkline":
+		return <SparklineWidget rows options />;
 }
 ```
 
@@ -152,20 +180,20 @@ Each renderer validates required option fields against returned columns; missing
 
 Seeded in `DEFAULT_WIDGETS` with `builtin: true`. SQL sketches — final SQL validated during implementation.
 
-| # | id                 | Name                    | Kind        | Metric |
-|---|--------------------|-------------------------|-------------|--------|
-| 1 | `total-logs`       | Total Logs              | stat        | count in range |
-| 2 | `db-size`          | Database Size           | stat        | `SELECT page_count * page_size AS bytes FROM pragma_page_count(), pragma_page_size()` |
-| 3 | `error-rate`       | Error Rate              | stat        | a — `SUM(CASE WHEN level IN ('error','fatal') THEN 1 END) * 100.0 / COUNT(*)` |
-| 4 | `errors-over-time` | Errors Over Time        | line        | a — per-minute count of error+fatal |
-| 5 | `throughput`       | Throughput per Service  | line        | c — logs/sec per service, bucketed |
-| 6 | `latency-p50-p95-p99` | Latency Percentiles  | line        | b — `json_extract(meta, '$.duration_ms')` percentiles per bucket |
-| 7 | `top-errors`       | Top Error Messages      | table       | d — `GROUP BY message` with `COUNT(*)`, `MAX(timestamp) AS last_seen` |
-| 8 | `slowest-events`   | Slowest Wide Events     | table       | e — `WHERE json_extract(meta,'$.event') = 1 ORDER BY duration_ms DESC LIMIT 20` |
-| 9 | `service-health`   | Service Health          | status-grid | h — per-service last-5min error% mapped to healthy/degraded/error by thresholds |
-| 10 | `project-branch`  | Project × Branch        | bar         | j — `GROUP BY project, branch COUNT(*)` |
-| 11 | `log-volume`      | Log Volume              | line        | existing — bucket `created_at` |
-| 12 | `recent-errors`   | Recent Errors           | table       | existing — last 10 logs where `level IN ('error','fatal')` |
+| #   | id                    | Name                   | Kind        | Metric                                                                                |
+| --- | --------------------- | ---------------------- | ----------- | ------------------------------------------------------------------------------------- |
+| 1   | `total-logs`          | Total Logs             | stat        | count in range                                                                        |
+| 2   | `db-size`             | Database Size          | stat        | `SELECT page_count * page_size AS bytes FROM pragma_page_count(), pragma_page_size()` |
+| 3   | `error-rate`          | Error Rate             | stat        | a — `SUM(CASE WHEN level IN ('error','fatal') THEN 1 END) * 100.0 / COUNT(*)`         |
+| 4   | `errors-over-time`    | Errors Over Time       | line        | a — per-minute count of error+fatal                                                   |
+| 5   | `throughput`          | Throughput per Service | line        | c — logs/sec per service, bucketed                                                    |
+| 6   | `latency-p50-p95-p99` | Latency Percentiles    | line        | b — `json_extract(meta, '$.duration_ms')` percentiles per bucket                      |
+| 7   | `top-errors`          | Top Error Messages     | table       | d — `GROUP BY message` with `COUNT(*)`, `MAX(timestamp) AS last_seen`                 |
+| 8   | `slowest-events`      | Slowest Wide Events    | table       | e — `WHERE json_extract(meta,'$.event') = 1 ORDER BY duration_ms DESC LIMIT 20`       |
+| 9   | `service-health`      | Service Health         | status-grid | h — per-service last-5min error% mapped to healthy/degraded/error by thresholds       |
+| 10  | `project-branch`      | Project × Branch       | bar         | j — `GROUP BY project, branch COUNT(*)`                                               |
+| 11  | `log-volume`          | Log Volume             | line        | existing — bucket `created_at`                                                        |
+| 12  | `recent-errors`       | Recent Errors          | table       | existing — last 10 logs where `level IN ('error','fatal')`                            |
 
 **Health stats via plain SQL (no special-casing)**: the current dashboard's `/health` endpoint returns status, log count, DB size, and uptime. Rather than special-case a "health" widget that bypasses the SQL pipeline, each of those becomes its own plain-SQL tile:
 
@@ -176,6 +204,7 @@ Seeded in `DEFAULT_WIDGETS` with `builtin: true`. SQL sketches — final SQL val
 ### Default Layout
 
 3-column grid (react-grid-layout `cols=12`, each widget w=4 default):
+
 - Row 1 (stats, h=2): `total-logs`, `db-size`, `error-rate`
 - Row 2 (lines, h=4): `log-volume` (w=12)
 - Row 3 (lines, h=4): `errors-over-time` (w=6), `throughput` (w=6)
@@ -219,6 +248,7 @@ Acceptable perf for typical log volumes (< ~1M rows in window). If benchmarks sh
 ### Top Filter Bar
 
 Replaces the current dashboard header. Left-to-right:
+
 - Time range toggle: 1h / 6h / 24h / 7d / 30d (existing control, reused)
 - Service picker: **single-select** dropdown (explicit scope choice — multi-select deferred to a later spec). Options from `SELECT DISTINCT service FROM logs WHERE service IS NOT NULL ORDER BY service`, cached 60s. Unselected → `${service}` substitutes to `NULL`.
 - Project picker: single-select on `project` column, same treatment

@@ -7,6 +7,7 @@
 **Architecture:** Server persists widget definitions to `~/.relog/widgets.json` via a `WidgetsManager` mirroring `AggregatesManager`. A `/widgets` HTTP route (GET=read role, mutations=admin role) exposes CRUD. On the client, a filter bar drives global vars (`${from}`, `${to}`, `${service}`, `${project}`); each widget runs its SQL through `/query`, then a per-kind renderer (`stat`, `line`, `bar`, `table`, `status-grid`, `heatmap`, `gauge`, `sparkline`) draws the result. `react-grid-layout` handles drag/resize in edit mode.
 
 **Tech Stack:**
+
 - Server: Bun + TypeScript, SQLite via `bun:sqlite`, existing `handleQuery` + DuckDB reader
 - Client: React 19, Vite, Vitest, recharts, CodeMirror 6, react-grid-layout (new dep)
 - Tests: `bun test` for server (`test/*.test.ts`); Vitest + jsdom + `@testing-library/react` for client (`src/**/*.vitest.tsx`)
@@ -20,38 +21,38 @@
 
 ### Server (new/modified)
 
-| File | Purpose |
-|------|---------|
-| `src/types.ts` | Add `Widget`, `WidgetKind`, `WidgetOptions` unions (shared with client via import) |
-| `src/paths.ts` | Add `getWidgetsPath()` |
-| `src/server/widgets.ts` | `WidgetsManager` class + `DEFAULT_WIDGETS` seeds |
-| `src/server/routes/widgets.ts` | `handleWidgets(request, manager)` CRUD handler |
-| `src/server/server.ts` | Instantiate manager, mount route with auth gating |
-| `test/widgets.test.ts` | Manager CRUD + persistence + default seeding + route tests |
+| File                           | Purpose                                                                            |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `src/types.ts`                 | Add `Widget`, `WidgetKind`, `WidgetOptions` unions (shared with client via import) |
+| `src/paths.ts`                 | Add `getWidgetsPath()`                                                             |
+| `src/server/widgets.ts`        | `WidgetsManager` class + `DEFAULT_WIDGETS` seeds                                   |
+| `src/server/routes/widgets.ts` | `handleWidgets(request, manager)` CRUD handler                                     |
+| `src/server/server.ts`         | Instantiate manager, mount route with auth gating                                  |
+| `test/widgets.test.ts`         | Manager CRUD + persistence + default seeding + route tests                         |
 
 ### Client (new/modified)
 
-| File | Purpose |
-|------|---------|
-| `app/src/types.ts` | Mirror `Widget`, `WidgetKind`, `WidgetOptions` types |
-| `app/src/api/client.ts` | Add `/widgets` helper (reuse existing `apiGet/Post/Put/Delete`) |
-| `app/src/hooks/use-widgets.ts` | CRUD + local cache hook |
-| `app/src/hooks/use-widget-data.ts` | Per-widget query runner (resolve vars → POST `/query` → expose rows/loading/error) |
-| `app/src/components/dashboard/sql-vars.ts` | `substituteVars(sql, vars)` |
-| `app/src/components/dashboard/filter-bar.tsx` | Time range + service + project + auto-refresh + edit-mode toggle + status badge |
-| `app/src/components/dashboard/widget-grid.tsx` | `react-grid-layout` wrapper, admin-gated drag/resize, debounced PUT |
-| `app/src/components/dashboard/widget-renderer.tsx` | `kind` dispatcher + `WidgetError`, `WidgetLoading`, `WidgetEmpty` helpers |
-| `app/src/components/dashboard/widgets/stat.tsx` | Stat card renderer (big number + delta) |
-| `app/src/components/dashboard/widgets/line.tsx` | Line/area time series |
-| `app/src/components/dashboard/widgets/bar.tsx` | Horizontal or vertical bar |
-| `app/src/components/dashboard/widgets/table.tsx` | Rows w/ format hints |
-| `app/src/components/dashboard/widgets/status-grid.tsx` | Per-service colored dots |
-| `app/src/components/dashboard/widgets/heatmap.tsx` | 2D bucket heatmap |
-| `app/src/components/dashboard/widgets/gauge.tsx` | Radial gauge |
-| `app/src/components/dashboard/widgets/sparkline.tsx` | Inline mini-line |
-| `app/src/components/dashboard/widget-editor.tsx` | Modal: CodeMirror SQL + kind + options + live preview |
-| `app/src/views/dashboard.tsx` | Rewritten as orchestrator |
-| `app/src/components/dashboard/*.vitest.tsx` | One test file per non-trivial component |
+| File                                                   | Purpose                                                                            |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `app/src/types.ts`                                     | Mirror `Widget`, `WidgetKind`, `WidgetOptions` types                               |
+| `app/src/api/client.ts`                                | Add `/widgets` helper (reuse existing `apiGet/Post/Put/Delete`)                    |
+| `app/src/hooks/use-widgets.ts`                         | CRUD + local cache hook                                                            |
+| `app/src/hooks/use-widget-data.ts`                     | Per-widget query runner (resolve vars → POST `/query` → expose rows/loading/error) |
+| `app/src/components/dashboard/sql-vars.ts`             | `substituteVars(sql, vars)`                                                        |
+| `app/src/components/dashboard/filter-bar.tsx`          | Time range + service + project + auto-refresh + edit-mode toggle + status badge    |
+| `app/src/components/dashboard/widget-grid.tsx`         | `react-grid-layout` wrapper, admin-gated drag/resize, debounced PUT                |
+| `app/src/components/dashboard/widget-renderer.tsx`     | `kind` dispatcher + `WidgetError`, `WidgetLoading`, `WidgetEmpty` helpers          |
+| `app/src/components/dashboard/widgets/stat.tsx`        | Stat card renderer (big number + delta)                                            |
+| `app/src/components/dashboard/widgets/line.tsx`        | Line/area time series                                                              |
+| `app/src/components/dashboard/widgets/bar.tsx`         | Horizontal or vertical bar                                                         |
+| `app/src/components/dashboard/widgets/table.tsx`       | Rows w/ format hints                                                               |
+| `app/src/components/dashboard/widgets/status-grid.tsx` | Per-service colored dots                                                           |
+| `app/src/components/dashboard/widgets/heatmap.tsx`     | 2D bucket heatmap                                                                  |
+| `app/src/components/dashboard/widgets/gauge.tsx`       | Radial gauge                                                                       |
+| `app/src/components/dashboard/widgets/sparkline.tsx`   | Inline mini-line                                                                   |
+| `app/src/components/dashboard/widget-editor.tsx`       | Modal: CodeMirror SQL + kind + options + live preview                              |
+| `app/src/views/dashboard.tsx`                          | Rewritten as orchestrator                                                          |
+| `app/src/components/dashboard/*.vitest.tsx`            | One test file per non-trivial component                                            |
 
 ### Dependencies
 
@@ -77,6 +78,7 @@
 ## Task 1 — Add Widget types (shared)
 
 **Files:**
+
 - Modify: `src/types.ts` (append after `Aggregate` block at end of file)
 - Modify: `app/src/types.ts` (append, keep client-side mirror)
 
@@ -205,6 +207,7 @@ git commit -m "feat(types): add Widget type definitions for dashboard v2"
 ## Task 2 — Add `getWidgetsPath()`
 
 **Files:**
+
 - Modify: `src/paths.ts`
 
 - [ ] **Step 2.1: Add function after `getAggregatesPath`**
@@ -249,6 +252,7 @@ git commit -m "feat(paths): add getWidgetsPath()"
 ## Task 3 — `WidgetsManager` (server)
 
 **Files:**
+
 - Create: `src/server/widgets.ts`
 - Create: `test/widgets.test.ts`
 
@@ -268,7 +272,10 @@ function tmpFile(): string {
 	return join(tmpdir(), `relog-widgets-${Date.now()}-${Math.random().toString(36).slice(2)}.json`);
 }
 
-function makeWidget(id: string, overrides: Partial<Widget> = {}): Omit<Widget, "createdAt" | "updatedAt"> {
+function makeWidget(
+	id: string,
+	overrides: Partial<Widget> = {},
+): Omit<Widget, "createdAt" | "updatedAt"> {
 	return {
 		id,
 		name: `Widget ${id}`,
@@ -284,7 +291,9 @@ describe("WidgetsManager", () => {
 	const created: string[] = [];
 	afterEach(() => {
 		for (const p of created.splice(0)) {
-			try { unlinkSync(p); } catch {}
+			try {
+				unlinkSync(p);
+			} catch {}
 		}
 	});
 
@@ -415,42 +424,42 @@ Expected: PASS.
 Append to `test/widgets.test.ts`:
 
 ```ts
-	test("update persists", async () => {
-		const path = tmpFile();
-		created.push(path);
-		const m = new WidgetsManager(path);
-		await m.init();
-		await m.add(makeWidget("u", { name: "Original" }));
-		await m.update("u", { name: "Updated" });
+test("update persists", async () => {
+	const path = tmpFile();
+	created.push(path);
+	const m = new WidgetsManager(path);
+	await m.init();
+	await m.add(makeWidget("u", { name: "Original" }));
+	await m.update("u", { name: "Updated" });
 
-		const m2 = new WidgetsManager(path);
-		await m2.init();
-		expect(m2.get("u")!.name).toBe("Updated");
-	});
+	const m2 = new WidgetsManager(path);
+	await m2.init();
+	expect(m2.get("u")!.name).toBe("Updated");
+});
 
-	test("delete persists", async () => {
-		const path = tmpFile();
-		created.push(path);
-		const m = new WidgetsManager(path);
-		await m.init();
-		await m.add(makeWidget("d"));
-		expect(await m.delete("d")).toBe(true);
+test("delete persists", async () => {
+	const path = tmpFile();
+	created.push(path);
+	const m = new WidgetsManager(path);
+	await m.init();
+	await m.add(makeWidget("d"));
+	expect(await m.delete("d")).toBe(true);
 
-		const m2 = new WidgetsManager(path);
-		await m2.init();
-		expect(m2.get("d")).toBeNull();
-	});
+	const m2 = new WidgetsManager(path);
+	await m2.init();
+	expect(m2.get("d")).toBeNull();
+});
 
-	test("cannot delete builtin widget", async () => {
-		const path = tmpFile();
-		created.push(path);
-		const m = new WidgetsManager(path);
-		await m.init();
-		// Inject a builtin directly for this test
-		await m.add({ ...makeWidget("bi"), builtin: true });
-		expect(await m.delete("bi")).toBe(false);
-		expect(m.get("bi")).not.toBeNull();
-	});
+test("cannot delete builtin widget", async () => {
+	const path = tmpFile();
+	created.push(path);
+	const m = new WidgetsManager(path);
+	await m.init();
+	// Inject a builtin directly for this test
+	await m.add({ ...makeWidget("bi"), builtin: true });
+	expect(await m.delete("bi")).toBe(false);
+	expect(m.get("bi")).not.toBeNull();
+});
 ```
 
 - [ ] **Step 3.6: Run tests**
@@ -470,6 +479,7 @@ git commit -m "feat(server): add WidgetsManager CRUD with JSON persistence"
 ## Task 4 — `DEFAULT_WIDGETS` seeds
 
 **Files:**
+
 - Modify: `src/server/widgets.ts` (replace placeholder `DEFAULT_WIDGETS`)
 - Modify: `test/widgets.test.ts` (add seeding test)
 
@@ -478,19 +488,19 @@ git commit -m "feat(server): add WidgetsManager CRUD with JSON persistence"
 Append to `test/widgets.test.ts`:
 
 ```ts
-	test("init on empty file seeds DEFAULT_WIDGETS", async () => {
-		const path = tmpFile();
-		created.push(path);
-		const m = new WidgetsManager(path);
-		await m.init();
-		const all = m.getAll();
-		expect(all.length).toBeGreaterThanOrEqual(11);
-		// Known seed ids
-		for (const id of ["total-logs", "error-rate", "errors-over-time", "top-errors"]) {
-			expect(m.get(id)).not.toBeNull();
-			expect(m.get(id)!.builtin).toBe(true);
-		}
-	});
+test("init on empty file seeds DEFAULT_WIDGETS", async () => {
+	const path = tmpFile();
+	created.push(path);
+	const m = new WidgetsManager(path);
+	await m.init();
+	const all = m.getAll();
+	expect(all.length).toBeGreaterThanOrEqual(11);
+	// Known seed ids
+	for (const id of ["total-logs", "error-rate", "errors-over-time", "top-errors"]) {
+		expect(m.get(id)).not.toBeNull();
+		expect(m.get(id)!.builtin).toBe(true);
+	}
+});
 ```
 
 - [ ] **Step 4.2: Run to verify failure**
@@ -820,6 +830,7 @@ git commit -m "feat(widgets): seed 12 default OOTB widgets with SQL"
 ## Task 5 — `/widgets` HTTP route
 
 **Files:**
+
 - Create: `src/server/routes/widgets.ts`
 - Modify: `test/widgets.test.ts` (add route tests)
 
@@ -852,10 +863,7 @@ describe("handleWidgets", () => {
 	test("POST /widgets creates a widget", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", makeWidget("custom")),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", makeWidget("custom")), m);
 		expect(res.status).toBe(201);
 		expect(m.get("custom")).not.toBeNull();
 	});
@@ -863,20 +871,14 @@ describe("handleWidgets", () => {
 	test("POST /widgets rejects missing fields", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", { id: "x" }),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", { id: "x" }), m);
 		expect(res.status).toBe(400);
 	});
 
 	test("POST /widgets rejects bad id", async () => {
 		const m = new WidgetsManager();
 		await m.init();
-		const res = await handleWidgets(
-			await req("POST", "/widgets", makeWidget("bad id!")),
-			m,
-		);
+		const res = await handleWidgets(await req("POST", "/widgets", makeWidget("bad id!")), m);
 		expect(res.status).toBe(400);
 	});
 
@@ -884,10 +886,7 @@ describe("handleWidgets", () => {
 		const m = new WidgetsManager();
 		await m.init();
 		await m.add(makeWidget("u"));
-		const res = await handleWidgets(
-			await req("PUT", "/widgets/u", { name: "Renamed" }),
-			m,
-		);
+		const res = await handleWidgets(await req("PUT", "/widgets/u", { name: "Renamed" }), m);
 		expect(res.status).toBe(200);
 		expect(m.get("u")!.name).toBe("Renamed");
 	});
@@ -1022,10 +1021,12 @@ Expected: all tests PASS.
 - [ ] **Step 5.5: Lint + format**
 
 Run:
+
 ```bash
 bun run lint
 bun run format
 ```
+
 Expected: clean (ignore pre-existing warnings in files you did not touch).
 
 - [ ] **Step 5.6: Commit**
@@ -1040,6 +1041,7 @@ git commit -m "feat(server): add /widgets CRUD route handler"
 ## Task 6 — Wire `/widgets` into server bootstrap
 
 **Files:**
+
 - Modify: `src/server/server.ts`
 
 - [ ] **Step 6.1: Add imports**
@@ -1089,6 +1091,7 @@ In the return value of `startServer`, include `widgetsManager` alongside `aggreg
 - [ ] **Step 6.6: Smoke test — server boot**
 
 Run:
+
 ```bash
 bun run src/cli.ts start --no-ui --no-open &
 SERVER_PID=$!
@@ -1096,6 +1099,7 @@ sleep 1
 curl -s http://localhost:3485/widgets | head -c 400
 kill $SERVER_PID
 ```
+
 Expected: JSON `{ "widgets": [ … ] }` with seeded ids.
 
 - [ ] **Step 6.7: Commit**
@@ -1110,6 +1114,7 @@ git commit -m "feat(server): mount /widgets route with read/admin auth"
 ## Task 7 — Client `/widgets` API helpers + `useWidgets` hook
 
 **Files:**
+
 - Modify: `app/src/api/client.ts` (no change needed — reuse `apiGet/Post/Put/Delete`)
 - Create: `app/src/hooks/use-widgets.ts`
 
@@ -1150,11 +1155,14 @@ export function useWidgets() {
 		return res.widget;
 	}, []);
 
-	const update = useCallback(async (id: string, patch: Partial<Omit<Widget, "id" | "createdAt">>) => {
-		const res = await apiPut<{ widget: Widget }>(`/widgets/${id}`, patch);
-		setWidgets((prev) => prev.map((x) => (x.id === id ? res.widget : x)));
-		return res.widget;
-	}, []);
+	const update = useCallback(
+		async (id: string, patch: Partial<Omit<Widget, "id" | "createdAt">>) => {
+			const res = await apiPut<{ widget: Widget }>(`/widgets/${id}`, patch);
+			setWidgets((prev) => prev.map((x) => (x.id === id ? res.widget : x)));
+			return res.widget;
+		},
+		[],
+	);
 
 	const remove = useCallback(async (id: string) => {
 		await apiDelete(`/widgets/${id}`);
@@ -1182,6 +1190,7 @@ git commit -m "feat(app): add useWidgets hook for /widgets CRUD"
 ## Task 8 — `substituteVars` SQL template
 
 **Files:**
+
 - Create: `app/src/components/dashboard/sql-vars.ts`
 - Create: `app/src/components/dashboard/sql-vars.vitest.ts`
 
@@ -1289,6 +1298,7 @@ git commit -m "feat(app): add substituteVars SQL template helper"
 ## Task 9 — `useWidgetData` hook
 
 **Files:**
+
 - Create: `app/src/hooks/use-widget-data.ts`
 
 - [ ] **Step 9.1: Implement hook**
@@ -1312,10 +1322,10 @@ const TIME_RANGE_MS: Record<string, number> = {
 export const QUERY_TIMEOUT_MS = 15_000;
 
 export interface WidgetFilters {
-	timeRange: string;       // e.g. "24h"
+	timeRange: string; // e.g. "24h"
 	service?: string | null;
 	project?: string | null;
-	nowMs?: number;           // for testability
+	nowMs?: number; // for testability
 }
 
 export function resolveVars(widget: Widget, filters: WidgetFilters): SqlVars {
@@ -1338,7 +1348,11 @@ export interface WidgetDataState {
 	reload: () => void;
 }
 
-export function useWidgetData(widget: Widget, filters: WidgetFilters, refreshKey: number): WidgetDataState {
+export function useWidgetData(
+	widget: Widget,
+	filters: WidgetFilters,
+	refreshKey: number,
+): WidgetDataState {
 	const [rows, setRows] = useState<Record<string, unknown>[]>([]);
 	const [columns, setColumns] = useState<string[]>([]);
 	const [loading, setLoading] = useState(false);
@@ -1403,6 +1417,7 @@ git commit -m "feat(app): add useWidgetData hook with SQL var resolution + timeo
 ## Task 10 — Widget renderer shell (`WidgetRenderer` + error/loading/empty helpers)
 
 **Files:**
+
 - Create: `app/src/components/dashboard/widget-renderer.tsx`
 
 - [ ] **Step 10.1: Implement dispatcher + state helpers**
@@ -1438,14 +1453,22 @@ export function WidgetRenderer(props: WidgetRenderProps) {
 
 	const options = widget.options as never;
 	switch (widget.kind) {
-		case "stat":        return <StatWidget rows={rows} options={options} />;
-		case "line":        return <LineWidget rows={rows} options={options} />;
-		case "bar":         return <BarWidget rows={rows} options={options} />;
-		case "table":       return <TableWidget rows={rows} options={options} />;
-		case "status-grid": return <StatusGridWidget rows={rows} options={options} />;
-		case "heatmap":     return <HeatmapWidget rows={rows} options={options} />;
-		case "gauge":       return <GaugeWidget rows={rows} options={options} />;
-		case "sparkline":   return <SparklineWidget rows={rows} options={options} />;
+		case "stat":
+			return <StatWidget rows={rows} options={options} />;
+		case "line":
+			return <LineWidget rows={rows} options={options} />;
+		case "bar":
+			return <BarWidget rows={rows} options={options} />;
+		case "table":
+			return <TableWidget rows={rows} options={options} />;
+		case "status-grid":
+			return <StatusGridWidget rows={rows} options={options} />;
+		case "heatmap":
+			return <HeatmapWidget rows={rows} options={options} />;
+		case "gauge":
+			return <GaugeWidget rows={rows} options={options} />;
+		case "sparkline":
+			return <SparklineWidget rows={rows} options={options} />;
 	}
 }
 
@@ -1490,6 +1513,7 @@ Defer typecheck until Task 11 is complete (renderers imported here are created t
 ## Task 11 — Kind-specific renderers
 
 **Files:**
+
 - Create: `app/src/components/dashboard/widgets/stat.tsx`
 - Create: `app/src/components/dashboard/widgets/line.tsx`
 - Create: `app/src/components/dashboard/widgets/bar.tsx`
@@ -1548,15 +1572,22 @@ import type { StatOptions } from "@/types";
 import { formatValue } from "./format";
 import { WidgetError } from "../widget-renderer";
 
-export function StatWidget({ rows, options }: { rows: Record<string, unknown>[]; options: StatOptions }) {
+export function StatWidget({
+	rows,
+	options,
+}: {
+	rows: Record<string, unknown>[];
+	options: StatOptions;
+}) {
 	const row = rows[0];
 	if (!row || !(options.valueField in row)) {
 		return <WidgetError message={`Missing column: ${options.valueField}`} />;
 	}
 	const value = formatValue(row[options.valueField], options.format ?? "number");
-	const delta = options.deltaField && options.deltaField in row
-		? formatValue(row[options.deltaField], options.format ?? "number")
-		: null;
+	const delta =
+		options.deltaField && options.deltaField in row
+			? formatValue(row[options.deltaField], options.format ?? "number")
+			: null;
 	return (
 		<div className="flex h-full flex-col justify-center gap-1 p-3">
 			<div className="text-2xl font-semibold tabular-nums">{value}</div>
@@ -1586,7 +1617,13 @@ import { WidgetError } from "../widget-renderer";
 
 const LINE_COLORS = ["#60a5fa", "#f87171", "#34d399", "#fbbf24", "#a78bfa", "#f472b6"];
 
-export function LineWidget({ rows, options }: { rows: Record<string, unknown>[]; options: LineOptions }) {
+export function LineWidget({
+	rows,
+	options,
+}: {
+	rows: Record<string, unknown>[];
+	options: LineOptions;
+}) {
 	if (rows.length && !(options.xField in rows[0])) {
 		return <WidgetError message={`Missing x column: ${options.xField}`} />;
 	}
@@ -1649,9 +1686,17 @@ import type { BarOptions } from "@/types";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { WidgetError } from "../widget-renderer";
 
-export function BarWidget({ rows, options }: { rows: Record<string, unknown>[]; options: BarOptions }) {
+export function BarWidget({
+	rows,
+	options,
+}: {
+	rows: Record<string, unknown>[];
+	options: BarOptions;
+}) {
 	if (rows.length && (!(options.categoryField in rows[0]) || !(options.valueField in rows[0]))) {
-		return <WidgetError message={`Missing column: ${options.categoryField} or ${options.valueField}`} />;
+		return (
+			<WidgetError message={`Missing column: ${options.categoryField} or ${options.valueField}`} />
+		);
 	}
 	const horizontal = options.orientation !== "vertical";
 	return (
@@ -1718,7 +1763,13 @@ Create `app/src/components/dashboard/widgets/table.tsx`:
 import type { TableOptions } from "@/types";
 import { formatValue } from "./format";
 
-export function TableWidget({ rows, options }: { rows: Record<string, unknown>[]; options: TableOptions }) {
+export function TableWidget({
+	rows,
+	options,
+}: {
+	rows: Record<string, unknown>[];
+	options: TableOptions;
+}) {
 	return (
 		<div className="h-full overflow-auto p-1">
 			<table className="w-full text-xs">
@@ -1771,7 +1822,9 @@ export function StatusGridWidget({
 	options: StatusGridOptions;
 }) {
 	if (rows.length && (!(options.labelField in rows[0]) || !(options.statusField in rows[0]))) {
-		return <WidgetError message={`Missing column: ${options.labelField} or ${options.statusField}`} />;
+		return (
+			<WidgetError message={`Missing column: ${options.labelField} or ${options.statusField}`} />
+		);
 	}
 	return (
 		<div className="grid h-full grid-cols-4 gap-2 p-3 sm:grid-cols-6 md:grid-cols-8">
@@ -1892,14 +1945,7 @@ export function GaugeWidget({
 		<div className="flex h-full flex-col items-center justify-center gap-2 p-3">
 			<div className="relative h-20 w-20">
 				<svg viewBox="0 0 36 36" className="h-full w-full -rotate-90">
-					<circle
-						cx="18"
-						cy="18"
-						r="16"
-						fill="none"
-						stroke="var(--color-border)"
-						strokeWidth="3"
-					/>
+					<circle cx="18" cy="18" r="16" fill="none" stroke="var(--color-border)" strokeWidth="3" />
 					<circle
 						cx="18"
 						cy="18"
@@ -1975,6 +2021,7 @@ git commit -m "feat(app): add 8 kind-specific widget renderers + WidgetRenderer 
 ## Task 12 — Widget renderer test
 
 **Files:**
+
 - Create: `app/src/components/dashboard/widget-renderer.vitest.tsx`
 
 - [ ] **Step 12.1: Write renderer dispatch test**
@@ -2003,9 +2050,7 @@ function widgetOf(kind: Widget["kind"], opts: object): Widget {
 describe("WidgetRenderer", () => {
 	test("shows error state", () => {
 		const w = widgetOf("stat", { valueField: "v" });
-		render(
-			<WidgetRenderer widget={w} rows={[]} columns={[]} loading={false} error="boom" />,
-		);
+		render(<WidgetRenderer widget={w} rows={[]} columns={[]} loading={false} error="boom" />);
 		expect(screen.getByText("boom")).toBeInTheDocument();
 	});
 
@@ -2062,11 +2107,13 @@ git commit -m "test(app): add WidgetRenderer dispatch + error-state tests"
 ## Task 13 — Install `react-grid-layout`
 
 **Files:**
+
 - Modify: `app/package.json`
 
 - [ ] **Step 13.1: Install**
 
 Run:
+
 ```bash
 cd app && bun add react-grid-layout && bun add -d @types/react-grid-layout
 ```
@@ -2085,6 +2132,7 @@ git commit -m "chore(app): add react-grid-layout"
 ## Task 14 — `WidgetGrid`
 
 **Files:**
+
 - Create: `app/src/components/dashboard/widget-grid.tsx`
 
 - [ ] **Step 14.1: Implement grid**
@@ -2109,13 +2157,22 @@ export interface WidgetGridProps {
 	renderWidget: (w: Widget) => React.ReactNode;
 }
 
-export function WidgetGrid({ widgets, editMode, width, onLayoutChange, renderWidget }: WidgetGridProps) {
+export function WidgetGrid({
+	widgets,
+	editMode,
+	width,
+	onLayoutChange,
+	renderWidget,
+}: WidgetGridProps) {
 	const pendingRef = useRef<Map<string, Widget["layout"]>>(new Map());
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
 	const flush = useCallback(() => {
 		if (pendingRef.current.size === 0) return;
-		const updates = Array.from(pendingRef.current.entries()).map(([id, layout]) => ({ id, layout }));
+		const updates = Array.from(pendingRef.current.entries()).map(([id, layout]) => ({
+			id,
+			layout,
+		}));
 		pendingRef.current.clear();
 		onLayoutChange(updates);
 	}, [onLayoutChange]);
@@ -2127,19 +2184,27 @@ export function WidgetGrid({ widgets, editMode, width, onLayoutChange, renderWid
 		};
 	}, [editMode, flush]);
 
-	const handleLayoutChange = useCallback((layouts: Layout[]) => {
-		if (!editMode) return;
-		const byId = new Map(widgets.map((w) => [w.id, w]));
-		for (const l of layouts) {
-			const prev = byId.get(l.i);
-			if (!prev) continue;
-			if (prev.layout.x !== l.x || prev.layout.y !== l.y || prev.layout.w !== l.w || prev.layout.h !== l.h) {
-				pendingRef.current.set(l.i, { x: l.x, y: l.y, w: l.w, h: l.h });
+	const handleLayoutChange = useCallback(
+		(layouts: Layout[]) => {
+			if (!editMode) return;
+			const byId = new Map(widgets.map((w) => [w.id, w]));
+			for (const l of layouts) {
+				const prev = byId.get(l.i);
+				if (!prev) continue;
+				if (
+					prev.layout.x !== l.x ||
+					prev.layout.y !== l.y ||
+					prev.layout.w !== l.w ||
+					prev.layout.h !== l.h
+				) {
+					pendingRef.current.set(l.i, { x: l.x, y: l.y, w: l.w, h: l.h });
+				}
 			}
-		}
-		if (debounceRef.current) clearTimeout(debounceRef.current);
-		debounceRef.current = setTimeout(flush, 2000);
-	}, [widgets, editMode, flush]);
+			if (debounceRef.current) clearTimeout(debounceRef.current);
+			debounceRef.current = setTimeout(flush, 2000);
+		},
+		[widgets, editMode, flush],
+	);
 
 	const layout: Layout[] = widgets.map((w) => ({
 		i: w.id,
@@ -2192,6 +2257,7 @@ git commit -m "feat(app): add WidgetGrid wrapper around react-grid-layout with d
 ## Task 15 — `FilterBar`
 
 **Files:**
+
 - Create: `app/src/components/dashboard/filter-bar.tsx`
 
 - [ ] **Step 15.1: Implement filter bar**
@@ -2260,12 +2326,16 @@ export function FilterBar(props: FilterBarProps) {
 			apiPost<QueryResult>("/query", {
 				sql: "SELECT DISTINCT project FROM logs WHERE project IS NOT NULL ORDER BY project LIMIT 500",
 			}),
-		]).then(([s, p]) => {
-			if (cancelled) return;
-			setServices(s.rows.map((r) => String(r.service)));
-			setProjects(p.rows.map((r) => String(r.project)));
-		}).catch(() => {});
-		return () => { cancelled = true; };
+		])
+			.then(([s, p]) => {
+				if (cancelled) return;
+				setServices(s.rows.map((r) => String(r.service)));
+				setProjects(p.rows.map((r) => String(r.project)));
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	return (
@@ -2293,7 +2363,11 @@ export function FilterBar(props: FilterBarProps) {
 				onChange={(e) => props.onService(e.target.value || null)}
 			>
 				<option value="">All services</option>
-				{services.map((s) => <option key={s} value={s}>{s}</option>)}
+				{services.map((s) => (
+					<option key={s} value={s}>
+						{s}
+					</option>
+				))}
 			</select>
 
 			<select
@@ -2302,7 +2376,11 @@ export function FilterBar(props: FilterBarProps) {
 				onChange={(e) => props.onProject(e.target.value || null)}
 			>
 				<option value="">All projects</option>
-				{projects.map((p) => <option key={p} value={p}>{p}</option>)}
+				{projects.map((p) => (
+					<option key={p} value={p}>
+						{p}
+					</option>
+				))}
 			</select>
 
 			<div className="flex-1" />
@@ -2330,7 +2408,9 @@ export function FilterBar(props: FilterBarProps) {
 				onChange={(e) => props.onRefreshMs(Number(e.target.value))}
 			>
 				{REFRESH_OPTIONS.map((o) => (
-					<option key={o.label} value={o.ms}>Auto: {o.label}</option>
+					<option key={o.label} value={o.ms}>
+						Auto: {o.label}
+					</option>
 				))}
 			</select>
 
@@ -2379,6 +2459,7 @@ git commit -m "feat(app): add dashboard FilterBar with service/project pickers +
 ## Task 16 — `WidgetEditor` modal
 
 **Files:**
+
 - Create: `app/src/components/dashboard/widget-editor.tsx`
 
 - [ ] **Step 16.1: Implement editor**
@@ -2415,7 +2496,11 @@ const DEFAULT_OPTIONS: Record<WidgetKind, WidgetOptions> = {
 	line: { xField: "bucket", yFields: ["value"] },
 	bar: { categoryField: "label", valueField: "value" },
 	table: { columns: [{ field: "value" }] },
-	"status-grid": { labelField: "label", statusField: "value", thresholds: { healthy: 1, degraded: 5 } },
+	"status-grid": {
+		labelField: "label",
+		statusField: "value",
+		thresholds: { healthy: 1, degraded: 5 },
+	},
 	heatmap: { xField: "x", yField: "y", valueField: "value" },
 	gauge: { valueField: "value", max: 100 },
 	sparkline: { xField: "x", yField: "value" },
@@ -2440,7 +2525,8 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		props.initial?.options ?? DEFAULT_OPTIONS.stat,
 	);
 	const [sqlText, setSqlText] = useState(
-		props.initial?.sql ?? "SELECT COUNT(*) AS value FROM logs WHERE created_at BETWEEN ${from} AND ${to}",
+		props.initial?.sql ??
+			"SELECT COUNT(*) AS value FROM logs WHERE created_at BETWEEN ${from} AND ${to}",
 	);
 	const [previewRows, setPreviewRows] = useState<Record<string, unknown>[]>([]);
 	const [previewCols, setPreviewCols] = useState<string[]>([]);
@@ -2449,16 +2535,19 @@ export function WidgetEditor(props: WidgetEditorProps) {
 	const editorHost = useRef<HTMLDivElement | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
 
-	const previewWidget: Widget = useMemo(() => ({
-		id: id || "preview",
-		name: name || "Preview",
-		kind,
-		sql: sqlText,
-		options,
-		layout: { x: 0, y: 0, w: 6, h: 4 },
-		createdAt: 0,
-		updatedAt: 0,
-	}), [id, name, kind, sqlText, options]);
+	const previewWidget: Widget = useMemo(
+		() => ({
+			id: id || "preview",
+			name: name || "Preview",
+			kind,
+			sql: sqlText,
+			options,
+			layout: { x: 0, y: 0, w: 6, h: 4 },
+			createdAt: 0,
+			updatedAt: 0,
+		}),
+		[id, name, kind, sqlText, options],
+	);
 
 	// Mount CodeMirror once
 	useEffect(() => {
@@ -2535,9 +2624,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6">
 			<div className="flex h-full max-h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl">
 				<div className="flex items-center justify-between border-b border-border p-3">
-					<h2 className="text-sm font-semibold">
-						{props.initial ? "Edit widget" : "New widget"}
-					</h2>
+					<h2 className="text-sm font-semibold">{props.initial ? "Edit widget" : "New widget"}</h2>
 					<button type="button" onClick={props.onCancel} className="rounded p-1 hover:bg-muted">
 						<X className="h-4 w-4" />
 					</button>
@@ -2576,12 +2663,19 @@ export function WidgetEditor(props: WidgetEditorProps) {
 								onChange={(e) => handleKindChange(e.target.value as WidgetKind)}
 								className="rounded-md border border-border bg-background px-2 py-1"
 							>
-								{KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+								{KINDS.map((k) => (
+									<option key={k.value} value={k.value}>
+										{k.label}
+									</option>
+								))}
 							</select>
 						</label>
 						<div className="flex flex-col gap-1">
 							<span className="text-muted-foreground">SQL</span>
-							<div ref={editorHost} className="min-h-[220px] overflow-hidden rounded-md border border-border" />
+							<div
+								ref={editorHost}
+								className="min-h-[220px] overflow-hidden rounded-md border border-border"
+							/>
 							<span className="text-[10px] text-muted-foreground">
 								Vars: ${"{"}from{"}"} ${"{"}to{"}"} ${"{"}service{"}"} ${"{"}project{"}"}
 							</span>
@@ -2664,6 +2758,7 @@ git commit -m "feat(app): add WidgetEditor modal with CodeMirror SQL + live prev
 ## Task 17 — Rewrite `dashboard.tsx` orchestrator
 
 **Files:**
+
 - Modify: `app/src/views/dashboard.tsx` (replace entire body)
 
 - [ ] **Step 17.1: Replace `dashboard.tsx`**
@@ -2706,7 +2801,9 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	const [editMode, setEditMode] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [hidden, setHidden] = useState<Set<string>>(() => readHidden());
-	const [editor, setEditor] = useState<{ open: true; widget?: Widget } | { open: false }>({ open: false });
+	const [editor, setEditor] = useState<{ open: true; widget?: Widget } | { open: false }>({
+		open: false,
+	});
 	const gridContainerRef = useRef<HTMLDivElement | null>(null);
 	const [gridWidth, setGridWidth] = useState(1200);
 
@@ -2735,10 +2832,7 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		return () => clearInterval(t);
 	}, [refreshMs]);
 
-	const visibleWidgets = useMemo(
-		() => widgets.filter((w) => !hidden.has(w.id)),
-		[widgets, hidden],
-	);
+	const visibleWidgets = useMemo(() => widgets.filter((w) => !hidden.has(w.id)), [widgets, hidden]);
 
 	const handleLayoutChange = useCallback(
 		(updates: { id: string; layout: Widget["layout"] }[]) => {
@@ -2763,11 +2857,14 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		setEditor({ open: true, widget: { ...w, id: "", builtin: false, createdAt: 0, updatedAt: 0 } });
 	}, []);
 
-	const handleDelete = useCallback(async (w: Widget) => {
-		if (w.builtin) return;
-		if (!confirm(`Delete widget "${w.name}"?`)) return;
-		await remove(w.id);
-	}, [remove]);
+	const handleDelete = useCallback(
+		async (w: Widget) => {
+			if (w.builtin) return;
+			if (!confirm(`Delete widget "${w.name}"?`)) return;
+			await remove(w.id);
+		},
+		[remove],
+	);
 
 	if (widgetsLoading && widgets.length === 0) {
 		return (
@@ -2797,7 +2894,10 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 				refreshMs={refreshMs}
 				onRefreshMs={(v) => setRefreshMsStr(String(v))}
 				loading={widgetsLoading}
-				onManualRefresh={() => { refetch(); setRefreshKey((k) => k + 1); }}
+				onManualRefresh={() => {
+					refetch();
+					setRefreshKey((k) => k + 1);
+				}}
 				editMode={editMode}
 				onEditMode={setEditMode}
 				onAddWidget={() => setEditor({ open: true })}
@@ -2810,7 +2910,10 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 					{hidden.size} hidden ·{" "}
 					<button
 						type="button"
-						onClick={() => { setHidden(new Set()); writeHidden(new Set()); }}
+						onClick={() => {
+							setHidden(new Set());
+							writeHidden(new Set());
+						}}
 						className="underline"
 					>
 						show all
@@ -2893,15 +2996,30 @@ function WidgetTile({
 				{editMode && (
 					<div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
 						{!widget.builtin && (
-							<button type="button" onClick={onEdit} title="Edit" className="rounded p-1 hover:bg-muted">
+							<button
+								type="button"
+								onClick={onEdit}
+								title="Edit"
+								className="rounded p-1 hover:bg-muted"
+							>
 								<Pencil className="h-3 w-3" />
 							</button>
 						)}
-						<button type="button" onClick={onDuplicate} title="Duplicate" className="rounded p-1 hover:bg-muted">
+						<button
+							type="button"
+							onClick={onDuplicate}
+							title="Duplicate"
+							className="rounded p-1 hover:bg-muted"
+						>
 							<Copy className="h-3 w-3" />
 						</button>
 						{widget.builtin ? (
-							<button type="button" onClick={onHide} title="Hide" className="rounded p-1 hover:bg-muted">
+							<button
+								type="button"
+								onClick={onHide}
+								title="Hide"
+								className="rounded p-1 hover:bg-muted"
+							>
 								<EyeOff className="h-3 w-3" />
 							</button>
 						) : (
@@ -2940,10 +3058,12 @@ Expected: PASS.
 - [ ] **Step 17.3: Lint + format**
 
 Run (from repo root):
+
 ```bash
 bun run lint
 bun run format
 ```
+
 Expected: no new warnings introduced in the files just created/modified.
 
 - [ ] **Step 17.4: Commit**
@@ -2960,9 +3080,11 @@ git commit -m "feat(app): rewrite dashboard view as widget-grid orchestrator"
 - [ ] **Step 18.1: Start dev stack**
 
 Run (from repo root):
+
 ```bash
 bun run dev
 ```
+
 Expected: server on :3485 and app on :5173, seeded logs streaming in.
 
 - [ ] **Step 18.2: Open dashboard**
@@ -2995,9 +3117,11 @@ Ctrl+C the `bun run dev` process.
 - [ ] **Step 18.4: Run all tests**
 
 Run (from repo root):
+
 ```bash
 bun run test:all
 ```
+
 Expected: all server + client tests pass.
 
 ---
@@ -3016,25 +3140,25 @@ Expected: all server + client tests pass.
 
 ## Self-Review Coverage Map
 
-| Spec section | Task(s) |
-|--------------|---------|
-| Data Model → Widget type | Task 1 |
-| Data Model → Persistence (`widgets.json`) | Task 3 |
-| Data Model → API (`/widgets` GET/POST/PUT/DELETE, auth) | Tasks 5, 6 |
-| Rendering Pipeline → load + per-widget query | Tasks 7, 9 |
-| Rendering Pipeline → `substituteVars` | Task 8 |
-| Rendering Pipeline → dispatcher + error states | Tasks 10, 12 |
-| OOTB seeds (12 widgets) | Task 4 |
-| Percentile query (SQLite row-number approach) | Task 4 (latency widget SQL) |
-| Health stats as plain SQL + filter-bar chrome | Task 4 (`total-logs`, `db-size`) + Task 15 (status badge) |
-| Filter bar (time, service, project, auto-refresh, edit toggle, add) | Task 15 |
-| Edit mode + drag/resize + debounced PUT (2s) | Task 14 |
-| Add/edit modal w/ CodeMirror + live preview (500ms debounce) | Task 16 |
-| Duplicate / Hide / Delete | Task 17 |
-| First-run (seeded default `widgets.json`) | Tasks 3, 4 |
-| File structure / renderers | Tasks 10–12 |
-| Testing (server CRUD, auth, substituteVars, renderer) | Tasks 3, 5, 8, 12 |
-| Query timeout (15s) | Task 9 |
-| Concrete values (2s / 15s / 500ms / 60s dropdown cache) | Tasks 9, 14, 15, 16 |
+| Spec section                                                        | Task(s)                                                   |
+| ------------------------------------------------------------------- | --------------------------------------------------------- |
+| Data Model → Widget type                                            | Task 1                                                    |
+| Data Model → Persistence (`widgets.json`)                           | Task 3                                                    |
+| Data Model → API (`/widgets` GET/POST/PUT/DELETE, auth)             | Tasks 5, 6                                                |
+| Rendering Pipeline → load + per-widget query                        | Tasks 7, 9                                                |
+| Rendering Pipeline → `substituteVars`                               | Task 8                                                    |
+| Rendering Pipeline → dispatcher + error states                      | Tasks 10, 12                                              |
+| OOTB seeds (12 widgets)                                             | Task 4                                                    |
+| Percentile query (SQLite row-number approach)                       | Task 4 (latency widget SQL)                               |
+| Health stats as plain SQL + filter-bar chrome                       | Task 4 (`total-logs`, `db-size`) + Task 15 (status badge) |
+| Filter bar (time, service, project, auto-refresh, edit toggle, add) | Task 15                                                   |
+| Edit mode + drag/resize + debounced PUT (2s)                        | Task 14                                                   |
+| Add/edit modal w/ CodeMirror + live preview (500ms debounce)        | Task 16                                                   |
+| Duplicate / Hide / Delete                                           | Task 17                                                   |
+| First-run (seeded default `widgets.json`)                           | Tasks 3, 4                                                |
+| File structure / renderers                                          | Tasks 10–12                                               |
+| Testing (server CRUD, auth, substituteVars, renderer)               | Tasks 3, 5, 8, 12                                         |
+| Query timeout (15s)                                                 | Task 9                                                    |
+| Concrete values (2s / 15s / 500ms / 60s dropdown cache)             | Tasks 9, 14, 15, 16                                       |
 
 All spec sections mapped. No TBDs or placeholders in step bodies.

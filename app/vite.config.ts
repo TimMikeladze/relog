@@ -12,16 +12,20 @@ export default defineConfig({
 		},
 	},
 	server: {
+		port: 5173,
+		strictPort: true,
 		proxy: {
 			"/health": "http://localhost:3485",
 			"/histogram": "http://localhost:3485",
 			"/ingest": "http://localhost:3485",
 			"/logs": "http://localhost:3485",
+			"/traces": "http://localhost:3485",
 			"/query": "http://localhost:3485",
 			"/stream": "http://localhost:3485",
 			"/prune": "http://localhost:3485",
 			"/archive": "http://localhost:3485",
 			"/aggregates": "http://localhost:3485",
+			"/v1": "http://localhost:3485",
 		},
 	},
 	test: {
