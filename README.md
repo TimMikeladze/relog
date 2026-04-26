@@ -856,10 +856,10 @@ export default relogMiddleware(myMiddleware);
 
 ### How It Works
 
-- **Console patching**: `register()` intercepts `console.log/info/warn/error/debug`, forwarding each call to both the terminal (original behavior preserved) and the relog.dev transport. A recursion guard prevents infinite loops when the transport itself logs warnings.
+- **Console patching**: `register()` intercepts `console.log/info/warn/error/debug/trace`, forwarding each call to both the terminal (original behavior preserved) and the relog.dev transport. A recursion guard prevents infinite loops when the transport itself logs warnings. Display-only helpers (`console.group/table/dir`) are intentionally not patched — they don't carry log payloads.
 - **Request logging**: The middleware logs every request with method, path, status code, duration, and a generated trace ID. The trace ID is also set as an `x-trace-id` response header.
 - **Error tracking**: `onRequestError` is a Next.js instrumentation hook that catches unhandled errors from server components, server actions, and route handlers, logging them with full route context.
-- **Edge runtime**: The middleware detects Edge runtime (`NEXT_RUNTIME === "edge"`) and sends logs directly via `fetch` instead of using the full Logger/Transport stack, avoiding Node.js API dependencies.
+- **Edge runtime**: The middleware detects Edge runtime (`NEXT_RUNTIME === "edge"`) and sends logs directly via `fetch` instead of using the full Logger/Transport stack, avoiding Node.js API dependencies. If the edge fetch fails (misconfigured `RELOG_URL`, network down), the failure is surfaced via `console.warn` once-per-process so logs aren't silently dropped forever.
 
 ## Browser Logging
 
@@ -909,8 +909,11 @@ export const POST = createBrowserProxy({
 	auth: "my-ingest-key",
 	service: "web-client",
 	maxBatchSize: 50,
+	maxBodyBytes: 1 * 1024 * 1024, // 1 MiB cap; oversized requests get 413
 });
 ```
+
+The proxy rejects requests whose `Content-Length` (or actual streamed length) exceeds `maxBodyBytes` *before* parsing JSON, so a hostile client can't OOM your Next.js process by posting a giant blob. Per-IP rate limiting is left to your existing middleware.
 
 For non-Next.js servers, implement a POST endpoint that accepts a JSON array of log entries and forwards them to your relog server's `/ingest` endpoint.
 
@@ -1089,6 +1092,10 @@ curl -X POST http://localhost:3485/ingest \
   }'
 ```
 
+**Idempotency:** pass an `Idempotency-Key` (or `X-Idempotency-Key`) header to dedupe automatic client retries. The cached response is replayed for the configured TTL with an `Idempotent-Replay: true` response header. The cache is per-route and per-key-prefix, LRU-evicted under load so a still-active key isn't dropped under burst traffic.
+
+**Rate limit:** ingest is rate-limited per API key prefix (default 600 req/min/key, configurable via `--ingest-rpm`). One noisy key cannot starve other keys.
+
 | Field           | Required | Description                                        |
 | --------------- | -------- | -------------------------------------------------- |
 | `level`         | yes      | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
@@ -1148,6 +1155,8 @@ curl -N "http://localhost:3485/stream?level=error&project=my-app"
 | `branch`        | Filter by branch        |
 | `version`       | Filter by version       |
 | `deployment_id` | Filter by deployment ID |
+
+Heartbeats every 25s (under the common 30s proxy idle-timeout). A slow consumer that lets >1000 messages queue is dropped and the stream is closed — clients should reconnect with backoff.
 
 ### `POST /query`
 
@@ -1231,6 +1240,8 @@ curl -X POST http://localhost:3485/aggregates \
 ### `GET /health`
 
 Returns `{ ok, uptime, db_size_bytes, log_count }`. When auto-prune is configured, also includes `auto_prune: { max_db_size, max_age_days, interval_seconds, db_usage_pct }`.
+
+Unauthenticated. Per-IP rate-limited at 60 req/min — single misbehaving probe can't starve real load-balancer probes. The remote IP comes from the first `X-Forwarded-For` entry when present, otherwise the socket peer; front the server with a reverse proxy that sets `X-Forwarded-For` in production.
 
 ## Database Schema
 
@@ -1376,6 +1387,14 @@ Parquet files are partitioned by `project/branch/year/month/day` for efficient r
 
 S3 uploads use exponential backoff with jitter: `baseDelay * 2^attempt + random * baseDelay`, capped at `maxDelay`. The default retry config is 3 retries with 1–30s delays. If all retries fail for a partition, those logs stay in SQLite and will be retried on the next prune cycle.
 
+### Cycle Budget
+
+Each prune cycle (age- and size-based) is capped at a 30-second wall-clock budget. With a huge backlog after a long outage, a single cycle could otherwise run for many minutes; the in-flight guard prevents overlapping ticks but a stuck cycle would silently halt all future pruning. Pass a custom budget via `pruneByAge(..., budgetMs)` / `pruneBySize(..., budgetMs)` if you call them programmatically. The cycle exits early with a warn line and the next interval picks up where it left off.
+
+### Schema (Parquet)
+
+Archived Parquet files use INT64 for `id`, `pid`, and `created_at` so SQLite ROWIDs above 2³¹ never silently wrap into negative values on long-running instances.
+
 ## External Sources
 
 Logs already exist in external systems — CI runners, deploy platforms, cloud services. Instead of switching between GitHub Actions, Vercel, and CloudWatch to investigate a single incident, relog can pull logs from all of them into one place.
@@ -1395,6 +1414,8 @@ sources.yaml → Source Runner → Adapter.pull(cursor) → SQLite → SSE strea
                   ↑ setInterval                            ↓
                   └──── cursor saved ◀─────────────────────┘
 ```
+
+**Failure handling:** transient errors back off exponentially (capped at 1h) with ±10% jitter so a shared upstream outage doesn't make every source retry in lock-step. After 24 consecutive failures the source is **disabled** with an actionable error log — restart relog after fixing the underlying problem (rotated token, deleted repo, etc.). Cursor strings are validated with a strict ISO-8601 regex on parse, so a corrupted cursor returns null and the source resumes from "now" rather than silently re-ingesting from epoch.
 
 ### Configuration
 
