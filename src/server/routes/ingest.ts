@@ -3,11 +3,7 @@ import { VALID_LEVELS } from "../../types.ts";
 import type { IngestPayload } from "../../types.ts";
 import { logRouteError } from "../log.ts";
 import { redactMeta } from "../redact.ts";
-import {
-	cachedToResponse,
-	type IdempotencyStore,
-	readIdempotencyKey,
-} from "../idempotency.ts";
+import { cachedToResponse, type IdempotencyStore, readIdempotencyKey } from "../idempotency.ts";
 
 const MAX_MESSAGE_LENGTH = 1_048_576;
 const MAX_STRING_FIELD_LENGTH = 1024;

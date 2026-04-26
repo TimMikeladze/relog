@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+	createContext,
+	useCallback,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
 import { apiGet, setAuthKey, getAuthKey, setBaseUrl, getBaseUrl } from "@/api/client";
 import type { HealthResponse } from "@/types";
 
@@ -61,7 +69,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		try {
 			await apiGet<HealthResponse>("/health");
 			backoffRef.current = INITIAL_BACKOFF_MS;
-			setState((s) => ({ ...s, status: "authenticated", error: undefined, nextRetryAt: undefined }));
+			setState((s) => ({
+				...s,
+				status: "authenticated",
+				error: undefined,
+				nextRetryAt: undefined,
+			}));
 		} catch (err: unknown) {
 			const status = (err as { status?: number } | null)?.status;
 			if (status === 401) {

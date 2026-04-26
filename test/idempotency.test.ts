@@ -8,7 +8,11 @@ import {
 describe("IdempotencyStore", () => {
 	test("returns cached entry within TTL", () => {
 		const store = new IdempotencyStore(60_000, 100);
-		store.put("ingest", "pfx", "key-1", { status: 201, body: "{}", contentType: "application/json" });
+		store.put("ingest", "pfx", "key-1", {
+			status: 201,
+			body: "{}",
+			contentType: "application/json",
+		});
 		const cached = store.get("ingest", "pfx", "key-1");
 		expect(cached?.status).toBe(201);
 		expect(cached?.body).toBe("{}");
@@ -25,7 +29,11 @@ describe("IdempotencyStore", () => {
 	test("scopes entries per route", () => {
 		const store = new IdempotencyStore();
 		store.put("ingest", "p", "k", { status: 201, body: "ingest", contentType: "application/json" });
-		store.put("otel-logs", "p", "k", { status: 200, body: "otel", contentType: "application/json" });
+		store.put("otel-logs", "p", "k", {
+			status: 200,
+			body: "otel",
+			contentType: "application/json",
+		});
 		expect(store.get("ingest", "p", "k")?.body).toBe("ingest");
 		expect(store.get("otel-logs", "p", "k")?.body).toBe("otel");
 	});

@@ -12,9 +12,11 @@ export function logRouteError(
 	const message = err instanceof Error ? err.message : String(err);
 	const fields: Record<string, unknown> = { route };
 	if (context?.keyPrefix) fields.keyPrefix = context.keyPrefix;
-	if (context?.sql) fields.sql = context.sql.length > 500 ? `${context.sql.slice(0, 500)}…` : context.sql;
+	if (context?.sql)
+		fields.sql = context.sql.length > 500 ? `${context.sql.slice(0, 500)}…` : context.sql;
 	if (context?.details) Object.assign(fields, context.details);
 	fields.error = message;
-	if (err instanceof Error && err.stack) fields.stack = err.stack.split("\n").slice(0, 5).join("\n");
+	if (err instanceof Error && err.stack)
+		fields.stack = err.stack.split("\n").slice(0, 5).join("\n");
 	console.error(`[relog.dev] route_error ${JSON.stringify(fields)}`);
 }

@@ -167,13 +167,17 @@ function AppContent() {
 
 	if (auth.status === "unreachable" || auth.status === "error") {
 		const retryIn =
-			auth.nextRetryAt !== undefined ? Math.max(0, Math.round((auth.nextRetryAt - Date.now()) / 1000)) : null;
+			auth.nextRetryAt !== undefined
+				? Math.max(0, Math.round((auth.nextRetryAt - Date.now()) / 1000))
+				: null;
 		return (
 			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="flex max-w-md flex-col items-center gap-3 rounded-lg border border-border bg-card p-6 text-center">
 					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
 					<div className="text-sm font-medium">Server unreachable</div>
-					<div className="text-xs text-muted-foreground">{auth.error ?? "No response from server"}</div>
+					<div className="text-xs text-muted-foreground">
+						{auth.error ?? "No response from server"}
+					</div>
 					{retryIn !== null && retryIn > 0 && (
 						<div className="text-[11px] text-muted-foreground">Retrying in {retryIn}s…</div>
 					)}

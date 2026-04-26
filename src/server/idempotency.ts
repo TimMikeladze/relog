@@ -90,8 +90,7 @@ export class IdempotencyStore {
  * we don't want a hostile client filling the cache with multi-KB keys.
  */
 export function readIdempotencyKey(request: Request): string | null {
-	const raw =
-		request.headers.get("idempotency-key") ?? request.headers.get("x-idempotency-key");
+	const raw = request.headers.get("idempotency-key") ?? request.headers.get("x-idempotency-key");
 	if (!raw) return null;
 	const trimmed = raw.trim();
 	if (trimmed.length === 0 || trimmed.length > 200) return null;

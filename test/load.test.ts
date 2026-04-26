@@ -100,9 +100,7 @@ describe.if(ENABLED)("load: ingest RPS", () => {
 		};
 
 		const t0 = performance.now();
-		await Promise.all(
-			Array.from({ length: concurrency }, (_, i) => send(i)),
-		);
+		await Promise.all(Array.from({ length: concurrency }, (_, i) => send(i)));
 		const elapsed = performance.now() - t0;
 		const rps = (totalLogs / elapsed) * 1000;
 

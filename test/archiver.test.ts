@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { S3Client } from "bun";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { DuckDBInstance } from "@duckdb/node-api";
-import { logsToParquet, groupByPartition, archiveLogBatch, sanitizePartition } from "../src/archiver.ts";
+import {
+	logsToParquet,
+	groupByPartition,
+	archiveLogBatch,
+	sanitizePartition,
+} from "../src/archiver.ts";
 import { RelogDatabase } from "../src/db/database.ts";
 import { DuckDBReader } from "../src/db/duckdb.ts";
 import type { ArchiveConfig, LogEntry } from "../src/types.ts";
@@ -87,9 +92,7 @@ describe("groupByPartition", () => {
 	});
 
 	test("sanitizes path-traversal characters out of project/branch", () => {
-		const logs = makeLogs([
-			{ project: "../escape", branch: "feat/main with space" },
-		]);
+		const logs = makeLogs([{ project: "../escape", branch: "feat/main with space" }]);
 		const partitions = groupByPartition(logs);
 		// '/' and ' ' replaced with _, leading dots preserved (file-name safe).
 		expect(partitions[0]!.project).toBe(".._escape");

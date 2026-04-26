@@ -31,7 +31,10 @@ function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(row)) {
 		if (typeof v === "bigint") {
-			if ((v > MAX_SAFE_BIGINT || v < MIN_SAFE_BIGINT) && Date.now() - lastBigIntWarnAt > BIGINT_WARN_INTERVAL_MS) {
+			if (
+				(v > MAX_SAFE_BIGINT || v < MIN_SAFE_BIGINT) &&
+				Date.now() - lastBigIntWarnAt > BIGINT_WARN_INTERVAL_MS
+			) {
 				lastBigIntWarnAt = Date.now();
 				console.warn(
 					`[relog.dev] BIGINT truncation: column "${k}" value ${v.toString()} exceeds Number.MAX_SAFE_INTEGER; precision lost`,

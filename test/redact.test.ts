@@ -25,7 +25,9 @@ describe("redactMeta", () => {
 				body: { secret: "shh", count: 1 },
 			},
 		};
-		const result = redactMeta(input) as { request: { headers: Record<string, string>; body: Record<string, unknown> } };
+		const result = redactMeta(input) as {
+			request: { headers: Record<string, string>; body: Record<string, unknown> };
+		};
 		expect(result.request.headers.Authorization).toBe("[REDACTED]");
 		expect(result.request.headers["x-trace"]).toBe("ok");
 		expect(result.request.body.secret).toBe("[REDACTED]");

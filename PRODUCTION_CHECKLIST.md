@@ -14,6 +14,7 @@ Findings from holistic review of `src/` and `app/`. Cite `file:line`. P0 = block
 ## P1 — Should-fix
 
 ### Server / DB
+
 - [x] **No PII / secret redaction on ingest meta** — raw JSON stored. Auth headers, tokens land unredacted.
 - [x] **No idempotency on ingest** — `src/server/routes/ingest.ts`. Client retry → duplicate rows. Add idempotency key or content hash dedup.
 - [x] **Rate limiter is global, not per-key** — `src/server/server.ts:27, 119`. One noisy key starves others. Move to per-key map.
@@ -26,6 +27,7 @@ Findings from holistic review of `src/` and `app/`. Cite `file:line`. P0 = block
 - [x] **BIGINT coerce silent truncation** — `src/db/duckdb.ts:11-17`. `Number(bigint)` >2^53 truncates silently. Log warning at boundary.
 
 ### Frontend
+
 - [x] **No React ErrorBoundary** — `app/src/App.tsx:247`. View crash crashes whole app. Wrap each view.
 - [x] **`useAuth` doesn't distinguish auth-fail vs server-down** — `app/src/hooks/use-auth.tsx:56-62`. 500 from `/health` shown same as 401. Add retry-with-backoff + "server unreachable" UI.
 - [x] **`useStream` deps thrash** — `app/src/hooks/use-stream.ts:82`. `filters` object identity changes each parent render → reconnect storm. Destructure stable primitives or memoize.
@@ -175,6 +177,7 @@ Rounds 1–4 have now covered every non-test file in `src/` and every non-test f
 **Multi-tenant / external:** ship-ready except for an admin-action audit log (process/policy work, not code). Idempotency LRU, per-IP `/health` rate limit, widget SQL save-validation, and the auth pre-hash perf fix all landed.
 
 **Open P2s** (quality-of-life, none block ship):
+
 - `TableWidget` array-index keys (only matters if interactive sort lands)
 - `toLocaleTimeString` TZ token parsing fragility
 - Histogram `buckets` user-vs-adaptive cap unification (doc)

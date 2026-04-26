@@ -31,10 +31,7 @@ function serializeError(err: Error, depth = 0): Record<string, unknown> {
 	// recursion at 5 levels so a cycle (rare but possible) can't blow up
 	// the serializer.
 	if (err.cause !== undefined && depth < 5) {
-		out.cause =
-			err.cause instanceof Error
-				? serializeError(err.cause, depth + 1)
-				: err.cause;
+		out.cause = err.cause instanceof Error ? serializeError(err.cause, depth + 1) : err.cause;
 	}
 	return out;
 }

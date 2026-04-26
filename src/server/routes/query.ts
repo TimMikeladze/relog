@@ -35,9 +35,7 @@ export async function handleQuery(
 		// Validation errors are user input — message is enough. Execution
 		// errors are server-side; the helper attaches a stack on Error.
 		if (err instanceof QueryValidationError) {
-			console.warn(
-				`[relog.dev] /query rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`,
-			);
+			console.warn(`[relog.dev] /query rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`);
 		} else {
 			logRouteError("POST /query", err, { keyPrefix, sql: body.sql });
 		}

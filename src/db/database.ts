@@ -3,7 +3,11 @@ import { CREATE_INDEXES, CREATE_LOGS_TABLE, CREATE_SOURCE_CURSORS_TABLE } from "
 import type { IngestPayload, LogEntry, StreamFilters } from "../types.ts";
 import { parseMeta } from "./util.ts";
 import { getDefaultDbPath } from "../paths.ts";
-import { addColumnIfMissing as addColIfMissing, type Migration, runMigrations } from "./migrations.ts";
+import {
+	addColumnIfMissing as addColIfMissing,
+	type Migration,
+	runMigrations,
+} from "./migrations.ts";
 
 export { QueryValidationError } from "./validate.ts";
 

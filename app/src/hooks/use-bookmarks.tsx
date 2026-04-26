@@ -1,11 +1,4 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useRef,
-	useState,
-	type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import type { Bookmark } from "@/types";
 
 const STORAGE_KEY = "relog:bookmarks";

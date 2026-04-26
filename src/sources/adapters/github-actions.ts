@@ -51,8 +51,7 @@ interface ParsedCursor {
 // Strict ISO 8601 with date + time + Z|offset. Without this, `Date.parse`
 // accepts truncated values like "2024" and a corrupted cursor silently
 // restarts the source from epoch — re-ingesting years of runs.
-const ISO_8601_RE =
-	/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_8601_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 function parseCursor(raw: string | null): ParsedCursor | null {
 	if (!raw) return null;

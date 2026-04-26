@@ -44,7 +44,7 @@ export function LogTable({
 	// Memoize the lookup so `logs.find` doesn't run on every render of an
 	// unrelated state change (e.g. live-stream tick when nothing is selected).
 	const selectedLog = useMemo(
-		() => (selectedId !== null ? logs.find((l) => l.id === selectedId) ?? null : null),
+		() => (selectedId !== null ? (logs.find((l) => l.id === selectedId) ?? null) : null),
 		[selectedId, logs],
 	);
 

@@ -222,7 +222,8 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				// Health check before auth so load balancers can probe without credentials
 				if (method === "GET" && path === "/health") {
 					const xff = request.headers.get("x-forwarded-for");
-					const remoteIp = xff?.split(",")[0]?.trim() || server.requestIP(request)?.address || "_anon";
+					const remoteIp =
+						xff?.split(",")[0]?.trim() || server.requestIP(request)?.address || "_anon";
 					if (!healthLimiter.check(remoteIp)) {
 						return Response.json(
 							{ error: "Too many requests" },
@@ -276,13 +277,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 							{ status: 429, headers: { "Retry-After": "10" } },
 						);
 					} else {
-						response = await handleOtelLogs(
-							request,
-							db,
-							maxBatchSize,
-							auth.keyPrefix,
-							idempotency,
-						);
+						response = await handleOtelLogs(request, db, maxBatchSize, auth.keyPrefix, idempotency);
 						if (response.status === 200) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/ingest") {
@@ -297,13 +292,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 							},
 						);
 					} else {
-						response = await handleIngest(
-							request,
-							db,
-							maxBatchSize,
-							auth.keyPrefix,
-							idempotency,
-						);
+						response = await handleIngest(request, db, maxBatchSize, auth.keyPrefix, idempotency);
 						if (response.status === 201) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/histogram") {

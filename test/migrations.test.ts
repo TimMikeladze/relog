@@ -82,8 +82,6 @@ describe("addColumnIfMissing", () => {
 
 	test("propagates non-duplicate errors", () => {
 		const db = memDb();
-		expect(() =>
-			addColumnIfMissing(db, "ALTER TABLE no_such_table ADD COLUMN x TEXT"),
-		).toThrow();
+		expect(() => addColumnIfMissing(db, "ALTER TABLE no_such_table ADD COLUMN x TEXT")).toThrow();
 	});
 });

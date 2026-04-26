@@ -183,10 +183,7 @@ export function validateQuery(sql: string, maxRows: number): string {
 		throw new QueryValidationError("Only SELECT, EXPLAIN, and WITH queries are allowed");
 	}
 
-	if (
-		(trimmed.startsWith("SELECT") || trimmed.startsWith("WITH")) &&
-		!hasTopLevelLimit(blanked)
-	) {
+	if ((trimmed.startsWith("SELECT") || trimmed.startsWith("WITH")) && !hasTopLevelLimit(blanked)) {
 		return `${stripped} LIMIT ${maxRows}`;
 	}
 
