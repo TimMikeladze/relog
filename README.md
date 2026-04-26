@@ -913,7 +913,7 @@ export const POST = createBrowserProxy({
 });
 ```
 
-The proxy rejects requests whose `Content-Length` (or actual streamed length) exceeds `maxBodyBytes` *before* parsing JSON, so a hostile client can't OOM your Next.js process by posting a giant blob. Per-IP rate limiting is left to your existing middleware.
+The proxy rejects requests whose `Content-Length` (or actual streamed length) exceeds `maxBodyBytes` _before_ parsing JSON, so a hostile client can't OOM your Next.js process by posting a giant blob. Per-IP rate limiting is left to your existing middleware.
 
 For non-Next.js servers, implement a POST endpoint that accepts a JSON array of log entries and forwards them to your relog server's `/ingest` endpoint.
 
