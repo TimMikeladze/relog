@@ -4,7 +4,28 @@ function formatValue(value: unknown, indent: number): string {
 	if (value === null || value === undefined) return "null";
 	if (typeof value === "string") return `"${value}"`;
 	if (typeof value === "number" || typeof value === "boolean") return String(value);
-	return JSON.stringify(value, null, 2)
+	let serialized: string;
+	try {
+		// Cycle-safe replacer: log meta from web-app values can carry
+		// circular refs (DOM nodes, React fibers), and a throw here would
+		// crash the whole detail panel render.
+		const seen = new WeakSet<object>();
+		serialized = JSON.stringify(
+			value,
+			(_k, v) => {
+				if (typeof v === "bigint") return v.toString();
+				if (v && typeof v === "object") {
+					if (seen.has(v as object)) return "[Circular]";
+					seen.add(v as object);
+				}
+				return v;
+			},
+			2,
+		);
+	} catch {
+		serialized = "[unserializable]";
+	}
+	return serialized
 		.split("\n")
 		.map((line, i) => (i === 0 ? line : " ".repeat(indent) + line))
 		.join("\n");

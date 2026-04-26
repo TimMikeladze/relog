@@ -1,5 +1,6 @@
 import type { DuckDBReader } from "../../db/duckdb.ts";
 import { VALID_LEVELS } from "../../types.ts";
+import { logRouteError } from "../log.ts";
 
 interface HistogramBody {
 	from: number;
@@ -27,7 +28,11 @@ function adaptiveBuckets(rangeMs: number): number {
 	return 360; // >30d: ~daily
 }
 
-export async function handleHistogram(request: Request, duckdb: DuckDBReader): Promise<Response> {
+export async function handleHistogram(
+	request: Request,
+	duckdb: DuckDBReader,
+	keyPrefix?: string,
+): Promise<Response> {
 	let body: HistogramBody;
 	try {
 		body = (await request.json()) as HistogramBody;
@@ -68,7 +73,11 @@ export async function handleHistogram(request: Request, duckdb: DuckDBReader): P
 			filters: body.filters,
 		});
 		return Response.json(result);
-	} catch {
+	} catch (err) {
+		logRouteError("POST /histogram", err, {
+			keyPrefix,
+			details: { from: body.from, to: body.to, buckets },
+		});
 		return Response.json({ error: "Histogram query failed" }, { status: 500 });
 	}
 }

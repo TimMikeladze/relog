@@ -10,6 +10,7 @@ export function useLogs(filters: Filters, enabled: boolean) {
 	const [loading, setLoading] = useState(false);
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 	const [hasMore, setHasMore] = useState(true);
 	const offsetRef = useRef(0);
 	const abortRef = useRef<AbortController | null>(null);
@@ -35,73 +36,61 @@ export function useLogs(filters: Filters, enabled: boolean) {
 		[filters],
 	);
 
+	// Single fetch-from-zero implementation shared by the initial-fetch
+	// effect and `refetch`. Hoisting prevents the two paths drifting apart
+	// (which is how stale request handling, abort wiring, and error mapping
+	// silently diverge over time).
+	const fetchFromZero = useCallback(() => {
+		abortRef.current?.abort();
+		const controller = new AbortController();
+		abortRef.current = controller;
+
+		setLoading(true);
+		setError(null);
+		setLoadMoreError(null);
+		offsetRef.current = 0;
+
+		apiGet<LogsResponse>("/logs", buildParams(0), controller.signal)
+			.then((res) => {
+				if (controller.signal.aborted) return;
+				setRows(res.rows);
+				setTotal(res.total);
+				setHasMore(res.rows.length < res.total);
+				offsetRef.current = res.rows.length;
+			})
+			.catch((err) => {
+				if (controller.signal.aborted) return;
+				setError(err instanceof Error ? err.message : "Failed to fetch logs");
+			})
+			.finally(() => {
+				if (controller.signal.aborted) return;
+				setLoading(false);
+			});
+
+		return controller;
+	}, [buildParams]);
+
 	// Initial fetch (resets on filter change)
 	useEffect(() => {
 		if (!enabled) return;
-
-		abortRef.current?.abort();
-		const controller = new AbortController();
-		abortRef.current = controller;
-
-		setLoading(true);
-		setError(null);
-		offsetRef.current = 0;
-
-		apiGet<LogsResponse>("/logs", buildParams(0), controller.signal)
-			.then((res) => {
-				if (controller.signal.aborted) return;
-				setRows(res.rows);
-				setTotal(res.total);
-				setHasMore(res.rows.length < res.total);
-				offsetRef.current = res.rows.length;
-			})
-			.catch((err) => {
-				if (controller.signal.aborted) return;
-				setError(err instanceof Error ? err.message : "Failed to fetch logs");
-			})
-			.finally(() => {
-				if (controller.signal.aborted) return;
-				setLoading(false);
-			});
-
+		const controller = fetchFromZero();
 		return () => {
 			controller.abort();
 		};
-	}, [buildParams, enabled]);
+	}, [fetchFromZero, enabled]);
 
 	const refetch = useCallback(() => {
 		if (!enabled) return;
+		fetchFromZero();
+	}, [fetchFromZero, enabled]);
 
-		abortRef.current?.abort();
-		const controller = new AbortController();
-		abortRef.current = controller;
-
-		setLoading(true);
-		setError(null);
-		offsetRef.current = 0;
-
-		apiGet<LogsResponse>("/logs", buildParams(0), controller.signal)
-			.then((res) => {
-				if (controller.signal.aborted) return;
-				setRows(res.rows);
-				setTotal(res.total);
-				setHasMore(res.rows.length < res.total);
-				offsetRef.current = res.rows.length;
-			})
-			.catch((err) => {
-				if (controller.signal.aborted) return;
-				setError(err instanceof Error ? err.message : "Failed to fetch logs");
-			})
-			.finally(() => {
-				if (controller.signal.aborted) return;
-				setLoading(false);
-			});
-	}, [buildParams, enabled]);
-
-	// Load more (append)
+	// Load more (append). Errors are surfaced via `loadMoreError` so the
+	// scroller can tell the user pagination failed instead of silently
+	// stalling at the current page.
 	const loadMore = useCallback(async () => {
 		if (loadingMore || loading || !hasMore) return;
 		setLoadingMore(true);
+		setLoadMoreError(null);
 		try {
 			const res = await apiGet<LogsResponse>("/logs", buildParams(offsetRef.current));
 			setRows((prev) => {
@@ -112,12 +101,22 @@ export function useLogs(filters: Filters, enabled: boolean) {
 			setTotal(res.total);
 			offsetRef.current += res.rows.length;
 			setHasMore(offsetRef.current < res.total);
-		} catch {
-			// silently fail on load-more
+		} catch (err) {
+			setLoadMoreError(err instanceof Error ? err.message : "Failed to load more logs");
 		} finally {
 			setLoadingMore(false);
 		}
 	}, [buildParams, loadingMore, loading, hasMore]);
 
-	return { rows, total, loading, loadingMore, error, hasMore, loadMore, refetch };
+	return {
+		rows,
+		total,
+		loading,
+		loadingMore,
+		error,
+		loadMoreError,
+		hasMore,
+		loadMore,
+		refetch,
+	};
 }

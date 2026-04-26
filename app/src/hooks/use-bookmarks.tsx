@@ -1,7 +1,29 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import {
+	createContext,
+	useCallback,
+	useContext,
+	useRef,
+	useState,
+	type ReactNode,
+} from "react";
 import type { Bookmark } from "@/types";
 
 const STORAGE_KEY = "relog:bookmarks";
+
+/**
+ * Best-effort write to localStorage. Quota exhaustion would otherwise
+ * propagate out of the React state setter and tear down the update batch
+ * (the in-memory bookmark add/remove never commits, the UI looks broken).
+ * Swallow the error and warn — the user keeps the in-memory state until
+ * the tab reloads, which is far better than a partially-applied update.
+ */
+function safeSetItem(value: string): void {
+	try {
+		localStorage.setItem(STORAGE_KEY, value);
+	} catch (err) {
+		console.warn("[relog] bookmarks localStorage write failed:", err);
+	}
+}
 
 interface BookmarksContextValue {
 	bookmarks: Bookmark[];
@@ -26,12 +48,19 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
 		}
 	});
 
+	// Mirror state in a ref so `toggle` can be a stable callback regardless of
+	// the latest bookmarks value. Without this, `toggle` re-creates on every
+	// add/remove and any consumer using it as an effect dep loops or
+	// invalidates downstream memos (notably the LogRow row callbacks).
+	const bookmarksRef = useRef(bookmarks);
+	bookmarksRef.current = bookmarks;
+
 	const add = useCallback((b: Omit<Bookmark, "id" | "createdAt">) => {
 		const id = bookmarkId(b);
 		setBookmarks((prev) => {
 			if (prev.some((x) => x.id === id)) return prev;
 			const next = [...prev, { ...b, id, createdAt: Date.now() }];
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+			safeSetItem(JSON.stringify(next));
 			return next;
 		});
 	}, []);
@@ -39,7 +68,7 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
 	const remove = useCallback((id: string) => {
 		setBookmarks((prev) => {
 			const next = prev.filter((b) => b.id !== id);
-			localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+			safeSetItem(JSON.stringify(next));
 			return next;
 		});
 	}, []);
@@ -49,13 +78,13 @@ export function BookmarksProvider({ children }: { children: ReactNode }) {
 	const toggle = useCallback(
 		(b: Omit<Bookmark, "id" | "createdAt">) => {
 			const id = bookmarkId(b);
-			if (bookmarks.some((x) => x.id === id)) {
+			if (bookmarksRef.current.some((x) => x.id === id)) {
 				remove(id);
 			} else {
 				add(b);
 			}
 		},
-		[bookmarks, add, remove],
+		[add, remove],
 	);
 
 	return (

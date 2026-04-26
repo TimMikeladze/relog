@@ -17,8 +17,13 @@
 		"noUncheckedIndexedAccess": true,
 		"noImplicitOverride": true,
 
-		"noUnusedLocals": false,
+		"noUnusedLocals": true,
 		"noUnusedParameters": false,
+		// noPropertyAccessFromIndexSignature deferred — this codebase has
+		// hundreds of `obj.foo` accesses on inferred-as-record types
+		// (process.env, parsed JSON meta, OTLP attrs) and turning the
+		// flag on at once produces ~250 errors that aren't real bugs.
+		// Revisit once those modules use typed shapes.
 		"noPropertyAccessFromIndexSignature": false
 	},
 

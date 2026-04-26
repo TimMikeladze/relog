@@ -64,9 +64,9 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	const visibleWidgets = useMemo(() => widgets.filter((w) => !hidden.has(w.id)), [widgets, hidden]);
 
 	const handleLayoutChange = useCallback(
-		(updates: { id: string; layout: Widget["layout"] }[]) => {
+		(updates: { id: string; layout: Widget["layout"] }[], opts?: { keepalive?: boolean }) => {
 			for (const { id, layout } of updates) {
-				update(id, { layout }).catch(() => {});
+				update(id, { layout }, opts).catch(() => {});
 			}
 		},
 		[update],
@@ -285,6 +285,7 @@ function WidgetTile({
 					columns={data.columns}
 					loading={data.loading}
 					error={data.error}
+					stale={data.stale}
 					onReload={data.reload}
 				/>
 			</div>

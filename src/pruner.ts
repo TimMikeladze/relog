@@ -5,6 +5,11 @@ import { archiveLogBatch } from "./archiver.ts";
 const BATCH_SIZE = 5000;
 const DEFAULT_RETRY: RetryConfig = { maxRetries: 3, baseDelayMs: 1000, maxDelayMs: 30000 };
 
+// Cap any single prune cycle so a huge backlog can't monopolize the
+// process. The `inFlight` guard already prevents overlapping ticks, but
+// without a wall-clock cap a stuck cycle silently halts pruning forever.
+const DEFAULT_PRUNE_BUDGET_MS = 30_000;
+
 export interface PruneHandle {
 	stop(): void;
 	readonly archiveFailures: number;
@@ -15,8 +20,10 @@ export async function pruneByAge(
 	maxAgeDays: number,
 	archiveConfig?: ArchiveConfig,
 	retry: RetryConfig = DEFAULT_RETRY,
+	budgetMs: number = DEFAULT_PRUNE_BUDGET_MS,
 ): Promise<{ deleted: number; archiveBlocked: boolean }> {
 	const cutoff = Date.now() - maxAgeDays * 86_400_000;
+	const deadline = Date.now() + budgetMs;
 
 	if (!archiveConfig) {
 		return { deleted: db.prune(cutoff), archiveBlocked: false };
@@ -25,6 +32,12 @@ export async function pruneByAge(
 	let totalDeleted = 0;
 	let archiveBlocked = false;
 	for (;;) {
+		if (Date.now() >= deadline) {
+			console.warn(
+				`[relog.dev] auto-prune: hit ${budgetMs}ms wall-clock budget on age-based prune (deleted ${totalDeleted}); resuming next cycle`,
+			);
+			break;
+		}
 		const logs = db.getLogsForArchive(cutoff, BATCH_SIZE);
 		if (logs.length === 0) break;
 
@@ -51,12 +64,20 @@ export async function pruneBySize(
 	maxDbSize: number,
 	archiveConfig?: ArchiveConfig,
 	retry: RetryConfig = DEFAULT_RETRY,
+	budgetMs: number = DEFAULT_PRUNE_BUDGET_MS,
 ): Promise<{ deleted: number; archiveBlocked: boolean }> {
 	let totalDeleted = 0;
 	let previousSize = db.getDbSize();
 	let archiveBlocked = false;
+	const deadline = Date.now() + budgetMs;
 
 	while (db.getDbSize() > maxDbSize) {
+		if (Date.now() >= deadline) {
+			console.warn(
+				`[relog.dev] auto-prune: hit ${budgetMs}ms wall-clock budget on size-based prune (deleted ${totalDeleted}); resuming next cycle`,
+			);
+			break;
+		}
 		const logs = db.getOldestLogs(BATCH_SIZE);
 		if (logs.length === 0) break;
 

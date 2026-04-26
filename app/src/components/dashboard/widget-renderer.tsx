@@ -25,15 +25,41 @@ export interface WidgetRenderProps {
 	columns: string[];
 	loading: boolean;
 	error: string | null;
+	/** True when `rows` is the previous successful result and a fresh fetch failed. */
+	stale?: boolean;
 	onReload?: () => void;
 }
 
 export function WidgetRenderer(props: WidgetRenderProps) {
-	const { widget, rows, loading, error, onReload } = props;
-	if (error) return <WidgetError message={error} onRetry={onReload} />;
+	const { widget, rows, loading, error, stale, onReload } = props;
+	// If we have prior data and the latest fetch failed, prefer showing
+	// the stale chart with a small badge over a full-screen error. This
+	// is the dashboard isolation behavior — one flaky widget shouldn't
+	// blank itself out and lose context.
+	if (error && rows.length === 0) {
+		return <WidgetError message={error} onRetry={onReload} />;
+	}
 	if (loading && rows.length === 0) return <WidgetLoading />;
 	if (!loading && rows.length === 0) return <WidgetEmpty />;
 
+	const body = renderWidgetBody(widget, rows);
+	if (error || stale) {
+		return (
+			<div className="relative h-full">
+				{body}
+				<div
+					className="absolute right-2 top-2 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+					title={error ?? undefined}
+				>
+					{error ? "Stale · refresh failed" : "Stale"}
+				</div>
+			</div>
+		);
+	}
+	return body;
+}
+
+function renderWidgetBody(widget: Widget, rows: Record<string, unknown>[]) {
 	switch (widget.kind) {
 		case "stat":
 			return <StatWidget rows={rows} options={widget.options as StatOptions} />;

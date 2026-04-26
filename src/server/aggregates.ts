@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import { dirname } from "path";
+import { atomicWriteFile } from "../atomic-write.ts";
 import type { Aggregate } from "../types.ts";
 
 const DEFAULT_AGGREGATES: Aggregate[] = [
@@ -111,7 +112,7 @@ export class AggregatesManager {
 			const dir = dirname(this.filePath);
 			await fs.mkdir(dir, { recursive: true });
 			const data = Array.from(this.aggregates.values());
-			await fs.writeFile(this.filePath, JSON.stringify(data, null, 2));
+			await atomicWriteFile(this.filePath, JSON.stringify(data, null, 2));
 		} catch (error) {
 			console.error("[relog] Failed to persist aggregates:", error);
 		}

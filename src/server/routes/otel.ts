@@ -1,6 +1,13 @@
 import { createGunzip } from "node:zlib";
 import type { RelogDatabase } from "../../db/database.ts";
 import type { IngestPayload, LogLevel } from "../../types.ts";
+import { logRouteError } from "../log.ts";
+import { redactMeta } from "../redact.ts";
+import {
+	cachedToResponse,
+	type IdempotencyStore,
+	readIdempotencyKey,
+} from "../idempotency.ts";
 
 const MAX_MESSAGE_LENGTH = 1_048_576;
 const MAX_STRING_FIELD_LENGTH = 1024;
@@ -248,8 +255,9 @@ function validateEntry(entry: IngestPayload): IngestPayload {
 			: undefined,
 		meta: entry.meta
 			? (() => {
-					const json = JSON.stringify(entry.meta);
-					return json.length > MAX_META_JSON_LENGTH ? { _truncated: true } : entry.meta;
+					const redacted = redactMeta(entry.meta) as Record<string, unknown>;
+					const json = JSON.stringify(redacted);
+					return json.length > MAX_META_JSON_LENGTH ? { _truncated: true } : redacted;
 				})()
 			: undefined,
 	};
@@ -262,6 +270,7 @@ export async function handleOtelTraces(
 	db: RelogDatabase,
 	maxBatchSize: number,
 	keyPrefix?: string,
+	idempotency?: IdempotencyStore,
 ): Promise<Response> {
 	const contentType = request.headers.get("content-type") ?? "";
 	if (contentType.includes("protobuf")) {
@@ -269,6 +278,12 @@ export async function handleOtelTraces(
 			{ error: "OTLP/Proto not supported, use OTLP/JSON (application/json)" },
 			{ status: 415 },
 		);
+	}
+
+	const idemKey = readIdempotencyKey(request);
+	if (idemKey && idempotency) {
+		const cached = idempotency.get("otel-traces", keyPrefix, idemKey);
+		if (cached) return cachedToResponse(cached);
 	}
 
 	let payload: OtelTracesPayload;
@@ -386,8 +401,27 @@ export async function handleOtelTraces(
 		);
 	}
 
-	db.insert(entries, keyPrefix);
-	return Response.json({ partialSuccess: {} }, { status: 200 });
+	try {
+		db.insert(entries, keyPrefix);
+	} catch (err) {
+		logRouteError("POST /v1/traces", err, {
+			keyPrefix,
+			details: { entries: entries.length },
+		});
+		return Response.json({ error: "Ingest failed" }, { status: 500 });
+	}
+	const tracesBody = JSON.stringify({ partialSuccess: {} });
+	if (idemKey && idempotency) {
+		idempotency.put("otel-traces", keyPrefix, idemKey, {
+			status: 200,
+			body: tracesBody,
+			contentType: "application/json",
+		});
+	}
+	return new Response(tracesBody, {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
 }
 
 // ── Logs handler ───────────────────────────────────────────────────
@@ -397,6 +431,7 @@ export async function handleOtelLogs(
 	db: RelogDatabase,
 	maxBatchSize: number,
 	keyPrefix?: string,
+	idempotency?: IdempotencyStore,
 ): Promise<Response> {
 	const contentType = request.headers.get("content-type") ?? "";
 	if (contentType.includes("protobuf")) {
@@ -404,6 +439,12 @@ export async function handleOtelLogs(
 			{ error: "OTLP/Proto not supported, use OTLP/JSON (application/json)" },
 			{ status: 415 },
 		);
+	}
+
+	const idemKey = readIdempotencyKey(request);
+	if (idemKey && idempotency) {
+		const cached = idempotency.get("otel-logs", keyPrefix, idemKey);
+		if (cached) return cachedToResponse(cached);
 	}
 
 	let payload: OtelLogsPayload;
@@ -480,6 +521,25 @@ export async function handleOtelLogs(
 		);
 	}
 
-	db.insert(entries, keyPrefix);
-	return Response.json({ partialSuccess: {} }, { status: 200 });
+	try {
+		db.insert(entries, keyPrefix);
+	} catch (err) {
+		logRouteError("POST /v1/logs", err, {
+			keyPrefix,
+			details: { entries: entries.length },
+		});
+		return Response.json({ error: "Ingest failed" }, { status: 500 });
+	}
+	const logsBody = JSON.stringify({ partialSuccess: {} });
+	if (idemKey && idempotency) {
+		idempotency.put("otel-logs", keyPrefix, idemKey, {
+			status: 200,
+			body: logsBody,
+			contentType: "application/json",
+		});
+	}
+	return new Response(logsBody, {
+		status: 200,
+		headers: { "Content-Type": "application/json" },
+	});
 }

@@ -11,7 +11,9 @@ export function Pagination({
 	limit: number;
 	onPageChange: (page: number) => void;
 }) {
-	const totalPages = Math.max(1, Math.ceil(total / limit));
+	// Guard against limit=0: Math.ceil(n/0) = Infinity would freeze the UI
+	// rendering an infinite list of page numbers.
+	const totalPages = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
 
 	if (totalPages <= 1) return null;
 

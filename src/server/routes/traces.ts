@@ -1,7 +1,12 @@
 import type { DuckDBReader } from "../../db/duckdb.ts";
 import { VALID_LEVELS } from "../../types.ts";
+import { logRouteError } from "../log.ts";
 
-export async function handleTraces(request: Request, duckdb: DuckDBReader): Promise<Response> {
+export async function handleTraces(
+	request: Request,
+	duckdb: DuckDBReader,
+	keyPrefix?: string,
+): Promise<Response> {
 	const url = new URL(request.url);
 	const opts: Parameters<DuckDBReader["listTraces"]>[0] = {};
 
@@ -58,7 +63,8 @@ export async function handleTraces(request: Request, duckdb: DuckDBReader): Prom
 	try {
 		const result = await duckdb.listTraces(opts);
 		return Response.json({ rows: result.rows, limit: opts.limit ?? 100 });
-	} catch {
+	} catch (err) {
+		logRouteError("GET /traces", err, { keyPrefix, details: opts });
 		return Response.json({ error: "Traces query failed" }, { status: 500 });
 	}
 }

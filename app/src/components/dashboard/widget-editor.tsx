@@ -138,6 +138,8 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [kind]);
 
+	const [saving, setSaving] = useState(false);
+
 	const save = useCallback(async () => {
 		if (optionsError) {
 			setPreviewError(`Fix options JSON: ${optionsError}`);
@@ -151,17 +153,41 @@ export function WidgetEditor(props: WidgetEditorProps) {
 			setPreviewError("Name required");
 			return;
 		}
-		await props.onSave({
-			id,
-			name,
-			description: description || undefined,
-			kind,
-			sql: sqlText,
-			options,
-			layout: props.initial?.layout ?? { x: 0, y: 0, w: 6, h: 4 },
-			timeRange,
-			builtin: false,
-		});
+
+		// Validate SQL against the server before persisting. EXPLAIN is
+		// cheaper than a real run and catches typos, missing columns, and
+		// blocked statements without committing a broken widget that would
+		// then 4xx on every dashboard refresh.
+		setSaving(true);
+		try {
+			const resolved = substituteVars(sqlText, {
+				from: props.filterFrom,
+				to: props.filterTo,
+				service: props.service,
+				project: props.project,
+			});
+			try {
+				await apiPost<QueryResult>("/query", { sql: `EXPLAIN ${resolved}` });
+			} catch (err) {
+				setPreviewError(
+					`SQL validation failed: ${err instanceof Error ? err.message : "unknown error"}`,
+				);
+				return;
+			}
+			await props.onSave({
+				id,
+				name,
+				description: description || undefined,
+				kind,
+				sql: sqlText,
+				options,
+				layout: props.initial?.layout ?? { x: 0, y: 0, w: 6, h: 4 },
+				timeRange,
+				builtin: false,
+			});
+		} finally {
+			setSaving(false);
+		}
 	}, [id, name, description, kind, sqlText, options, optionsError, timeRange, props]);
 
 	return (
@@ -277,9 +303,10 @@ export function WidgetEditor(props: WidgetEditorProps) {
 							<button
 								type="button"
 								onClick={save}
-								className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground"
+								disabled={saving}
+								className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground disabled:opacity-50"
 							>
-								Save
+								{saving ? "Validating…" : "Save"}
 							</button>
 						</div>
 					</div>

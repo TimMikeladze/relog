@@ -56,15 +56,22 @@ export const LogRow = memo(function LogRow({
 }: {
 	log: LogRecord;
 	selected?: boolean;
-	onClick?: () => void;
+	// `id` is passed back to the parent so it can keep one stable handler
+	// across all rows. With per-row arrow functions the LogRow `memo`
+	// wrapper was defeated and 2k buffered rows re-rendered every tick.
+	onClick?: (id: number) => void;
 	showDate?: boolean;
 	isBookmarked?: boolean;
-	onToggleBookmark?: (e: React.MouseEvent) => void;
+	onToggleBookmark?: (id: number, e: React.MouseEvent) => void;
 }) {
+	const handleClick = onClick ? () => onClick(log.id) : undefined;
+	const handleBookmark = onToggleBookmark
+		? (e: React.MouseEvent) => onToggleBookmark(log.id, e)
+		: undefined;
 	return (
 		<button
 			type="button"
-			onClick={onClick}
+			onClick={handleClick}
 			className={cn(
 				"group flex w-full items-center border-l-2 text-left text-xs transition-colors hover:bg-muted/40",
 				LEVEL_BORDERS[log.level] || "border-l-transparent",
@@ -100,12 +107,12 @@ export const LogRow = memo(function LogRow({
 			<span className="min-w-0 flex-1 py-[5px] pr-3 truncate">{log.message}</span>
 
 			{/* Bookmark */}
-			{onToggleBookmark && (
+			{handleBookmark && (
 				<span
 					role="button"
 					tabIndex={-1}
-					onClick={onToggleBookmark}
-					onKeyDown={(e) => e.key === "Enter" && onToggleBookmark(e as unknown as React.MouseEvent)}
+					onClick={handleBookmark}
+					onKeyDown={(e) => e.key === "Enter" && handleBookmark(e as unknown as React.MouseEvent)}
 					className={cn(
 						"shrink-0 mr-2 rounded p-0.5 transition-colors",
 						isBookmarked

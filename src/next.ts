@@ -20,6 +20,7 @@ let singleton: Logger | null = null;
 let singletonTransport: Transport | null = null;
 let singletonConfig: ReturnType<typeof resolveConfig> | null = null;
 let logProxyWarned = false;
+let edgeIngestWarned = false;
 
 const originalConsole = {
 	log: console.log,
@@ -27,6 +28,7 @@ const originalConsole = {
 	warn: console.warn,
 	error: console.error,
 	debug: console.debug,
+	trace: console.trace,
 };
 
 let _insideRelog = false;
@@ -62,6 +64,7 @@ function patchConsole(logger: Logger): void {
 		warn: "warn",
 		error: "error",
 		debug: "debug",
+		trace: "trace",
 	};
 
 	for (const [method, level] of Object.entries(levelMap)) {
@@ -75,9 +78,10 @@ function patchConsole(logger: Logger): void {
 			_insideRelog = true;
 			try {
 				const message = args.map(safeStringify).join(" ");
-				logger[level as keyof Pick<Logger, "info" | "warn" | "error" | "debug">](message, {
-					source: "console",
-				});
+				logger[level as keyof Pick<Logger, "trace" | "info" | "warn" | "error" | "debug">](
+					message,
+					{ source: "console" },
+				);
 			} finally {
 				_insideRelog = false;
 			}
@@ -91,6 +95,7 @@ export function restoreConsole(): void {
 	console.warn = originalConsole.warn;
 	console.error = originalConsole.error;
 	console.debug = originalConsole.debug;
+	console.trace = originalConsole.trace;
 }
 
 function generateTraceId(): string {
@@ -251,8 +256,16 @@ export function relogProxy(userProxy?: (request: Request) => Response | Promise<
 				method: "POST",
 				headers: edgeHeaders,
 				body: JSON.stringify([record]),
-			}).catch(() => {
-				// Silently drop in edge — no console to avoid noise
+			}).catch((err) => {
+				// Drop without crashing the request, but warn once per process
+				// so misconfigured RELOG_URL doesn't silently lose all logs.
+				if (!edgeIngestWarned) {
+					edgeIngestWarned = true;
+					originalConsole.warn(
+						`[relog.dev] edge-runtime ingest to ${edgeUrl}/ingest failed (further failures suppressed):`,
+						err instanceof Error ? err.message : err,
+					);
+				}
 			});
 			// Use waitUntil if available (Vercel Edge, Cloudflare Workers)
 			// to prevent the runtime from killing the fetch before it completes
@@ -322,18 +335,36 @@ export interface BrowserProxyOptions {
 	service?: string;
 	/** Max entries per request to prevent abuse (default: 100) */
 	maxBatchSize?: number;
+	/** Max raw request body in bytes, checked before parsing (default: 1 MiB). */
+	maxBodyBytes?: number;
 }
+
+const DEFAULT_MAX_BODY_BYTES = 1 * 1024 * 1024;
 
 export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 	const url = options.url ?? process.env.RELOG_URL ?? "http://localhost:3485";
 	const auth = options.auth ?? process.env.RELOG_AUTH;
 	const service = options.service;
 	const maxBatchSize = options.maxBatchSize ?? 100;
+	const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
 
 	return async (request: Request): Promise<Response> => {
+		// Reject oversized bodies up front. Without this, a hostile client
+		// posts an arbitrarily large JSON blob and we buffer the whole thing
+		// into V8 heap before slicing to maxBatchSize. Trust Content-Length
+		// when present; fall back to a streaming length check otherwise.
+		const declaredLen = Number(request.headers.get("content-length") ?? "");
+		if (Number.isFinite(declaredLen) && declaredLen > maxBodyBytes) {
+			return Response.json({ error: "Request body too large" }, { status: 413 });
+		}
+
 		let body: unknown;
 		try {
-			body = await request.json();
+			const raw = await readBoundedText(request, maxBodyBytes);
+			if (raw === null) {
+				return Response.json({ error: "Request body too large" }, { status: 413 });
+			}
+			body = JSON.parse(raw);
 		} catch {
 			return Response.json({ error: "Invalid JSON" }, { status: 400 });
 		}
@@ -386,6 +417,37 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 	};
 }
 
+/**
+ * Read up to `maxBytes` of UTF-8 text from a Request body. Returns `null`
+ * when the stream exceeds the cap so the caller can return 413 instead of
+ * silently truncating the JSON payload.
+ */
+async function readBoundedText(request: Request, maxBytes: number): Promise<string | null> {
+	const reader = request.body?.getReader();
+	if (!reader) return await request.text();
+	let total = 0;
+	const chunks: Uint8Array[] = [];
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > maxBytes) {
+			try {
+				await reader.cancel();
+			} catch {}
+			return null;
+		}
+		chunks.push(value);
+	}
+	const merged = new Uint8Array(total);
+	let offset = 0;
+	for (const c of chunks) {
+		merged.set(c, offset);
+		offset += c.byteLength;
+	}
+	return new TextDecoder("utf-8").decode(merged);
+}
+
 /** Reset singleton — exposed for testing only. */
 export function _resetSingleton(): void {
 	if (singletonTransport) {
@@ -395,5 +457,6 @@ export function _resetSingleton(): void {
 	singleton = null;
 	singletonConfig = null;
 	logProxyWarned = false;
+	edgeIngestWarned = false;
 	restoreConsole();
 }

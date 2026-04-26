@@ -1,6 +1,13 @@
 import type { RelogDatabase } from "../../db/database.ts";
 import { VALID_LEVELS } from "../../types.ts";
 import type { IngestPayload } from "../../types.ts";
+import { logRouteError } from "../log.ts";
+import { redactMeta } from "../redact.ts";
+import {
+	cachedToResponse,
+	type IdempotencyStore,
+	readIdempotencyKey,
+} from "../idempotency.ts";
 
 const MAX_MESSAGE_LENGTH = 1_048_576;
 const MAX_STRING_FIELD_LENGTH = 1024;
@@ -11,7 +18,14 @@ export async function handleIngest(
 	db: RelogDatabase,
 	maxBatchSize: number = 1000,
 	keyPrefix?: string,
+	idempotency?: IdempotencyStore,
 ): Promise<Response> {
+	const idemKey = readIdempotencyKey(request);
+	if (idemKey && idempotency) {
+		const cached = idempotency.get("ingest", keyPrefix, idemKey);
+		if (cached) return cachedToResponse(cached);
+	}
+
 	let body: unknown;
 	try {
 		body = await request.json();
@@ -157,6 +171,28 @@ export async function handleIngest(
 		}
 	}
 
-	db.insert(entries as IngestPayload[], keyPrefix);
-	return Response.json({ ingested: entries.length }, { status: 201 });
+	const cleaned = (entries as IngestPayload[]).map((e) =>
+		e.meta ? { ...e, meta: redactMeta(e.meta) as Record<string, unknown> } : e,
+	);
+	try {
+		db.insert(cleaned, keyPrefix);
+	} catch (err) {
+		logRouteError("POST /ingest", err, {
+			keyPrefix,
+			details: { entries: entries.length },
+		});
+		return Response.json({ error: "Ingest failed" }, { status: 500 });
+	}
+	const responseBody = JSON.stringify({ ingested: entries.length });
+	if (idemKey && idempotency) {
+		idempotency.put("ingest", keyPrefix, idemKey, {
+			status: 201,
+			body: responseBody,
+			contentType: "application/json",
+		});
+	}
+	return new Response(responseBody, {
+		status: 201,
+		headers: { "Content-Type": "application/json" },
+	});
 }

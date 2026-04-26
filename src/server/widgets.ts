@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { dirname } from "node:path";
+import { atomicWriteFile } from "../atomic-write.ts";
 import type { Widget, WidgetsFile } from "../types.ts";
 
 export class WidgetsManager {
@@ -80,7 +81,7 @@ export class WidgetsManager {
 				version: 1,
 				widgets: Array.from(this.widgets.values()),
 			};
-			await fs.writeFile(this.filePath, JSON.stringify(body, null, 2));
+			await atomicWriteFile(this.filePath, JSON.stringify(body, null, 2));
 		} catch (err) {
 			console.error("[relog.dev] Failed to persist widgets:", err);
 		}

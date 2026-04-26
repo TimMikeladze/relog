@@ -109,12 +109,17 @@ export function TimelineStrip({
 
 	const timeRange = useMemo(() => {
 		const now = Date.now();
-		const startMs = from
-			? from.match(/^\d+[smhdwMy]$/)
-				? parseRelativeTime(from)
-				: new Date(from).getTime()
-			: now - 3600_000;
-		const endMs = to ? new Date(to).getTime() : now;
+		// `new Date(badInput).getTime()` returns NaN, which silently
+		// propagates into every bucket calculation and blanks the strip.
+		// Coerce invalid inputs back to the 1h-default so the UI degrades
+		// gracefully rather than vanishing.
+		const parsed = (raw: string, fallback: number): number => {
+			if (raw.match(/^\d+[smhdwMy]$/)) return parseRelativeTime(raw);
+			const t = new Date(raw).getTime();
+			return Number.isFinite(t) ? t : fallback;
+		};
+		const startMs = from ? parsed(from, now - 3600_000) : now - 3600_000;
+		const endMs = to ? parsed(to, now) : now;
 		return { startMs, endMs, rangeMs: endMs - startMs };
 	}, [from, to]);
 

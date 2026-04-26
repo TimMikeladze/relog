@@ -18,7 +18,10 @@ const ReactGridLayoutWithWidth = WidthProvider(RGLBase);
 export interface WidgetGridProps {
 	widgets: Widget[];
 	editMode: boolean;
-	onLayoutChange: (updates: { id: string; layout: Widget["layout"] }[]) => void;
+	onLayoutChange: (
+		updates: { id: string; layout: Widget["layout"] }[],
+		opts?: { keepalive?: boolean },
+	) => void;
 	renderWidget: (w: Widget) => React.ReactNode;
 }
 
@@ -26,15 +29,22 @@ export function WidgetGrid({ widgets, editMode, onLayoutChange, renderWidget }: 
 	const pendingRef = useRef<Map<string, Widget["layout"]>>(new Map());
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-	const flush = useCallback(() => {
-		if (pendingRef.current.size === 0) return;
-		const updates = Array.from(pendingRef.current.entries()).map(([id, layout]) => ({
-			id,
-			layout,
-		}));
-		pendingRef.current.clear();
-		onLayoutChange(updates);
-	}, [onLayoutChange]);
+	const flush = useCallback(
+		(opts?: { keepalive?: boolean }) => {
+			if (pendingRef.current.size === 0) return;
+			const updates = Array.from(pendingRef.current.entries()).map(([id, layout]) => ({
+				id,
+				layout,
+			}));
+			pendingRef.current.clear();
+			// Only pass opts when it's actually meaningful — keeps the
+			// common-case call site (`onLayoutChange(updates)`) compatible
+			// with consumers that expect a single argument.
+			if (opts) onLayoutChange(updates, opts);
+			else onLayoutChange(updates);
+		},
+		[onLayoutChange],
+	);
 
 	const flushRef = useRef(flush);
 	useEffect(() => {
@@ -51,6 +61,23 @@ export function WidgetGrid({ widgets, editMode, onLayoutChange, renderWidget }: 
 	useEffect(() => {
 		return () => {
 			flushRef.current();
+		};
+	}, []);
+
+	// Persist pending layout changes if the user closes the tab or hides
+	// it during the 2s debounce window. `keepalive: true` lets the PUT
+	// finish after page unload — without it the request is aborted and
+	// the layout move is lost.
+	useEffect(() => {
+		const beforeUnload = () => flushRef.current({ keepalive: true });
+		const visibility = () => {
+			if (document.visibilityState === "hidden") flushRef.current({ keepalive: true });
+		};
+		window.addEventListener("beforeunload", beforeUnload);
+		document.addEventListener("visibilitychange", visibility);
+		return () => {
+			window.removeEventListener("beforeunload", beforeUnload);
+			document.removeEventListener("visibilitychange", visibility);
 		};
 	}, []);
 
@@ -71,7 +98,7 @@ export function WidgetGrid({ widgets, editMode, onLayoutChange, renderWidget }: 
 				}
 			}
 			if (debounceRef.current) clearTimeout(debounceRef.current);
-			debounceRef.current = setTimeout(flush, 2000);
+			debounceRef.current = setTimeout(() => flush(), 2000);
 		},
 		[widgets, editMode, flush],
 	);

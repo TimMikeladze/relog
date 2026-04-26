@@ -118,7 +118,6 @@ interface TraceContext {
 	depth: number;
 }
 
-const SPAN_KINDS = ["server", "client", "internal", "producer", "consumer"] as const;
 const SCOPE_NAMES = [
 	"@opentelemetry/instrumentation-http",
 	"@opentelemetry/instrumentation-express",

@@ -3,23 +3,48 @@ import type { LogRecord } from "./types.ts";
 const activeTransports = new Set<Transport>();
 let shutdownRegistered = false;
 
+const SHUTDOWN_DRAIN_TIMEOUT_MS = 5000;
+
 function registerShutdownHandlers(): void {
 	if (shutdownRegistered) return;
 	shutdownRegistered = true;
 
 	if (typeof process === "undefined") return;
 
-	const flushAll = () => Promise.allSettled([...activeTransports].map((t) => t.flush()));
+	// Drain everything: pending buffered batches AND any sendBatch already
+	// in flight. Bound the wait so a hung HTTP request doesn't pin the
+	// process forever — at SHUTDOWN_DRAIN_TIMEOUT_MS we give up and let
+	// the process exit, dropping any still-in-flight batches.
+	const drainAll = async () => {
+		const flushes = [...activeTransports].map((t) => t.flush());
+		const inflight = [...activeTransports].flatMap((t) => t.getInflight());
+		const pending = Promise.allSettled([...flushes, ...inflight]);
+		const timeout = new Promise<void>((resolve) => {
+			const t = setTimeout(resolve, SHUTDOWN_DRAIN_TIMEOUT_MS);
+			if (typeof t === "object" && "unref" in t) t.unref();
+		});
+		await Promise.race([pending, timeout]);
+	};
 
-	// Flush pending logs on shutdown signals. We do NOT call process.exit() —
-	// the host application is responsible for exit. This avoids conflicts when
-	// the transport runs alongside other shutdown logic (e.g. closing databases).
 	const shutdownFlush = () => {
+		// Pin the event loop while drain is running; clear it so the
+		// process can exit immediately afterwards. Bun/Node would otherwise
+		// have nothing keeping it alive once timers/intervals are unref'd.
 		const keepAlive = setInterval(() => {}, 1000);
-		flushAll().finally(() => clearInterval(keepAlive));
+		drainAll().finally(() => clearInterval(keepAlive));
 	};
 	process.on("SIGINT", shutdownFlush);
 	process.on("SIGTERM", shutdownFlush);
+	// beforeExit fires when the loop is about to drain naturally — last
+	// chance to flush leftover buffered logs that batched-but-never-sent.
+	// Guard against re-entry: drainAll's async work re-arms the loop,
+	// which would re-fire beforeExit and recurse forever.
+	let beforeExitFired = false;
+	process.on("beforeExit", () => {
+		if (beforeExitFired) return;
+		beforeExitFired = true;
+		void drainAll();
+	});
 }
 
 export class Transport {
@@ -34,6 +59,7 @@ export class Transport {
 	private pendingFlush = false;
 	private destroyed = false;
 	private onError: ((error: Error, batch: LogRecord[]) => void) | undefined;
+	private inflight = new Set<Promise<void>>();
 
 	constructor(options: {
 		url: string;
@@ -82,15 +108,23 @@ export class Transport {
 
 		const batch = this.buffer.splice(0);
 
+		const sendPromise = this.sendBatch(batch);
+		this.inflight.add(sendPromise);
 		try {
-			await this.sendBatch(batch);
+			await sendPromise;
 		} finally {
+			this.inflight.delete(sendPromise);
 			this.flushing = false;
 			if (!this.destroyed && this.pendingFlush && this.buffer.length > 0) {
 				this.pendingFlush = false;
 				void this.flush();
 			}
 		}
+	}
+
+	/** Snapshot of in-flight sendBatch promises for the shutdown path. */
+	getInflight(): Promise<void>[] {
+		return [...this.inflight];
 	}
 
 	private async sendBatch(batch: LogRecord[]): Promise<void> {

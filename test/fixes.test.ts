@@ -1,11 +1,10 @@
-import { unlinkSync, existsSync } from "node:fs";
+import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { startServer } from "../src/server/server.ts";
 import type { ServerInstance } from "../src/server/server.ts";
 import { AggregatesManager } from "../src/server/aggregates.ts";
-import type { LogEntry } from "../src/types.ts";
 
 function tmpDbPath(): string {
 	return join(tmpdir(), `relog-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`);
@@ -244,5 +243,45 @@ describe("RateLimiter correctness", () => {
 		// First 5 should succeed (201), rest should be rate limited (429)
 		expect(results.filter((s) => s === 201).length).toBe(5);
 		expect(results.filter((s) => s === 429).length).toBe(3);
+	});
+});
+
+// Regression: DuckDB returns TIMESTAMP/DATE/INTERVAL/etc. as value-class
+// instances backed by BigInt. Plain JSON.stringify on them throws, which
+// surfaced as a 500 from /query whenever a user (or widget) used date_trunc
+// or any other expression that produced a TIMESTAMP column.
+describe("DuckDB value-class JSON serialization", () => {
+	let server: ServerInstance;
+	let baseUrl: string;
+	let dbPath: string;
+
+	beforeAll(async () => {
+		dbPath = tmpDbPath();
+		server = await startServer({ port: 0, dbPath });
+		baseUrl = `http://localhost:${server.server.port}`;
+		// Seed one log so the GROUP BY has something to bucket.
+		server.db.insert([{ level: "info", message: "tz-test" }]);
+	});
+
+	afterAll(() => {
+		server.shutdown();
+		cleanupDb(dbPath);
+	});
+
+	test("date_trunc(TIMESTAMP) result serializes without BigInt error", async () => {
+		const res = await fetch(`${baseUrl}/query`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				sql: "SELECT date_trunc('minute', CAST(timestamp AS TIMESTAMP)) AS m, COUNT(*) AS n FROM logs GROUP BY m",
+			}),
+		});
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { rows: { m: unknown; n: number }[] };
+		expect(body.rows.length).toBeGreaterThan(0);
+		// Bucket should be present and JSON-safe (string). Value depends on
+		// the timestamp DuckDB stores; just assert it's a non-empty string.
+		expect(typeof body.rows[0]!.m).toBe("string");
+		expect((body.rows[0]!.m as string).length).toBeGreaterThan(0);
 	});
 });

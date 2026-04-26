@@ -8,10 +8,41 @@ function escapeLike(s: string): string {
 	return s.replace(/[%_\\]/g, "\\$&");
 }
 
+// Throttle the truncation warning so a single bad query can't spam stderr
+// for every row × column. One log per minute is enough to flag it in ops.
+let lastBigIntWarnAt = 0;
+const BIGINT_WARN_INTERVAL_MS = 60_000;
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE_BIGINT = -MAX_SAFE_BIGINT;
+
+/**
+ * DuckDB returns TIMESTAMP/DATE/TIME/INTERVAL/DECIMAL/UUID/BIT etc. as
+ * value-class instances whose internal representation is a BigInt. Plain
+ * JSON.stringify on these throws ("cannot serialize BigInt"), so route
+ * handlers fail with 500. Convert to string via the class's toString().
+ */
+function isDuckDBValueClass(v: object): boolean {
+	const ctor = v.constructor;
+	if (!ctor || ctor === Object || ctor === Array) return false;
+	return typeof ctor.name === "string" && ctor.name.startsWith("DuckDB");
+}
+
 function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
 	const out: Record<string, unknown> = {};
 	for (const [k, v] of Object.entries(row)) {
-		out[k] = typeof v === "bigint" ? Number(v) : v;
+		if (typeof v === "bigint") {
+			if ((v > MAX_SAFE_BIGINT || v < MIN_SAFE_BIGINT) && Date.now() - lastBigIntWarnAt > BIGINT_WARN_INTERVAL_MS) {
+				lastBigIntWarnAt = Date.now();
+				console.warn(
+					`[relog.dev] BIGINT truncation: column "${k}" value ${v.toString()} exceeds Number.MAX_SAFE_INTEGER; precision lost`,
+				);
+			}
+			out[k] = Number(v);
+		} else if (v !== null && typeof v === "object" && isDuckDBValueClass(v)) {
+			out[k] = String(v);
+		} else {
+			out[k] = v;
+		}
 	}
 	return out;
 }
@@ -75,9 +106,32 @@ export class DuckDBReader {
 							REGION '${escapeString(this.archive.region ?? "us-east-1")}'
 						);
 					`);
-				} catch {
+				} catch (err) {
+					const e = err as Error & { code?: string };
+					const raw = e.message ?? String(err);
+					// Redact longest secret first; skip empty creds (split("") explodes
+					// the string into characters). Also redact the SQL-escaped form in
+					// case DuckDB echoes the literal as written.
+					const variants = (s: string): string[] =>
+						s.length === 0 ? [] : s === escapeString(s) ? [s] : [s, escapeString(s)];
+					const redactions: { value: string; label: string }[] = [
+						...variants(this.archive.secretAccessKey).map((v) => ({
+							value: v,
+							label: "[REDACTED_SECRET]",
+						})),
+						...variants(this.archive.accessKeyId).map((v) => ({
+							value: v,
+							label: "[REDACTED_KEY_ID]",
+						})),
+					];
+					let redacted = raw;
+					for (const { value, label } of redactions) {
+						redacted = redacted.split(value).join(label);
+					}
+					const codePart = e.code ? ` [${e.code}]` : "";
+					console.error("[relog.dev] DuckDB S3 secret creation failed:", redacted);
 					throw new Error(
-						"Failed to configure S3 access in DuckDB — check endpoint, bucket, and credentials",
+						`Failed to configure S3 access in DuckDB — check endpoint, bucket, and credentials${codePart}: ${redacted}`,
 					);
 				}
 

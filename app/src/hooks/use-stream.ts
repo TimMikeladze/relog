@@ -1,9 +1,42 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getAuthKey, getBaseUrl } from "@/api/client";
 import type { Filters, LogRecord } from "@/types";
 
-const MAX_BUFFER = 10_000;
+// log-table.tsx renders rows via a plain `.map()` — no virtualization.
+// 10k DOM rows tanks scroll perf and explodes memory; 2k keeps the live
+// stream useful without melting the browser. If/when the table is moved
+// to a windowed renderer, this can grow back up.
+const MAX_BUFFER = 2_000;
 const MAX_BACKOFF = 30_000;
+
+/**
+ * Parse SSE event blocks. Spec: events are delimited by `\n\n`. A single
+ * event may contain multiple `data:` lines whose values are joined with
+ * `\n`. The previous split-on-`\n` worked only because our server emits
+ * single-line JSON, but would break the moment a payload contained a
+ * literal newline. Returns the consumed events plus any trailing partial
+ * block to carry into the next read.
+ */
+function consumeBuffer(buffer: string): { events: string[]; rest: string } {
+	const events: string[] = [];
+	let lastConsumedEnd = 0;
+	let cursor = 0;
+	while (cursor < buffer.length) {
+		const end = buffer.indexOf("\n\n", cursor);
+		if (end === -1) break;
+		const block = buffer.slice(cursor, end);
+		const dataLines: string[] = [];
+		for (const line of block.split("\n")) {
+			if (line.startsWith("data:")) {
+				dataLines.push(line.slice(5).replace(/^ /, ""));
+			}
+		}
+		if (dataLines.length > 0) events.push(dataLines.join("\n"));
+		cursor = end + 2;
+		lastConsumedEnd = cursor;
+	}
+	return { events, rest: buffer.slice(lastConsumedEnd) };
+}
 
 export function useStream(filters: Filters, enabled: boolean) {
 	const [logs, setLogs] = useState<LogRecord[]>([]);
@@ -13,6 +46,30 @@ export function useStream(filters: Filters, enabled: boolean) {
 	const backoffRef = useRef(1000);
 	const reconnectTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+	// Stabilize the filter identity. Parents pass a fresh `filters` object on
+	// every render, which used to invalidate the connect callback and trigger
+	// a reconnect storm whenever any unrelated state changed. By memoizing
+	// against the actual filter values, we only reconnect when the filter
+	// content genuinely changes.
+	const stableFilters = useMemo(
+		() => ({
+			level: filters.level ?? null,
+			service: filters.service ?? null,
+			project: filters.project ?? null,
+			branch: filters.branch ?? null,
+			version: filters.version ?? null,
+			deployment_id: filters.deployment_id ?? null,
+		}),
+		[
+			filters.level,
+			filters.service,
+			filters.project,
+			filters.branch,
+			filters.version,
+			filters.deployment_id,
+		],
+	);
+
 	const connect = useCallback(() => {
 		if (paused || !enabled) return;
 
@@ -21,12 +78,13 @@ export function useStream(filters: Filters, enabled: boolean) {
 		abortRef.current = controller;
 
 		const url = new URL("/stream", getBaseUrl());
-		if (filters.level) url.searchParams.set("level", filters.level);
-		if (filters.service) url.searchParams.set("service", filters.service);
-		if (filters.project) url.searchParams.set("project", filters.project);
-		if (filters.branch) url.searchParams.set("branch", filters.branch);
-		if (filters.version) url.searchParams.set("version", filters.version);
-		if (filters.deployment_id) url.searchParams.set("deployment_id", filters.deployment_id);
+		if (stableFilters.level) url.searchParams.set("level", stableFilters.level);
+		if (stableFilters.service) url.searchParams.set("service", stableFilters.service);
+		if (stableFilters.project) url.searchParams.set("project", stableFilters.project);
+		if (stableFilters.branch) url.searchParams.set("branch", stableFilters.branch);
+		if (stableFilters.version) url.searchParams.set("version", stableFilters.version);
+		if (stableFilters.deployment_id)
+			url.searchParams.set("deployment_id", stableFilters.deployment_id);
 
 		const headers: Record<string, string> = { Accept: "text/event-stream" };
 		const key = getAuthKey();
@@ -51,20 +109,17 @@ export function useStream(filters: Filters, enabled: boolean) {
 					if (done) break;
 
 					buffer += decoder.decode(value, { stream: true });
-					const lines = buffer.split("\n");
-					buffer = lines.pop() || "";
-
-					for (const line of lines) {
-						if (line.startsWith("data: ")) {
-							try {
-								const log = JSON.parse(line.slice(6)) as LogRecord;
-								setLogs((prev) => {
-									const next = [...prev, log];
-									return next.length > MAX_BUFFER ? next.slice(-MAX_BUFFER) : next;
-								});
-							} catch {
-								// ignore parse errors
-							}
+					const { events, rest } = consumeBuffer(buffer);
+					buffer = rest;
+					for (const data of events) {
+						try {
+							const log = JSON.parse(data) as LogRecord;
+							setLogs((prev) => {
+								const next = [...prev, log];
+								return next.length > MAX_BUFFER ? next.slice(-MAX_BUFFER) : next;
+							});
+						} catch {
+							// ignore parse errors (heartbeats, malformed payload)
 						}
 					}
 				}
@@ -79,7 +134,7 @@ export function useStream(filters: Filters, enabled: boolean) {
 				backoffRef.current = Math.min(delay * 2, MAX_BACKOFF);
 				reconnectTimerRef.current = setTimeout(connect, delay);
 			});
-	}, [filters, paused, enabled]);
+	}, [stableFilters, paused, enabled]);
 
 	useEffect(() => {
 		setLogs([]);

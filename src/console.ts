@@ -37,9 +37,25 @@ export function formatLogRecord(record: LogRecord): string {
 			: "";
 	const meta =
 		record.meta && Object.keys(record.meta).length > 0
-			? ` ${pc.dim(JSON.stringify(record.meta))}`
+			? ` ${pc.dim(safeStringify(record.meta))}`
 			: "";
 	return `${pc.dim(time)} ${levelStr} ${proj}${svc}${record.message}${duration}${meta}`;
+}
+
+/**
+ * `JSON.stringify` throws on BigInt and on circular references — both of
+ * which leak into log meta when callers pass DB rows or driver objects
+ * directly. A throw here aborts the local console formatter and the user
+ * loses the log entirely. Coerce BigInt to string in a replacer; on any
+ * remaining error (cycles, getters that throw), fall back to a marker so
+ * the rest of the line still renders.
+ */
+function safeStringify(value: unknown): string {
+	try {
+		return JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+	} catch {
+		return "[unserializable meta]";
+	}
 }
 
 export function printLogRecord(record: LogRecord): void {

@@ -166,8 +166,15 @@ function TreeConnectors({
 	let currentSpanId = span.spanId;
 	const depthIsLast: boolean[] = [];
 
-	// Walk up from current span to root, collecting "is last child" at each depth
+	// Walk up from current span to root, collecting "is last child" at each
+	// depth. A malformed parent chain (span.parentSpanId === spanId, or any
+	// cycle further up) would otherwise produce wrong tree connectors as
+	// the same node is revisited; bail on revisit so the worst case is a
+	// truncated indent guide rather than incorrect lines.
+	const seen = new Set<string>();
 	for (let d = span.depth; d >= 1; d--) {
+		if (seen.has(currentSpanId)) break;
+		seen.add(currentSpanId);
 		depthIsLast[d] = isLastChild.get(currentSpanId) ?? true;
 		const pIdx = parentIndex.get(currentSpanId);
 		if (pIdx !== undefined) {

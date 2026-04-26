@@ -3,8 +3,31 @@ import { CREATE_INDEXES, CREATE_LOGS_TABLE, CREATE_SOURCE_CURSORS_TABLE } from "
 import type { IngestPayload, LogEntry, StreamFilters } from "../types.ts";
 import { parseMeta } from "./util.ts";
 import { getDefaultDbPath } from "../paths.ts";
+import { addColumnIfMissing as addColIfMissing, type Migration, runMigrations } from "./migrations.ts";
 
 export { QueryValidationError } from "./validate.ts";
+
+/**
+ * Schema migrations. Append-only — never edit a published migration.
+ * Migration 1 retroactively records the ad-hoc ALTERs that pre-existed
+ * the migration runner so existing databases get marked as up-to-date
+ * without re-running anything destructive.
+ */
+const MIGRATIONS: Migration[] = [
+	{
+		id: 1,
+		name: "baseline columns (project, branch, version, deployment_id, key_prefix, parent_span_id, duration_ms)",
+		up: (db) => {
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN project TEXT");
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN branch TEXT");
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN version TEXT");
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN deployment_id TEXT");
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN key_prefix TEXT");
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN parent_span_id TEXT");
+			addColIfMissing(db, "ALTER TABLE logs ADD COLUMN duration_ms REAL");
+		},
+	},
+];
 
 export interface SearchOptions {
 	level?: string;
@@ -27,15 +50,6 @@ export interface SearchOptions {
 const UPSERT_CURSOR_SQL =
 	"INSERT INTO source_cursors (source_id, cursor, updated_at) VALUES (?, ?, ?) ON CONFLICT(source_id) DO UPDATE SET cursor = excluded.cursor, updated_at = excluded.updated_at";
 
-function addColumnIfMissing(db: Database, sql: string): void {
-	try {
-		db.exec(sql);
-	} catch (err: unknown) {
-		const msg = err instanceof Error ? err.message : String(err);
-		if (!msg.includes("duplicate column name")) throw err;
-	}
-}
-
 export class RelogDatabase {
 	private db: Database;
 	private readonlyDb: Database;
@@ -47,14 +61,7 @@ export class RelogDatabase {
 		this.db.exec("PRAGMA busy_timeout = 5000");
 		this.db.exec(CREATE_LOGS_TABLE);
 		this.db.exec(CREATE_SOURCE_CURSORS_TABLE);
-		// Migrate: add columns for existing DBs
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN project TEXT");
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN branch TEXT");
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN version TEXT");
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN deployment_id TEXT");
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN key_prefix TEXT");
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN parent_span_id TEXT");
-		addColumnIfMissing(this.db, "ALTER TABLE logs ADD COLUMN duration_ms REAL");
+		runMigrations(this.db, MIGRATIONS);
 		for (const idx of CREATE_INDEXES) {
 			this.db.exec(idx);
 		}

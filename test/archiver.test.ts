@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { S3Client } from "bun";
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { DuckDBInstance, type DuckDBConnection } from "@duckdb/node-api";
-import { logsToParquet, groupByPartition, archiveLogBatch } from "../src/archiver.ts";
+import { DuckDBInstance } from "@duckdb/node-api";
+import { logsToParquet, groupByPartition, archiveLogBatch, sanitizePartition } from "../src/archiver.ts";
 import { RelogDatabase } from "../src/db/database.ts";
 import { DuckDBReader } from "../src/db/duckdb.ts";
 import type { ArchiveConfig, LogEntry } from "../src/types.ts";
@@ -84,6 +84,44 @@ describe("groupByPartition", () => {
 		const partitions = groupByPartition(logs);
 		expect(partitions[0]!.project).toBe("_default");
 		expect(partitions[0]!.branch).toBe("_default");
+	});
+
+	test("sanitizes path-traversal characters out of project/branch", () => {
+		const logs = makeLogs([
+			{ project: "../escape", branch: "feat/main with space" },
+		]);
+		const partitions = groupByPartition(logs);
+		// '/' and ' ' replaced with _, leading dots preserved (file-name safe).
+		expect(partitions[0]!.project).toBe(".._escape");
+		expect(partitions[0]!.branch).toBe("feat_main_with_space");
+	});
+});
+
+// ─── sanitizePartition ────────────────────────────────────────────
+
+describe("sanitizePartition", () => {
+	test("passes safe values unchanged", () => {
+		expect(sanitizePartition("proj-a")).toBe("proj-a");
+		expect(sanitizePartition("v1.2.3")).toBe("v1.2.3");
+		expect(sanitizePartition("my_branch")).toBe("my_branch");
+	});
+
+	test("replaces unsafe characters", () => {
+		expect(sanitizePartition("../escape")).toBe(".._escape");
+		expect(sanitizePartition("a/b")).toBe("a_b");
+		expect(sanitizePartition("with space")).toBe("with_space");
+		expect(sanitizePartition("nul\x00byte")).toBe("nul_byte");
+	});
+
+	test("falls back to _default on empty input", () => {
+		expect(sanitizePartition("")).toBe("_default");
+		expect(sanitizePartition("///")).toBe("___");
+	});
+
+	test("caps length", () => {
+		const long = "a".repeat(500);
+		const result = sanitizePartition(long);
+		expect(result.length).toBeLessThanOrEqual(128);
 	});
 });
 
@@ -467,7 +505,6 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 	let dbPath: string;
 	let db: RelogDatabase;
 	let archiveConfig: ArchiveConfig;
-	let s3: S3Client;
 	const testPrefix = `test-${Date.now()}`;
 
 	beforeAll(() => {
@@ -483,7 +520,9 @@ describe.if(HAS_MINIO)("Archiver → S3 (MinIO) end-to-end", () => {
 			region: "us-east-1",
 		};
 
-		s3 = new S3Client({
+		// Construct to validate creds; instance not held since archiver
+		// constructs its own internally.
+		new S3Client({
 			endpoint: MINIO_ENDPOINT!,
 			bucket: MINIO_BUCKET!,
 			accessKeyId: MINIO_ACCESS_KEY!,

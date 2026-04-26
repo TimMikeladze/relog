@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { WidgetEditor } from "./widget-editor";
 
@@ -77,7 +77,9 @@ describe("WidgetEditor", () => {
 		fireEvent.change(screen.getByLabelText("ID"), { target: { value: "good-id" } });
 		fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Good" } });
 		fireEvent.click(screen.getByRole("button", { name: /save/i }));
-		expect(onSave).toHaveBeenCalledTimes(1);
+		// Save now runs an async EXPLAIN against the server before invoking
+		// onSave; wait for the mocked apiPost promise chain to settle.
+		await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
 		expect(onSave).toHaveBeenCalledWith(
 			expect.objectContaining({
 				id: "good-id",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import type { LogRecord } from "@/types";
 import { LogRow } from "./log-row";
@@ -35,7 +35,48 @@ export function LogTable({
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const stickToBottomRef = useRef(autoScroll);
 
-	const selectedLog = selectedId !== null ? logs.find((l) => l.id === selectedId) : null;
+	// Latest-logs ref so the stable bookmark/click handlers below can read
+	// the current row without re-binding when `logs` changes (which would
+	// invalidate the memoized LogRow callbacks every render).
+	const logsRef = useRef(logs);
+	logsRef.current = logs;
+
+	// Memoize the lookup so `logs.find` doesn't run on every render of an
+	// unrelated state change (e.g. live-stream tick when nothing is selected).
+	const selectedLog = useMemo(
+		() => (selectedId !== null ? logs.find((l) => l.id === selectedId) ?? null : null),
+		[selectedId, logs],
+	);
+
+	const handleSelectInline = useCallback((id: number) => {
+		setExpandedIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+	}, []);
+
+	const handleSelectPanel = useCallback((id: number) => {
+		setSelectedId((prev) => (prev === id ? null : id));
+	}, []);
+
+	const handleToggleBookmark = useCallback(
+		(id: number, e: React.MouseEvent) => {
+			e.stopPropagation();
+			const log = logsRef.current.find((l) => l.id === id);
+			if (!log) return;
+			toggle({
+				type: "log",
+				label: log.message.slice(0, 80),
+				timestamp: log.timestamp,
+				level: log.level,
+				service: log.service ?? undefined,
+				logRecord: log,
+			});
+		},
+		[toggle],
+	);
 
 	const handleScroll = useCallback(() => {
 		const el = scrollRef.current;
@@ -89,37 +130,14 @@ export function LogTable({
 									showDate={showDate}
 									selected={expanded}
 									isBookmarked={isBookmarked(`log:${log.id}`)}
-									onToggleBookmark={(e) => {
-										e.stopPropagation();
-										toggle({
-											type: "log",
-											label: log.message.slice(0, 80),
-											timestamp: log.timestamp,
-											level: log.level,
-											service: log.service ?? undefined,
-											logRecord: log,
-										});
-									}}
-									onClick={() =>
-										setExpandedIds((prev) => {
-											const next = new Set(prev);
-											if (next.has(log.id)) next.delete(log.id);
-											else next.add(log.id);
-											return next;
-										})
-									}
+									onToggleBookmark={handleToggleBookmark}
+									onClick={handleSelectInline}
 								/>
 								{expanded && (
 									<div className="mx-2 mb-2 max-h-[520px] overflow-y-auto">
 										<LogDetailPanel
 											log={log}
-											onClose={() =>
-												setExpandedIds((prev) => {
-													const next = new Set(prev);
-													next.delete(log.id);
-													return next;
-												})
-											}
+											onClose={() => handleSelectInline(log.id)}
 											onNavigateTrace={onNavigateTrace}
 											variant="inline"
 										/>
@@ -151,18 +169,8 @@ export function LogTable({
 								showDate={showDate}
 								selected={log.id === selectedId}
 								isBookmarked={isBookmarked(`log:${log.id}`)}
-								onToggleBookmark={(e) => {
-									e.stopPropagation();
-									toggle({
-										type: "log",
-										label: log.message.slice(0, 80),
-										timestamp: log.timestamp,
-										level: log.level,
-										service: log.service ?? undefined,
-										logRecord: log,
-									});
-								}}
-								onClick={() => setSelectedId((prev) => (prev === log.id ? null : log.id))}
+								onToggleBookmark={handleToggleBookmark}
+								onClick={handleSelectPanel}
 							/>
 						))}
 

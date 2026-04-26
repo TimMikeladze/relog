@@ -20,6 +20,7 @@ import { handleAggregates } from "./routes/aggregates.ts";
 import { WidgetsManager } from "./widgets.ts";
 import { handleWidgets } from "./routes/widgets.ts";
 import { handleOtelTraces, handleOtelLogs } from "./routes/otel.ts";
+import { IdempotencyStore } from "./idempotency.ts";
 
 const DEFAULT_MAX_BODY = 5 * 1024 * 1024;
 const DEFAULT_INGEST_RPM = 600;
@@ -64,6 +65,54 @@ class RateLimiter {
 	get remaining(): number {
 		this.evict(Date.now());
 		return Math.max(0, this.maxRequests - this.active);
+	}
+
+	/** Last activity timestamp; used by the per-key map to GC idle entries. */
+	get lastSeen(): number {
+		return this.requests[this.requests.length - 1] ?? 0;
+	}
+}
+
+/**
+ * Per-key rate limit so one noisy ingest key cannot starve others. The
+ * unauthenticated case (no keys configured at all) shares a single
+ * "anonymous" bucket. Idle limiters are GC'd to bound map growth; otherwise
+ * a flood of one-off bogus tokens could grow the map without bound, which
+ * is itself a DoS vector.
+ */
+class PerKeyRateLimiter {
+	private buckets = new Map<string, RateLimiter>();
+	private windowMs: number;
+	private maxRequests: number;
+	private lastGcAt = 0;
+	private readonly GC_INTERVAL_MS = 5 * 60_000;
+	private readonly IDLE_TTL_MS = 10 * 60_000;
+	private readonly ANON_KEY = "__anon__";
+
+	constructor(windowMs: number, maxRequests: number) {
+		this.windowMs = windowMs;
+		this.maxRequests = maxRequests;
+	}
+
+	check(keyPrefix: string | undefined): boolean {
+		this.maybeGc();
+		const k = keyPrefix && keyPrefix.length > 0 ? keyPrefix : this.ANON_KEY;
+		let limiter = this.buckets.get(k);
+		if (!limiter) {
+			limiter = new RateLimiter(this.windowMs, this.maxRequests);
+			this.buckets.set(k, limiter);
+		}
+		return limiter.check();
+	}
+
+	private maybeGc(): void {
+		const now = Date.now();
+		if (now - this.lastGcAt < this.GC_INTERVAL_MS) return;
+		this.lastGcAt = now;
+		const cutoff = now - this.IDLE_TTL_MS;
+		for (const [k, limiter] of this.buckets) {
+			if (limiter.lastSeen < cutoff) this.buckets.delete(k);
+		}
 	}
 }
 
@@ -116,7 +165,21 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	await aggregatesManager.init();
 	const widgetsManager = new WidgetsManager(getWidgetsPath());
 	await widgetsManager.init();
-	const ingestLimiter = new RateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
+	const ingestLimiter = new PerKeyRateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
+	const idempotency = new IdempotencyStore();
+
+	// /health is unauthenticated and cheap, but unbounded. A bot scanning
+	// for /health endpoints can fill logs quickly. Bucket per remote IP so a
+	// single misbehaving probe can't starve real load-balancer probes.
+	// Trust `x-forwarded-for` first (front a reverse proxy in prod);
+	// otherwise fall back to the socket peer address.
+	const healthLimiter = new PerKeyRateLimiter(60_000, 60);
+
+	if (config.cors === true) {
+		console.warn(
+			"[relog.dev] CORS is configured as `true` (wildcard `*`). Do NOT use this in production — set `cors` to a specific origin or list of origins.",
+		);
+	}
 
 	const duckdb = new DuckDBReader(config.dbPath, config.archive);
 	await duckdb.init();
@@ -143,7 +206,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		port: config.port,
 		maxRequestBodySize: maxBody,
 		idleTimeout: config.idleTimeout ?? 60,
-		async fetch(request) {
+		async fetch(request, server) {
 			const requestOrigin = request.headers.get("Origin");
 			const cors = corsHeaders(config, requestOrigin);
 
@@ -158,6 +221,14 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 
 				// Health check before auth so load balancers can probe without credentials
 				if (method === "GET" && path === "/health") {
+					const xff = request.headers.get("x-forwarded-for");
+					const remoteIp = xff?.split(",")[0]?.trim() || server.requestIP(request)?.address || "_anon";
+					if (!healthLimiter.check(remoteIp)) {
+						return Response.json(
+							{ error: "Too many requests" },
+							{ status: 429, headers: { "Retry-After": "10", ...cors } },
+						);
+					}
 					const response = handleHealth(db, startTime, config.autoPrune);
 					if (config.cors) {
 						for (const [k, v] of Object.entries(cors)) {
@@ -174,13 +245,19 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				if (method === "POST" && path === "/v1/traces") {
 					auth = checkRole(request, "ingest", keys, prefixLen);
 					if (auth.error) return auth.error;
-					if (!ingestLimiter.check()) {
+					if (!ingestLimiter.check(auth.keyPrefix)) {
 						response = Response.json(
 							{ error: "Too many requests" },
 							{ status: 429, headers: { "Retry-After": "10" } },
 						);
 					} else {
-						response = await handleOtelTraces(request, db, maxBatchSize, auth.keyPrefix);
+						response = await handleOtelTraces(
+							request,
+							db,
+							maxBatchSize,
+							auth.keyPrefix,
+							idempotency,
+						);
 						if (response.status === 200) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/v1/metrics") {
@@ -193,19 +270,25 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				} else if (method === "POST" && path === "/v1/logs") {
 					auth = checkRole(request, "ingest", keys, prefixLen);
 					if (auth.error) return auth.error;
-					if (!ingestLimiter.check()) {
+					if (!ingestLimiter.check(auth.keyPrefix)) {
 						response = Response.json(
 							{ error: "Too many requests" },
 							{ status: 429, headers: { "Retry-After": "10" } },
 						);
 					} else {
-						response = await handleOtelLogs(request, db, maxBatchSize, auth.keyPrefix);
+						response = await handleOtelLogs(
+							request,
+							db,
+							maxBatchSize,
+							auth.keyPrefix,
+							idempotency,
+						);
 						if (response.status === 200) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/ingest") {
 					auth = checkRole(request, "ingest", keys, prefixLen);
 					if (auth.error) return auth.error;
-					if (!ingestLimiter.check()) {
+					if (!ingestLimiter.check(auth.keyPrefix)) {
 						response = Response.json(
 							{ error: "Too many requests" },
 							{
@@ -214,33 +297,39 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 							},
 						);
 					} else {
-						response = await handleIngest(request, db, maxBatchSize, auth.keyPrefix);
+						response = await handleIngest(
+							request,
+							db,
+							maxBatchSize,
+							auth.keyPrefix,
+							idempotency,
+						);
 						if (response.status === 201) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/histogram") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handleHistogram(request, duckdb);
+					response = await handleHistogram(request, duckdb, auth.keyPrefix);
 				} else if (method === "POST" && path === "/query") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handleQuery(request, duckdb);
+					response = await handleQuery(request, duckdb, auth.keyPrefix);
 				} else if (method === "POST" && path === "/query/stream") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handleQueryStream(request, duckdb);
+					response = await handleQueryStream(request, duckdb, auth.keyPrefix);
 				} else if (method === "POST" && path === "/prune") {
 					auth = checkRole(request, "admin", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handlePrune(request, db);
+					response = await handlePrune(request, db, auth.keyPrefix);
 				} else if (method === "GET" && path === "/logs") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handleLogs(request, duckdb);
+					response = await handleLogs(request, duckdb, auth.keyPrefix);
 				} else if (method === "GET" && path === "/traces") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
-					response = await handleTraces(request, duckdb);
+					response = await handleTraces(request, duckdb, auth.keyPrefix);
 				} else if (method === "GET" && path === "/stream") {
 					auth = checkRole(request, "read", keys, prefixLen);
 					if (auth.error) return auth.error;
@@ -253,7 +342,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 						auth = checkRole(request, "admin", keys, prefixLen);
 					}
 					if (auth.error) return auth.error;
-					response = await handleAggregates(request, aggregatesManager);
+					response = await handleAggregates(request, aggregatesManager, auth.keyPrefix);
 				} else if (path.startsWith("/widgets")) {
 					if (method === "GET") {
 						auth = checkRole(request, "read", keys, prefixLen);
@@ -261,7 +350,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 						auth = checkRole(request, "admin", keys, prefixLen);
 					}
 					if (auth.error) return auth.error;
-					response = await handleWidgets(request, widgetsManager);
+					response = await handleWidgets(request, widgetsManager, auth.keyPrefix);
 				} else if (method === "GET" && config.uiDistPath) {
 					// Serve the bundled web UI with SPA fallback
 					// Prevent path traversal by resolving and checking the path stays within root
@@ -309,9 +398,14 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		await sourcesHandle?.stop();
 		pruneHandle?.stop();
 		streamManager.shutdown();
-		server.stop();
-		// Grace period for in-flight requests to complete
-		await Bun.sleep(3000);
+		// Stop accepting new connections, drain in-flight up to 5s, then force-close
+		const drained = await Promise.race([
+			server.stop().then(() => true),
+			Bun.sleep(5000).then(() => false),
+		]);
+		if (!drained) {
+			await server.stop(true);
+		}
 		duckdb?.close();
 		db.close();
 	};

@@ -21,12 +21,22 @@ function resolveAuth(explicit?: string): string | undefined {
 	return explicit ?? process.env.RELOG_AUTH;
 }
 
-function serializeError(err: Error): Record<string, unknown> {
-	return {
+function serializeError(err: Error, depth = 0): Record<string, unknown> {
+	const out: Record<string, unknown> = {
 		error: err.message,
 		name: err.name,
 		stack: err.stack,
 	};
+	// Recursively capture the standard `Error.cause` chain (ES2022). Bound
+	// recursion at 5 levels so a cycle (rare but possible) can't blow up
+	// the serializer.
+	if (err.cause !== undefined && depth < 5) {
+		out.cause =
+			err.cause instanceof Error
+				? serializeError(err.cause, depth + 1)
+				: err.cause;
+	}
+	return out;
 }
 
 export class Logger {

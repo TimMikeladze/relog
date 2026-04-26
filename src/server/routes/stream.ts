@@ -1,12 +1,47 @@
 import type { RelogDatabase } from "../../db/database.ts";
 import { VALID_LEVELS } from "../../types.ts";
-import type { StreamFilters } from "../../types.ts";
+import type { LogEntry, StreamFilters } from "../../types.ts";
 
 type StreamClient = {
 	controller: ReadableStreamDefaultController;
 	filters: StreamFilters;
 	lastPollId: number;
 };
+
+// Per-flush cap. Keep in sync with getLogsSince call below.
+const FLUSH_BATCH_SIZE = 500;
+
+// SSE backpressure cutoff. ReadableStream's `desiredSize` is `highWaterMark -
+// queueSize`; with the default count-based HWM of 1 it goes negative as soon
+// as the consumer falls behind. We allow up to ~1k backlogged messages before
+// dropping the client — beyond that, the stream queue is the OOM risk.
+const MAX_QUEUE_BACKLOG = 1_000;
+
+function isBackpressured(controller: ReadableStreamDefaultController): boolean {
+	const ds = controller.desiredSize;
+	if (ds === null) return true; // stream errored/closed
+	return ds < -MAX_QUEUE_BACKLOG;
+}
+
+function logMatchesFilter(log: LogEntry, filters: StreamFilters): boolean {
+	for (const col of [
+		"level",
+		"service",
+		"trace_id",
+		"project",
+		"branch",
+		"version",
+		"deployment_id",
+	] as const) {
+		const want = filters[col];
+		if (!want) continue;
+		const values = String(want).split(",").filter(Boolean);
+		if (values.length === 0) continue;
+		const actual = (log as unknown as Record<string, unknown>)[col];
+		if (actual == null || !values.includes(String(actual))) return false;
+	}
+	return true;
+}
 
 export class StreamManager {
 	private clients = new Set<StreamClient>();
@@ -23,7 +58,10 @@ export class StreamManager {
 		db: RelogDatabase,
 		debounceMs: number = 50,
 		maxClients: number = 100,
-		heartbeatMs: number = 30_000,
+		// 25s, not 30s: many proxies and load balancers idle-time-out at
+		// exactly 30s (AWS ALB default, GCP HTTPS LB, Cloudflare). A 25s
+		// heartbeat keeps the connection alive comfortably under that.
+		heartbeatMs: number = 25_000,
 	) {
 		this.db = db;
 		this.debounceMs = debounceMs;
@@ -102,33 +140,73 @@ export class StreamManager {
 	private flush(): void {
 		if (this.closed || this.clients.size === 0) return;
 
+		// Single DB query for the lowest-watermark client; filter the result
+		// per-client in memory. Replaces O(N_clients × DB query) with O(1 query).
+		let minId = Number.POSITIVE_INFINITY;
+		for (const client of this.clients) {
+			if (client.lastPollId < minId) minId = client.lastPollId;
+		}
+		if (!Number.isFinite(minId)) return;
+
+		let logs: LogEntry[];
+		try {
+			logs = this.db.getLogsSince(minId, {}, FLUSH_BATCH_SIZE);
+		} catch {
+			// DB may be closed during shutdown
+			return;
+		}
+		if (logs.length === 0) return;
+
 		const failed: StreamClient[] = [];
 
-		for (const client of this.clients) {
-			try {
-				const logs = this.db.getLogsSince(client.lastPollId, client.filters, 500);
-				if (logs.length === 0) continue;
+		const batchMaxId = logs[logs.length - 1]!.id ?? 0;
 
-				let clientFailed = false;
-				for (const log of logs) {
-					if (clientFailed) break;
-					try {
-						client.controller.enqueue(this.encoder.encode(`data: ${JSON.stringify(log)}\n\n`));
-						if (log.id && log.id > client.lastPollId) {
-							client.lastPollId = log.id;
-						}
-					} catch {
+		for (const client of this.clients) {
+			let clientFailed = false;
+			if (isBackpressured(client.controller)) {
+				failed.push(client);
+				continue;
+			}
+			for (const log of logs) {
+				if (clientFailed) break;
+				if (!log.id || log.id <= client.lastPollId) continue;
+				if (!logMatchesFilter(log, client.filters)) continue;
+				try {
+					client.controller.enqueue(this.encoder.encode(`data: ${JSON.stringify(log)}\n\n`));
+					client.lastPollId = log.id;
+					if (isBackpressured(client.controller)) {
 						clientFailed = true;
 						failed.push(client);
 					}
+				} catch {
+					clientFailed = true;
+					failed.push(client);
 				}
-			} catch {
-				// DB may be closed during shutdown
+			}
+			// Advance past this batch even when nothing matched, so the next
+			// flush doesn't re-evaluate the same window. notify() schedules
+			// another flush whenever new rows arrive past batchMaxId.
+			if (!clientFailed && batchMaxId > client.lastPollId) {
+				client.lastPollId = batchMaxId;
 			}
 		}
 
 		for (const client of failed) {
 			this.clients.delete(client);
+			try {
+				client.controller.close();
+			} catch {
+				// already closed/errored
+			}
+		}
+
+		// If we hit the batch cap, more rows are pending past batchMaxId.
+		// Without this, a single far-behind client would starve current
+		// clients: minId stays low, every flush serves the same old window,
+		// and notify() debouncing prevents spontaneous catch-up flushes.
+		// Re-arm via setImmediate so we yield between iterations.
+		if (logs.length === FLUSH_BATCH_SIZE && !this.closed && this.clients.size > 0) {
+			setImmediate(() => this.flush());
 		}
 	}
 }

@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { loadSourcesConfig, deriveSourceId } from "../src/sources/config.ts";
 import { getAdapter } from "../src/sources/registry.ts";
 import { startSources } from "../src/sources/runner.ts";
@@ -10,7 +10,6 @@ import {
 	type WorkflowRun,
 	type WorkflowJob,
 } from "../src/sources/adapters/github-actions.ts";
-import type { SourceAdapter, PullBatch } from "../src/sources/types.ts";
 import { writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -513,10 +512,6 @@ function cleanupDb(path: string) {
 }
 
 describe("source runner", () => {
-	function makeMockAdapter(pullFn: SourceAdapter["pull"]): SourceAdapter {
-		return { name: "mock-adapter", pull: pullFn };
-	}
-
 	function makeMockStreamManager() {
 		let notifyCount = 0;
 		return {
@@ -533,21 +528,12 @@ describe("source runner", () => {
 		const { RelogDatabase } = await import("../src/db/database.ts");
 		const path = join(tmpdir(), `relog-test-runner-${Date.now()}.db`);
 		const db = new RelogDatabase(path);
-		const sm = makeMockStreamManager();
 
-		const adapter = makeMockAdapter(async function* (_config, _cursor) {
-			yield {
-				logs: [{ level: "info" as const, message: "hello" }],
-				cursor: "2026-01-01T00:00:00Z|1",
-			};
-		});
-
-		// Temporarily register mock adapter
-		const { default: registry } = await import("../src/sources/registry.ts").then(() => {
-			// Use the real registry but test through startSources with a config
-			// that points to a real adapter. Instead, test the DB directly.
-			return { default: null };
-		});
+		// Earlier scaffolding constructed a mock StreamManager + adapter +
+		// registry stub here, but the test ended up exercising the DB
+		// directly instead. Keeping the helpers around but unbound was
+		// confusing dead code, so they were removed; restore them only if
+		// the test is rewritten to drive the runner end-to-end.
 
 		// Direct test: simulate what the runner does
 		const cursor = db.getCursor("test-runner");

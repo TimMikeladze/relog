@@ -1,8 +1,13 @@
 import type { SearchOptions } from "../../db/database.ts";
 import type { DuckDBReader } from "../../db/duckdb.ts";
 import { VALID_LEVELS } from "../../types.ts";
+import { logRouteError } from "../log.ts";
 
-export async function handleLogs(request: Request, duckdb: DuckDBReader): Promise<Response> {
+export async function handleLogs(
+	request: Request,
+	duckdb: DuckDBReader,
+	keyPrefix?: string,
+): Promise<Response> {
 	const url = new URL(request.url);
 	const opts: SearchOptions = {};
 
@@ -75,14 +80,18 @@ export async function handleLogs(request: Request, duckdb: DuckDBReader): Promis
 		opts.around_id = parsed;
 	}
 
-	const result = await duckdb.searchLogs(opts);
-
-	return Response.json({
-		rows: result.rows,
-		total: result.total,
-		limit: opts.limit ?? 100,
-		offset: opts.offset ?? 0,
-	});
+	try {
+		const result = await duckdb.searchLogs(opts);
+		return Response.json({
+			rows: result.rows,
+			total: result.total,
+			limit: opts.limit ?? 100,
+			offset: opts.offset ?? 0,
+		});
+	} catch (err) {
+		logRouteError("GET /logs", err, { keyPrefix, details: { ...opts } as Record<string, unknown> });
+		return Response.json({ error: "Logs query failed" }, { status: 500 });
+	}
 }
 
 function parseTime(input: string): number {

@@ -59,7 +59,12 @@ export function FilterBar(props: FilterBarProps) {
 
 	useEffect(() => {
 		let cancelled = false;
+		// Monotonic request id: only the most-recently-issued load is allowed
+		// to write state, so a slow earlier response cannot overwrite the
+		// fresher one issued before it resolved.
+		let requestSeq = 0;
 		const load = () => {
+			const seq = ++requestSeq;
 			Promise.all([
 				apiPost<QueryResult>("/query", {
 					sql: "SELECT DISTINCT service FROM logs WHERE service IS NOT NULL ORDER BY service LIMIT 500",
@@ -69,7 +74,7 @@ export function FilterBar(props: FilterBarProps) {
 				}),
 			])
 				.then(([s, p]) => {
-					if (cancelled) return;
+					if (cancelled || seq !== requestSeq) return;
 					setServices(s.rows.map((r) => String(r.service)));
 					setProjects(p.rows.map((r) => String(r.project)));
 				})

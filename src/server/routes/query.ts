@@ -1,5 +1,6 @@
 import { QueryValidationError } from "../../db/validate.ts";
 import type { DuckDBReader } from "../../db/duckdb.ts";
+import { logRouteError } from "../log.ts";
 
 interface QueryBody {
 	sql: string;
@@ -11,7 +12,11 @@ function queryErrorMessage(err: unknown): string {
 	return "Query execution failed";
 }
 
-export async function handleQuery(request: Request, duckdb: DuckDBReader): Promise<Response> {
+export async function handleQuery(
+	request: Request,
+	duckdb: DuckDBReader,
+	keyPrefix?: string,
+): Promise<Response> {
 	let body: QueryBody;
 	try {
 		body = (await request.json()) as QueryBody;
@@ -27,11 +32,24 @@ export async function handleQuery(request: Request, duckdb: DuckDBReader): Promi
 		const result = await duckdb.query(body.sql, body.params);
 		return Response.json(result);
 	} catch (err) {
+		// Validation errors are user input — message is enough. Execution
+		// errors are server-side; the helper attaches a stack on Error.
+		if (err instanceof QueryValidationError) {
+			console.warn(
+				`[relog.dev] /query rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`,
+			);
+		} else {
+			logRouteError("POST /query", err, { keyPrefix, sql: body.sql });
+		}
 		return Response.json({ error: queryErrorMessage(err) }, { status: 400 });
 	}
 }
 
-export async function handleQueryStream(request: Request, duckdb: DuckDBReader): Promise<Response> {
+export async function handleQueryStream(
+	request: Request,
+	duckdb: DuckDBReader,
+	keyPrefix?: string,
+): Promise<Response> {
 	let body: QueryBody;
 	try {
 		body = (await request.json()) as QueryBody;
@@ -83,6 +101,13 @@ export async function handleQueryStream(request: Request, duckdb: DuckDBReader):
 			},
 		});
 	} catch (err) {
+		if (err instanceof QueryValidationError) {
+			console.warn(
+				`[relog.dev] /query/stream rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`,
+			);
+		} else {
+			logRouteError("POST /query/stream", err, { keyPrefix, sql: body.sql });
+		}
 		return Response.json({ error: queryErrorMessage(err) }, { status: 400 });
 	}
 }

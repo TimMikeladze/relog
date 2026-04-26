@@ -18,14 +18,44 @@ function sha256(input: string): Buffer {
 	return createHash("sha256").update(input).digest();
 }
 
-function safeEquals(a: string, b: string): boolean {
-	return timingSafeEqual(sha256(a), sha256(b));
+/**
+ * Pre-hashed view of the configured keys. We compute SHA-256 once per
+ * configured key when the request first arrives (memoized by AuthKeys
+ * identity) so that each subsequent token check costs one hash of the
+ * candidate plus N constant-time compares — not 1+N hashes per request.
+ */
+interface PrehashedKeys {
+	admin: Buffer[];
+	read: Buffer[];
+	ingest: Buffer[];
+}
+const prehashCache = new WeakMap<AuthKeys, PrehashedKeys>();
+
+function prehash(keys: AuthKeys): PrehashedKeys {
+	let cached = prehashCache.get(keys);
+	if (cached) return cached;
+	cached = {
+		admin: (keys.adminKeys ?? []).map(sha256),
+		read: (keys.readKeys ?? []).map(sha256),
+		ingest: (keys.ingestKeys ?? []).map(sha256),
+	};
+	prehashCache.set(keys, cached);
+	return cached;
+}
+
+function matchesAny(candidate: Buffer, configured: Buffer[]): boolean {
+	for (const k of configured) {
+		if (k.length === candidate.length && timingSafeEqual(k, candidate)) return true;
+	}
+	return false;
 }
 
 function resolveRole(token: string, keys: AuthKeys): Role | null {
-	if (keys.adminKeys?.some((k) => safeEquals(token, k))) return "admin";
-	if (keys.readKeys?.some((k) => safeEquals(token, k))) return "read";
-	if (keys.ingestKeys?.some((k) => safeEquals(token, k))) return "ingest";
+	const candidate = sha256(token);
+	const ph = prehash(keys);
+	if (matchesAny(candidate, ph.admin)) return "admin";
+	if (matchesAny(candidate, ph.read)) return "read";
+	if (matchesAny(candidate, ph.ingest)) return "ingest";
 	return null;
 }
 

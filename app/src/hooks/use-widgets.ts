@@ -31,8 +31,12 @@ export function useWidgets() {
 	}, []);
 
 	const update = useCallback(
-		async (id: string, patch: Partial<Omit<Widget, "id" | "createdAt">>) => {
-			const res = await apiPut<{ widget: Widget }>(`/widgets/${id}`, patch);
+		async (
+			id: string,
+			patch: Partial<Omit<Widget, "id" | "createdAt">>,
+			opts?: { keepalive?: boolean },
+		) => {
+			const res = await apiPut<{ widget: Widget }>(`/widgets/${id}`, patch, opts);
 			setWidgets((prev) => prev.map((x) => (x.id === id ? res.widget : x)));
 			return res.widget;
 		},

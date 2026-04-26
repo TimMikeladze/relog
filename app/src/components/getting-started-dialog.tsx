@@ -20,10 +20,23 @@ function getHighlighter() {
 type TokenLine = { content: string; color?: string }[];
 
 export function useGettingStarted() {
-	const [open, setOpen] = useState(() => !localStorage.getItem(DISMISSED_KEY));
+	const [open, setOpen] = useState(() => {
+		try {
+			return !localStorage.getItem(DISMISSED_KEY);
+		} catch {
+			return true;
+		}
+	});
 
 	const dismiss = () => {
-		localStorage.setItem(DISMISSED_KEY, "1");
+		// Best-effort: if localStorage is full or unavailable (Safari private
+		// mode, quota exceeded), still dismiss the dialog for this session
+		// rather than throwing out of the click handler.
+		try {
+			localStorage.setItem(DISMISSED_KEY, "1");
+		} catch (err) {
+			console.warn("[relog] could not persist onboarding dismissal:", err);
+		}
 		setOpen(false);
 	};
 

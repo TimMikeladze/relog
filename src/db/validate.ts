@@ -1,9 +1,10 @@
 const BLOCKED_KEYWORDS =
 	/\b(ATTACH|DETACH|LOAD_EXTENSION|INSTALL|LOAD|COPY|EXPORT|IMPORT|REINDEX|VACUUM|ALTER|CREATE|DROP|INSERT|UPDATE|DELETE|REPLACE|MERGE|TRUNCATE|GRANT|REVOKE|SET|CALL|EXECUTE|PREPARE|PRAGMA)\b/i;
 
-/** Block DuckDB functions that can read/write files or access the network. */
+/** Block DuckDB functions that can read/write files, access the network,
+ *  introspect Parquet metadata, leak environment, or expose user identity. */
 const BLOCKED_FUNCTIONS =
-	/\b(read_csv|read_csv_auto|read_parquet|read_json|read_json_auto|read_text|read_blob|write_csv|write_parquet|write_json|http_get|http_post|current_setting|current_database)\s*\(/i;
+	/\b(read_csv|read_csv_auto|read_parquet|read_json|read_json_auto|read_text|read_blob|write_csv|write_parquet|write_json|http_get|http_post|current_setting|current_database|parquet_metadata|parquet_schema|parquet_file_metadata|parquet_kv_metadata|parquet_bloom_probe|current_user|version|getenv|which_secret|list_secrets)\s*\(/i;
 
 /** Block system catalog schemas and DuckDB introspection functions. */
 const BLOCKED_SCHEMAS =
@@ -97,6 +98,52 @@ export function hasSemicolonOutsideQuotes(sql: string): boolean {
 	return false;
 }
 
+const WORD_CHAR = /[A-Za-z0-9_]/;
+const LIMIT_VALUE = /^\s+(\d+|\?)/;
+
+/**
+ * Detects LIMIT only at parenthesis depth 0. A LIMIT inside a subquery,
+ * CTE, or derived table does not bound the outer result and must not
+ * suppress the auto-appended cap.
+ */
+export function hasTopLevelLimit(sql: string): boolean {
+	let depth = 0;
+	let i = 0;
+	while (i < sql.length) {
+		const c = sql[i]!;
+		if (c === "'" || c === '"') {
+			i = skipQuoted(sql, i, c);
+			continue;
+		}
+		if (c === "(") {
+			depth++;
+			i++;
+			continue;
+		}
+		if (c === ")") {
+			depth--;
+			i++;
+			continue;
+		}
+		if (
+			depth === 0 &&
+			(c === "L" || c === "l") &&
+			(sql[i + 1] === "I" || sql[i + 1] === "i") &&
+			(sql[i + 2] === "M" || sql[i + 2] === "m") &&
+			(sql[i + 3] === "I" || sql[i + 3] === "i") &&
+			(sql[i + 4] === "T" || sql[i + 4] === "t")
+		) {
+			const before = i === 0 ? " " : sql[i - 1]!;
+			const after = sql[i + 5] ?? "";
+			if (!WORD_CHAR.test(before) && !WORD_CHAR.test(after) && LIMIT_VALUE.test(sql.slice(i + 5))) {
+				return true;
+			}
+		}
+		i++;
+	}
+	return false;
+}
+
 export function validateQuery(sql: string, maxRows: number): string {
 	if (typeof sql !== "string") {
 		throw new QueryValidationError("SQL must be a string");
@@ -138,7 +185,7 @@ export function validateQuery(sql: string, maxRows: number): string {
 
 	if (
 		(trimmed.startsWith("SELECT") || trimmed.startsWith("WITH")) &&
-		!/\bLIMIT\s+(\d+|\?)/i.test(blanked)
+		!hasTopLevelLimit(blanked)
 	) {
 		return `${stripped} LIMIT ${maxRows}`;
 	}

@@ -2,9 +2,13 @@ import { useAuth } from "@/hooks/use-auth";
 import { Settings, X } from "lucide-react";
 import { ConnectForm } from "@/components/connect-form";
 
-export function AuthDialog({ onClose }: { onClose: () => void }) {
+export function AuthDialog({ onClose }: { onClose?: () => void }) {
 	const { status } = useAuth();
-	const isModal = status === "needs-auth";
+	// In needs-auth mode the dialog is a hard gate — there's nowhere to
+	// close it back to. We hide the close affordances entirely so callers
+	// can pass `undefined` (or omit `onClose`) without rendering a button
+	// that does nothing.
+	const isModal = status === "needs-auth" || !onClose;
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

@@ -17,6 +17,7 @@ import { ExploreView } from "@/views/explore";
 import { TracesView } from "@/views/traces";
 import { QueryView } from "@/views/query";
 import { DashboardView } from "@/views/dashboard";
+import { ViewErrorBoundary } from "@/components/view-error-boundary";
 import { Loader2 } from "lucide-react";
 import type { Bookmark, View } from "@/types";
 
@@ -159,7 +160,31 @@ function AppContent() {
 	if (auth.status === "needs-auth") {
 		return (
 			<div className="h-screen bg-background">
-				<AuthDialog onClose={() => {}} />
+				<AuthDialog />
+			</div>
+		);
+	}
+
+	if (auth.status === "unreachable" || auth.status === "error") {
+		const retryIn =
+			auth.nextRetryAt !== undefined ? Math.max(0, Math.round((auth.nextRetryAt - Date.now()) / 1000)) : null;
+		return (
+			<div className="flex h-screen items-center justify-center bg-background">
+				<div className="flex max-w-md flex-col items-center gap-3 rounded-lg border border-border bg-card p-6 text-center">
+					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+					<div className="text-sm font-medium">Server unreachable</div>
+					<div className="text-xs text-muted-foreground">{auth.error ?? "No response from server"}</div>
+					{retryIn !== null && retryIn > 0 && (
+						<div className="text-[11px] text-muted-foreground">Retrying in {retryIn}s…</div>
+					)}
+					<button
+						type="button"
+						onClick={auth.retryNow}
+						className="mt-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+					>
+						Retry now
+					</button>
+				</div>
 			</div>
 		);
 	}
@@ -200,30 +225,40 @@ function AppContent() {
 				)}
 				<Panel id="main" minSize="30%" className="flex overflow-hidden">
 					{view === "explore" && (
-						<ExploreView
-							filters={filters}
-							enabled={view === "explore"}
-							onNavigateTrace={navigateTrace}
-							onUpdateFilters={updateFilters}
-						/>
+						<ViewErrorBoundary key="explore" view="Explore">
+							<ExploreView
+								filters={filters}
+								enabled={view === "explore"}
+								onNavigateTrace={navigateTrace}
+								onUpdateFilters={updateFilters}
+							/>
+						</ViewErrorBoundary>
 					)}
 					{view === "traces" && (
-						<TracesView
-							filters={filters}
-							enabled={view === "traces"}
-							onUpdateFilters={updateFilters}
-						/>
+						<ViewErrorBoundary key="traces" view="Traces">
+							<TracesView
+								filters={filters}
+								enabled={view === "traces"}
+								onUpdateFilters={updateFilters}
+							/>
+						</ViewErrorBoundary>
 					)}
 					{view === "query" && (
-						<QueryView
-							enabled={view === "query"}
-							onZoom={(from, to) => {
-								updateFilters({ from, to });
-								setView("explore" as View);
-							}}
-						/>
+						<ViewErrorBoundary key="query" view="Query">
+							<QueryView
+								enabled={view === "query"}
+								onZoom={(from, to) => {
+									updateFilters({ from, to });
+									setView("explore" as View);
+								}}
+							/>
+						</ViewErrorBoundary>
 					)}
-					{view === "dashboard" && <DashboardView enabled={view === "dashboard"} />}
+					{view === "dashboard" && (
+						<ViewErrorBoundary key="dashboard" view="Dashboard">
+							<DashboardView enabled={view === "dashboard"} />
+						</ViewErrorBoundary>
+					)}
 				</Panel>
 			</PanelGroup>
 			<StatusBar

@@ -1,11 +1,36 @@
+import { QueryValidationError, validateQuery } from "../../db/validate.ts";
 import type { Widget } from "../../types.ts";
 import type { WidgetsManager } from "../widgets.ts";
 
 const VALID_ID = /^[a-zA-Z0-9_-]{1,128}$/;
+// Cap used purely for save-time validation. Runtime LIMIT is set by the
+// /query route and is the actual ceiling.
+const VALIDATION_MAX_ROWS = 10_000;
+const PLACEHOLDER_RE = /\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}/g;
+
+/**
+ * Replace `${name}` placeholders with `NULL` so the SQL parses through
+ * `validateQuery` at save time. Real values are interpolated by the
+ * frontend at render time and re-validated at /query.
+ */
+function stubPlaceholders(sql: string): string {
+	return sql.replace(PLACEHOLDER_RE, "NULL");
+}
+
+function validateWidgetSql(sql: string): string | null {
+	try {
+		validateQuery(stubPlaceholders(sql), VALIDATION_MAX_ROWS);
+		return null;
+	} catch (err) {
+		if (err instanceof QueryValidationError) return err.message;
+		return err instanceof Error ? err.message : "SQL validation failed";
+	}
+}
 
 export async function handleWidgets(
 	request: Request,
 	widgetsManager: WidgetsManager,
+	_keyPrefix?: string,
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const method = request.method;
@@ -45,6 +70,10 @@ export async function handleWidgets(
 		if (existing?.builtin) {
 			return Response.json({ error: "Cannot overwrite builtin widget" }, { status: 409 });
 		}
+		const sqlError = validateWidgetSql(body.sql);
+		if (sqlError) {
+			return Response.json({ error: `Invalid widget SQL: ${sqlError}` }, { status: 400 });
+		}
 		const widget = await widgetsManager.add({ ...body, builtin: false });
 		return Response.json({ widget }, { status: 201 });
 	}
@@ -80,6 +109,12 @@ export async function handleWidgets(
 			builtin: _ignoredBuiltin,
 			...safePatch
 		} = body;
+		if (typeof safePatch.sql === "string") {
+			const sqlError = validateWidgetSql(safePatch.sql);
+			if (sqlError) {
+				return Response.json({ error: `Invalid widget SQL: ${sqlError}` }, { status: 400 });
+			}
+		}
 		const updated = await widgetsManager.update(id, safePatch);
 		if (!updated) {
 			return Response.json({ error: "Widget not found" }, { status: 404 });

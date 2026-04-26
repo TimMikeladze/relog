@@ -38,8 +38,8 @@ beforeAll(async () => {
 	baseUrl = `http://localhost:${instance.server.port}`;
 });
 
-afterAll(() => {
-	instance.shutdown();
+afterAll(async () => {
+	await instance.shutdown();
 	cleanup();
 });
 
@@ -682,6 +682,32 @@ describe("POST /query", () => {
 		expect(res.status).toBe(200);
 		const body = await res.json();
 		expect(body.count).toBeLessThanOrEqual(10000);
+	});
+
+	test("auto-adds outer LIMIT when only subquery is bounded", async () => {
+		// Regression: previous regex matched any LIMIT anywhere, letting the outer
+		// query return unbounded rows. Outer LIMIT must be enforced.
+		const res = await fetch(url("/query"), {
+			method: "POST",
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
+			body: JSON.stringify({
+				sql: "SELECT * FROM logs WHERE id IN (SELECT id FROM logs LIMIT 5)",
+			}),
+		});
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.count).toBeLessThanOrEqual(10000);
+	});
+
+	test("preserves user-provided top-level LIMIT", async () => {
+		const res = await fetch(url("/query"), {
+			method: "POST",
+			headers: { ...bearerHeaders(), "Content-Type": "application/json" },
+			body: JSON.stringify({ sql: "SELECT * FROM logs LIMIT 3" }),
+		});
+		expect(res.status).toBe(200);
+		const body = await res.json();
+		expect(body.count).toBeLessThanOrEqual(3);
 	});
 });
 

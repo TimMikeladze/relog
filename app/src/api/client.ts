@@ -40,47 +40,66 @@ export async function apiGet<T>(
 	}
 	const res = await fetch(url.toString(), { headers: headers(), signal });
 	if (!res.ok) {
-		const body = await res.json().catch(() => ({}));
-		throw new ApiError(res.status, (body as { error?: string }).error ?? res.statusText);
+		throw new ApiError(res.status, await readErrorMessage(res));
 	}
 	return res.json() as Promise<T>;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-	const res = await fetch(`${baseUrl}${path}`, {
-		method: "POST",
-		headers: headers(),
-		body: JSON.stringify(body),
-	});
-	if (!res.ok) {
-		const data = await res.json().catch(() => ({}));
-		throw new ApiError(res.status, (data as { error?: string }).error ?? res.statusText);
+/**
+ * Best-effort error-body parsing. Upstream may return JSON (`{ error: "..." }`),
+ * HTML (proxy 502 / gateway timeout), or empty. Try JSON first, fall through
+ * to text, and finally use the HTTP status text — anything is more useful
+ * to the user than the bare status code.
+ */
+async function readErrorMessage(res: Response): Promise<string> {
+	const raw = await res.text().catch(() => "");
+	if (!raw) return res.statusText || `HTTP ${res.status}`;
+	try {
+		const parsed = JSON.parse(raw) as { error?: string };
+		if (parsed?.error) return parsed.error;
+	} catch {
+		// not JSON; fall through to truncated text
 	}
+	return raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
+}
+
+interface ApiOptions {
+	/** Pass `keepalive: true` for fire-and-forget calls during page unload. */
+	keepalive?: boolean;
+	/** Skip JSON response parsing (e.g. for 204 DELETE). */
+	noBody?: boolean;
+}
+
+async function apiSend<T>(
+	method: "POST" | "PUT" | "DELETE",
+	path: string,
+	body?: unknown,
+	opts?: ApiOptions,
+): Promise<T> {
+	const init: RequestInit = {
+		method,
+		headers: headers(),
+		keepalive: opts?.keepalive,
+	};
+	if (body !== undefined) init.body = JSON.stringify(body);
+	const res = await fetch(`${baseUrl}${path}`, init);
+	if (!res.ok) {
+		throw new ApiError(res.status, await readErrorMessage(res));
+	}
+	if (opts?.noBody) return undefined as T;
 	return res.json() as Promise<T>;
 }
 
-export async function apiPut<T>(path: string, body: unknown): Promise<T> {
-	const res = await fetch(`${baseUrl}${path}`, {
-		method: "PUT",
-		headers: headers(),
-		body: JSON.stringify(body),
-	});
-	if (!res.ok) {
-		const data = await res.json().catch(() => ({}));
-		throw new ApiError(res.status, (data as { error?: string }).error ?? res.statusText);
-	}
-	return res.json() as Promise<T>;
+export function apiPost<T>(path: string, body: unknown, opts?: ApiOptions): Promise<T> {
+	return apiSend<T>("POST", path, body, opts);
 }
 
-export async function apiDelete(path: string): Promise<void> {
-	const res = await fetch(`${baseUrl}${path}`, {
-		method: "DELETE",
-		headers: headers(),
-	});
-	if (!res.ok) {
-		const data = await res.json().catch(() => ({}));
-		throw new ApiError(res.status, (data as { error?: string }).error ?? res.statusText);
-	}
+export function apiPut<T>(path: string, body: unknown, opts?: ApiOptions): Promise<T> {
+	return apiSend<T>("PUT", path, body, opts);
+}
+
+export function apiDelete(path: string): Promise<void> {
+	return apiSend<void>("DELETE", path, undefined, { noBody: true });
 }
 
 export function streamUrl(params?: Record<string, string>): string {
