@@ -234,20 +234,38 @@ function bodyToString(body?: OtelAnyValue): string {
 	return typeof val === "string" ? val : JSON.stringify(val);
 }
 
-function truncate(s: string, max: number): string {
-	return s.length > max ? s.slice(0, max) : s;
+// Throttle truncation warnings: a single bad exporter could otherwise spam
+// stderr per log line. One warning per minute is enough to surface the issue.
+let lastTruncateWarnAt = 0;
+const TRUNCATE_WARN_INTERVAL_MS = 60_000;
+
+function truncate(s: string, max: number, fieldName?: string): string {
+	if (s.length <= max) return s;
+	if (fieldName && Date.now() - lastTruncateWarnAt > TRUNCATE_WARN_INTERVAL_MS) {
+		lastTruncateWarnAt = Date.now();
+		console.warn(
+			`[relog.dev] OTLP truncation: '${fieldName}' (${s.length} chars > ${max}); further warnings suppressed for 60s`,
+		);
+	}
+	return s.slice(0, max);
 }
 
 function validateEntry(entry: IngestPayload): IngestPayload {
 	return {
 		...entry,
-		message: truncate(entry.message || "span", MAX_MESSAGE_LENGTH),
-		service: entry.service ? truncate(entry.service, MAX_STRING_FIELD_LENGTH) : undefined,
-		host: entry.host ? truncate(entry.host, MAX_STRING_FIELD_LENGTH) : undefined,
-		trace_id: entry.trace_id ? truncate(entry.trace_id, MAX_STRING_FIELD_LENGTH) : undefined,
-		span_id: entry.span_id ? truncate(entry.span_id, MAX_STRING_FIELD_LENGTH) : undefined,
+		message: truncate(entry.message || "span", MAX_MESSAGE_LENGTH, "message"),
+		service: entry.service
+			? truncate(entry.service, MAX_STRING_FIELD_LENGTH, "service")
+			: undefined,
+		host: entry.host ? truncate(entry.host, MAX_STRING_FIELD_LENGTH, "host") : undefined,
+		trace_id: entry.trace_id
+			? truncate(entry.trace_id, MAX_STRING_FIELD_LENGTH, "trace_id")
+			: undefined,
+		span_id: entry.span_id
+			? truncate(entry.span_id, MAX_STRING_FIELD_LENGTH, "span_id")
+			: undefined,
 		parent_span_id: entry.parent_span_id
-			? truncate(entry.parent_span_id, MAX_STRING_FIELD_LENGTH)
+			? truncate(entry.parent_span_id, MAX_STRING_FIELD_LENGTH, "parent_span_id")
 			: undefined,
 		meta: entry.meta
 			? (() => {
@@ -315,7 +333,10 @@ export async function handleOtelTraces(
 				const spanAttrs = flattenAttributes(span.attributes);
 				const startMs = nanoToMs(span.startTimeUnixNano);
 				const endMs = nanoToMs(span.endTimeUnixNano);
-				const durationMs = Math.round((endMs - startMs) * 100) / 100;
+				// Clamp negative durations (clock skew between client/server) to 0
+				// rather than persisting them — downstream histograms/aggregates
+				// assume non-negative durations.
+				const durationMs = Math.max(0, Math.round((endMs - startMs) * 100) / 100);
 
 				const isError = span.status?.code === 2;
 				const level: LogLevel = isError ? "error" : "info";
@@ -467,7 +488,7 @@ export async function handleOtelLogs(
 		for (const sl of rl.scopeLogs ?? []) {
 			for (const log of sl.logRecords ?? []) {
 				const logAttrs = flattenAttributes(log.attributes);
-				const timeNano = log.timeUnixNano || log.observedTimeUnixNano;
+				const timeNano = log.timeUnixNano ?? log.observedTimeUnixNano;
 				const timestamp = timeNano ? nanoToIso(timeNano) : new Date().toISOString();
 				const level = severityToLevel(log.severityNumber);
 				const message = bodyToString(log.body) || log.severityText || "log";

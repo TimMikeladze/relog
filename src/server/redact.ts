@@ -19,7 +19,15 @@ export function redactMeta(value: unknown): unknown {
 }
 
 function redactInner(value: unknown, depth: number): unknown {
-	if (depth > MAX_DEPTH) return value;
+	// At depth limit, replace the entire subtree with a marker rather than
+	// returning the raw value untouched. Otherwise a hostile or accidental
+	// deeply-nested object could carry an unredacted secret past the depth
+	// guard: e.g. `{a:{a:{...12 levels...{authorization: "..."}}}}` would
+	// have its inner `authorization` key skipped because recursion stopped.
+	if (depth > MAX_DEPTH) {
+		if (value !== null && typeof value === "object") return "[TRUNCATED]";
+		return value;
+	}
 	if (Array.isArray(value)) {
 		return value.map((v) => redactInner(v, depth + 1));
 	}

@@ -93,7 +93,10 @@ export function readIdempotencyKey(request: Request): string | null {
 	const raw = request.headers.get("idempotency-key") ?? request.headers.get("x-idempotency-key");
 	if (!raw) return null;
 	const trimmed = raw.trim();
-	if (trimmed.length === 0 || trimmed.length > 200) return null;
+	// 128 bytes covers UUIDs (36), ULIDs (26), Snowflake IDs (~19), and
+	// hex/base64 SHA-256 (64). Anything longer is almost certainly noise or
+	// a deliberate cache-fill attempt.
+	if (trimmed.length === 0 || trimmed.length > 128) return null;
 	return trimmed;
 }
 

@@ -403,16 +403,23 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 			});
 
 			if (!res.ok) {
-				const text = await res.text().catch(() => "Unknown error");
-				return Response.json({ error: text }, { status: res.status });
+				// Don't reflect the upstream body to the browser — it can include
+				// server-side error detail (auth state, internal stack frames) and
+				// the browser caller has no actionable use for it. Log
+				// server-side and surface a generic status code.
+				const text = await res.text().catch(() => "");
+				originalConsole.warn(
+					`[relog.dev] browser proxy upstream ${res.status}: ${text.slice(0, 500)}`,
+				);
+				return Response.json({ error: "Upstream ingest failed" }, { status: 502 });
 			}
 
 			return Response.json({ ingested: entries.length });
 		} catch (err) {
-			return Response.json(
-				{ error: err instanceof Error ? err.message : "Proxy fetch failed" },
-				{ status: 502 },
+			originalConsole.warn(
+				`[relog.dev] browser proxy fetch failed: ${err instanceof Error ? err.message : err}`,
 			);
+			return Response.json({ error: "Upstream ingest failed" }, { status: 502 });
 		}
 	};
 }

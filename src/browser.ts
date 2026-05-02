@@ -11,6 +11,8 @@ export interface BrowserTransportOptions {
 	flushInterval?: number;
 	/** Max entries per flush (default: 25) */
 	batchSize?: number;
+	/** Max queued entries before dropping oldest (default: 1000) */
+	maxBufferSize?: number;
 }
 
 export interface BrowserLoggerOptions {
@@ -71,6 +73,7 @@ const BEACON_LIMIT = 60_000; // stay under sendBeacon's ~64KB limit
 export class BrowserTransport {
 	private endpoint: string;
 	private batchSize: number;
+	private maxBufferSize: number;
 	private buffer: IngestPayload[] = [];
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private destroyed = false;
@@ -78,6 +81,7 @@ export class BrowserTransport {
 	constructor(options: BrowserTransportOptions = {}) {
 		this.endpoint = options.endpoint ?? "/api/relog";
 		this.batchSize = options.batchSize ?? 25;
+		this.maxBufferSize = options.maxBufferSize ?? 1000;
 
 		this.timer = setInterval(() => this.flush(), options.flushInterval ?? 3_000);
 
@@ -94,6 +98,13 @@ export class BrowserTransport {
 
 	send(entry: IngestPayload): void {
 		if (this.destroyed) return;
+		// Bound the buffer so a runaway error spammer (window.onerror in a
+		// loop, broken ResizeObserver, etc.) cannot grow this unboundedly
+		// when the network is slow. Drop oldest 10% — a hard cap on memory
+		// at the cost of losing the oldest events first.
+		if (this.buffer.length >= this.maxBufferSize) {
+			this.buffer.splice(0, Math.floor(this.maxBufferSize * 0.1));
+		}
 		this.buffer.push(entry);
 		if (this.buffer.length >= this.batchSize) {
 			this.flush();

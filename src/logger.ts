@@ -222,22 +222,32 @@ export class Logger {
 
 	captureConsole(): void {
 		const logger = this;
-		console.log = (...args: unknown[]) => {
-			logger.info(format(...args), { source: "console" });
+		// Guard against recursion: transport/onError or even user code reachable
+		// from log() may eventually call console.* again. Without this, the
+		// transport's failure-warning console.warn ends up routed back through
+		// the logger and re-buffered indefinitely.
+		const wrap = (fn: (msg: string, m?: Record<string, unknown>) => void) => {
+			return (...args: unknown[]) => {
+				if (Logger._inCapturedConsole) {
+					originalConsole.log(...args);
+					return;
+				}
+				Logger._inCapturedConsole = true;
+				try {
+					fn.call(logger, format(...args), { source: "console" });
+				} finally {
+					Logger._inCapturedConsole = false;
+				}
+			};
 		};
-		console.info = (...args: unknown[]) => {
-			logger.info(format(...args), { source: "console" });
-		};
-		console.warn = (...args: unknown[]) => {
-			logger.warn(format(...args), { source: "console" });
-		};
-		console.error = (...args: unknown[]) => {
-			logger.error(format(...args), { source: "console" });
-		};
-		console.debug = (...args: unknown[]) => {
-			logger.debug(format(...args), { source: "console" });
-		};
+		console.log = wrap(this.info);
+		console.info = wrap(this.info);
+		console.warn = wrap(this.warn);
+		console.error = wrap(this.error);
+		console.debug = wrap(this.debug);
 	}
+
+	private static _inCapturedConsole = false;
 
 	restoreConsole(): void {
 		console.log = originalConsole.log;

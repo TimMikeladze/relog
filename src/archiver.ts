@@ -1,4 +1,5 @@
 import { S3Client } from "bun";
+import { randomUUID } from "node:crypto";
 import { parquetWriteBuffer } from "hyparquet-writer";
 import type { ArchiveConfig, ArchiveBatchResult, LogEntry, RetryConfig } from "./types.ts";
 
@@ -124,9 +125,10 @@ export function logsToParquet(logs: LogEntry[]): ArrayBuffer {
 }
 
 function s3Key(prefix: string, partition: Partition): string {
+	// UUID ensures uniqueness across concurrent writers and process restarts;
+	// `Date.now() + Math.random()` could collide and silently overwrite.
 	const ts = Date.now();
-	const rand = Math.random().toString(36).slice(2, 10);
-	return `${prefix}/project=${partition.project}/branch=${partition.branch}/year=${partition.year}/month=${partition.month}/day=${partition.day}/${ts}-${rand}.parquet`;
+	return `${prefix}/project=${partition.project}/branch=${partition.branch}/year=${partition.year}/month=${partition.month}/day=${partition.day}/${ts}-${randomUUID()}.parquet`;
 }
 
 async function retryUpload(fn: () => Promise<void>, retry: RetryConfig): Promise<void> {

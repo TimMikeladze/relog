@@ -64,7 +64,7 @@ function parseRelativeTime(rel: string): number {
 		M: 2_592_000_000,
 		y: 31_536_000_000,
 	};
-	return Date.now() - parseInt(num) * (ms[unit] ?? 3600_000);
+	return Date.now() - parseInt(num!, 10) * (ms[unit!] ?? 3600_000);
 }
 
 function formatTimeLabel(ts: number, rangeMs: number): string {

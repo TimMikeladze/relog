@@ -42,22 +42,29 @@ export class AggregatesManager {
 	}
 
 	async init(): Promise<void> {
-		// Load default aggregates
 		for (const agg of DEFAULT_AGGREGATES) {
 			this.aggregates.set(agg.id, agg);
 		}
 
-		// Load from file if it exists
-		if (this.filePath) {
-			try {
-				const data = await fs.readFile(this.filePath, "utf-8");
-				const loaded = JSON.parse(data) as Aggregate[];
-				for (const agg of loaded) {
-					this.aggregates.set(agg.id, agg);
-				}
-			} catch {
-				// File doesn't exist or invalid JSON - use defaults
+		if (!this.filePath) return;
+		let data: string;
+		try {
+			data = await fs.readFile(this.filePath, "utf-8");
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+			throw new Error(
+				`[relog.dev] Failed to read aggregates file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
+			);
+		}
+		try {
+			const loaded = JSON.parse(data) as Aggregate[];
+			for (const agg of loaded) {
+				this.aggregates.set(agg.id, agg);
 			}
+		} catch (err) {
+			throw new Error(
+				`[relog.dev] Aggregates file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
+			);
 		}
 	}
 

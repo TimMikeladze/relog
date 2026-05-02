@@ -1,5 +1,6 @@
 import { promises as fs } from "node:fs";
 import { dirname, basename } from "node:path";
+import { randomUUID } from "node:crypto";
 
 /**
  * Write a file atomically: write to a temp sibling, fsync, then rename onto
@@ -11,7 +12,10 @@ import { dirname, basename } from "node:path";
  */
 export async function atomicWriteFile(target: string, data: string): Promise<void> {
 	const dir = dirname(target);
-	const tmp = `${dir}/.${basename(target)}.${process.pid}.${Date.now()}.tmp`;
+	// pid + timestamp alone collide when two processes are respawned with the
+	// same pid in the same millisecond (rare, but observed under crash loops);
+	// a UUID makes the temp filename collision-free across any concurrent writer.
+	const tmp = `${dir}/.${basename(target)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
 	const handle = await fs.open(tmp, "w");
 	try {
 		await handle.writeFile(data);

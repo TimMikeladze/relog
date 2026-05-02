@@ -170,6 +170,18 @@ export async function handleIngest(
 	const cleaned = (entries as IngestPayload[]).map((e) =>
 		e.meta ? { ...e, meta: redactMeta(e.meta) as Record<string, unknown> } : e,
 	);
+	// Recheck size after redaction. Replacing primitive values with the longer
+	// "[REDACTED]" string can expand serialized size; a hostile payload of many
+	// short matching keys could grow past MAX_META_JSON_LENGTH and balloon
+	// memory in downstream serialization (parquet archive, query result).
+	for (const e of cleaned) {
+		if (e.meta && JSON.stringify(e.meta).length > MAX_META_JSON_LENGTH) {
+			return Response.json(
+				{ error: `Invalid log entry: 'meta' exceeds ${MAX_META_JSON_LENGTH} bytes after redaction` },
+				{ status: 400 },
+			);
+		}
+	}
 	try {
 		db.insert(cleaned, keyPrefix);
 	} catch (err) {

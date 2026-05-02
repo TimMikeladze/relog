@@ -117,7 +117,10 @@ export function startSources(
 
 		// Run immediately on startup, then on interval
 		tick();
-		timers.push(setInterval(tick, config.every * 1000));
+		const t = setInterval(tick, config.every * 1000);
+		// Source-poll timers should not block process exit on their own.
+		(t as { unref?: () => void }).unref?.();
+		timers.push(t);
 	}
 
 	return {

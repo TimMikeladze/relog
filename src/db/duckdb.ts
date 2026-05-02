@@ -55,12 +55,52 @@ function escapeString(s: string): string {
 	return s.replace(/'/g, "''");
 }
 
+// Default per-query wall-clock timeout. A runaway query (cross-join, missing
+// predicate, S3 stall on archive read) will hold a connection from the pool
+// indefinitely otherwise; with maxPoolSize=4 a few stuck queries starve the
+// entire read path.
+const DEFAULT_QUERY_TIMEOUT_MS = 30_000;
+
+/**
+ * Run `op` and call `conn.interrupt()` if it doesn't resolve within
+ * `timeoutMs`. The interrupt makes the in-flight DuckDB statement throw
+ * so the underlying op rejects shortly after, freeing the connection.
+ */
+async function withTimeout<T>(
+	conn: DuckDBConnection,
+	timeoutMs: number,
+	op: () => Promise<T>,
+): Promise<T> {
+	let timer: ReturnType<typeof setTimeout> | null = null;
+	let timedOut = false;
+	const timeout = new Promise<never>((_, reject) => {
+		timer = setTimeout(() => {
+			timedOut = true;
+			try {
+				conn.interrupt();
+			} catch {
+				// connection may already be closed
+			}
+			reject(new Error(`Query timed out after ${timeoutMs}ms`));
+		}, timeoutMs);
+	});
+	try {
+		return await Promise.race([op(), timeout]);
+	} catch (err) {
+		if (timedOut) throw new Error(`Query timed out after ${timeoutMs}ms`);
+		throw err;
+	} finally {
+		if (timer) clearTimeout(timer);
+	}
+}
+
 export class DuckDBReader {
 	private instance: DuckDBInstance | null = null;
 	private sqlitePath: string;
 	private archive?: ArchiveConfig;
 	private pool: DuckDBConnection[] = [];
 	private maxPoolSize = 4;
+	private queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS;
 
 	constructor(sqlitePath: string, archive?: ArchiveConfig) {
 		this.sqlitePath = sqlitePath;
@@ -189,10 +229,11 @@ export class DuckDBReader {
 		let errored = false;
 		try {
 			const start = performance.now();
-			const reader =
+			const reader = await withTimeout(conn, this.queryTimeoutMs, () =>
 				params && params.length > 0
-					? await conn.runAndReadAll(safeSql, params as (string | number | boolean | null)[])
-					: await conn.runAndReadAll(safeSql);
+					? conn.runAndReadAll(safeSql, params as (string | number | boolean | null)[])
+					: conn.runAndReadAll(safeSql),
+			);
 			const rawRows = reader.getRowObjects() as Record<string, unknown>[];
 			const rows = rawRows.map(coerceRow);
 			const time_ms = Math.round((performance.now() - start) * 100) / 100;
@@ -213,7 +254,11 @@ export class DuckDBReader {
 		const conn = await this.acquire();
 		let errored = false;
 		try {
-			const result = await conn.stream(safeSql);
+			// Timeout only covers planning (stream() resolves once the planner is
+			// done). Per-chunk fetches are bounded by client backpressure; if a
+			// single chunk stalls past the timeout, the next fetchChunk will reject
+			// once interrupt() lands.
+			const result = await withTimeout(conn, this.queryTimeoutMs, () => conn.stream(safeSql));
 			while (true) {
 				const chunk = await result.fetchChunk();
 				if (!chunk || chunk.rowCount === 0) break;

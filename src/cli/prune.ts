@@ -31,7 +31,16 @@ export const pruneCommand: Command = command({
 			const cutoff = new Date(beforeMs).toISOString();
 			process.stdout.write(`This will delete all logs before ${cutoff}. Continue? [y/N] `);
 			const input = await new Promise<string>((resolve) => {
-				process.stdin.once("data", (data) => resolve(data.toString().trim().toLowerCase()));
+				const onData = (data: Buffer) => {
+					process.stdin.off("end", onEnd);
+					resolve(data.toString().trim().toLowerCase());
+				};
+				const onEnd = () => {
+					process.stdin.off("data", onData);
+					resolve("");
+				};
+				process.stdin.once("data", onData);
+				process.stdin.once("end", onEnd);
 			});
 			if (input !== "y" && input !== "yes") {
 				console.log("Aborted.");

@@ -7,9 +7,24 @@ interface QueryBody {
 	params?: unknown[];
 }
 
-function queryErrorMessage(err: unknown): string {
-	if (err instanceof QueryValidationError) return err.message;
-	return "Query execution failed";
+// DuckDB errors caused by user-supplied SQL (syntax, missing column, missing
+// table, type mismatch, missing function). 400 is the right status — re-running
+// the same SQL won't help and the client needs to fix the query. Anything else
+// is server-side (IO, OOM, internal planner crash) and should return 500.
+const USER_ERROR_PREFIXES = [
+	"Parser Error",
+	"Binder Error",
+	"Catalog Error",
+	"Conversion Error",
+	"Type Error",
+	"Syntax Error",
+	"Not implemented Error",
+];
+
+function isUserSqlError(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const msg = err.message ?? "";
+	return USER_ERROR_PREFIXES.some((p) => msg.startsWith(p));
 }
 
 export async function handleQuery(
@@ -32,14 +47,18 @@ export async function handleQuery(
 		const result = await duckdb.query(body.sql, body.params);
 		return Response.json(result);
 	} catch (err) {
-		// Validation errors are user input — message is enough. Execution
-		// errors are server-side; the helper attaches a stack on Error.
+		// Validation errors are user input → 400. Execution errors are
+		// server-side (planner crash, OOM, file-not-found on Parquet) →
+		// 500 so clients/monitors don't misinterpret them as bad input.
 		if (err instanceof QueryValidationError) {
 			console.warn(`[relog.dev] /query rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`);
-		} else {
-			logRouteError("POST /query", err, { keyPrefix, sql: body.sql });
+			return Response.json({ error: err.message }, { status: 400 });
 		}
-		return Response.json({ error: queryErrorMessage(err) }, { status: 400 });
+		if (isUserSqlError(err)) {
+			return Response.json({ error: "Query execution failed" }, { status: 400 });
+		}
+		logRouteError("POST /query", err, { keyPrefix, sql: body.sql });
+		return Response.json({ error: "Query execution failed" }, { status: 500 });
 	}
 }
 
@@ -103,9 +122,12 @@ export async function handleQueryStream(
 			console.warn(
 				`[relog.dev] /query/stream rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`,
 			);
-		} else {
-			logRouteError("POST /query/stream", err, { keyPrefix, sql: body.sql });
+			return Response.json({ error: err.message }, { status: 400 });
 		}
-		return Response.json({ error: queryErrorMessage(err) }, { status: 400 });
+		if (isUserSqlError(err)) {
+			return Response.json({ error: "Query execution failed" }, { status: 400 });
+		}
+		logRouteError("POST /query/stream", err, { keyPrefix, sql: body.sql });
+		return Response.json({ error: "Query execution failed" }, { status: 500 });
 	}
 }

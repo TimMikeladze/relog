@@ -15,18 +15,33 @@ export class WidgetsManager {
 		for (const w of DEFAULT_WIDGETS) {
 			this.widgets.set(w.id, w);
 		}
-		if (this.filePath) {
-			try {
-				const raw = await fs.readFile(this.filePath, "utf-8");
-				const parsed = JSON.parse(raw) as WidgetsFile | Widget[];
-				const list = Array.isArray(parsed) ? parsed : parsed.widgets;
-				for (const w of list) {
-					this.widgets.set(w.id, w);
-				}
-			} catch {
-				// missing or invalid file — write seeds so the file exists going forward
+		if (!this.filePath) return;
+		let raw: string;
+		try {
+			raw = await fs.readFile(this.filePath, "utf-8");
+		} catch (err) {
+			if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+				// First run / fresh install — seed the file so future writes succeed.
 				await this.persist();
+				return;
 			}
+			// Anything else (EACCES, EIO, EISDIR) is an operator/FS issue. Don't
+			// overwrite — that would risk destroying real user data on a transient
+			// read failure.
+			throw new Error(
+				`[relog.dev] Failed to read widgets file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
+			);
+		}
+		try {
+			const parsed = JSON.parse(raw) as WidgetsFile | Widget[];
+			const list = Array.isArray(parsed) ? parsed : parsed.widgets;
+			for (const w of list) {
+				this.widgets.set(w.id, w);
+			}
+		} catch (err) {
+			throw new Error(
+				`[relog.dev] Widgets file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
+			);
 		}
 	}
 

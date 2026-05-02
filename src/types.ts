@@ -92,6 +92,14 @@ export interface ServerConfig {
 	ingestRpm?: number;
 	/** TCP idle timeout in seconds (default: 60). */
 	idleTimeout?: number;
+	/**
+	 * Trust the X-Forwarded-For header for the client IP. Only enable when
+	 * deployed behind a reverse proxy that is known to set this header
+	 * (ALB, GCP LB, Cloudflare, nginx). When false (default), the socket
+	 * peer address is used so a malicious client cannot spoof IPs and
+	 * bypass per-IP rate limiting.
+	 */
+	trustProxy?: boolean;
 	autoPrune?: AutoPruneConfig;
 	archive?: ArchiveConfig;
 	uiDistPath?: string;

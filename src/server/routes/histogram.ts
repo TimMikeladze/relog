@@ -47,6 +47,17 @@ export async function handleHistogram(
 		);
 	}
 
+	// Sanity-bound epoch values. Rejects negative timestamps and absurd futures
+	// that would otherwise produce a giant time range and force the engine to
+	// allocate huge bucket arrays.
+	const MAX_EPOCH_MS = Date.now() + 365 * 86_400_000;
+	if (body.from < 0 || body.to < 0 || body.from > MAX_EPOCH_MS || body.to > MAX_EPOCH_MS) {
+		return Response.json(
+			{ error: "'from'/'to' out of range (must be epoch ms within ±1y of now)" },
+			{ status: 400 },
+		);
+	}
+
 	if (body.to <= body.from) {
 		return Response.json({ error: "'to' must be greater than 'from'" }, { status: 400 });
 	}

@@ -65,8 +65,14 @@ export async function handleLogs(
 	const offset = url.searchParams.get("offset");
 	if (offset) {
 		const parsed = Number.parseInt(offset, 10);
-		if (Number.isNaN(parsed) || parsed < 0) {
-			return Response.json({ error: "Invalid 'offset' value" }, { status: 400 });
+		// Cap offset: deep-paging without bound forces full-table scans on the
+		// underlying engine. Clients should switch to keyset/`around_id` paging
+		// past this depth.
+		if (Number.isNaN(parsed) || parsed < 0 || parsed > 100_000) {
+			return Response.json(
+				{ error: "Invalid 'offset' value (must be 0..100000; use around_id for deep paging)" },
+				{ status: 400 },
+			);
 		}
 		opts.offset = parsed;
 	}

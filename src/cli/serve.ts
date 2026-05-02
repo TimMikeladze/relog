@@ -45,6 +45,9 @@ export const startCommand: Command = command({
 		s3UrlStyle: string("s3-url-style")
 			.desc("S3 URL style: 'path' for MinIO/Tigris, 'vhost' for AWS S3")
 			.default("path"),
+		trustProxy: boolean("trust-proxy").desc(
+			"Trust X-Forwarded-For for client IP. Only enable behind a known reverse proxy.",
+		),
 		noUi: boolean("no-ui").desc("Disable serving the web UI"),
 		noOpen: boolean("no-open").desc("Serve the web UI but skip opening it in the browser"),
 		sources: string().desc("Path to sources YAML config file for external log ingestion"),
@@ -110,6 +113,7 @@ export const startCommand: Command = command({
 			adminKeys,
 			keyPrefixLength: opts.keyPrefixLength,
 			cors: opts.cors === "true",
+			trustProxy: opts.trustProxy,
 			autoPrune,
 			archive,
 			uiDistPath,

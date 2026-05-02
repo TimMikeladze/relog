@@ -101,6 +101,9 @@ export async function handleWidgets(
 				);
 			}
 			const updated = await widgetsManager.update(id, { layout });
+			if (!updated) {
+				return Response.json({ error: "Widget not found" }, { status: 404 });
+			}
 			return Response.json({ widget: updated });
 		}
 		const {

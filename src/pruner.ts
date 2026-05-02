@@ -133,7 +133,7 @@ export function startAutoPrune(
 	let inFlight = false;
 	let consecutiveArchiveFailures = 0;
 
-	const timer = setInterval(async () => {
+	const timer: ReturnType<typeof setInterval> = setInterval(async () => {
 		if (inFlight) return;
 		inFlight = true;
 
@@ -183,6 +183,10 @@ export function startAutoPrune(
 			inFlight = false;
 		}
 	}, intervalSeconds * 1000);
+	// Don't keep the event loop alive solely for the prune timer — when the
+	// only remaining work is this background tick, allow process to exit
+	// (caller still calls `stop()` for clean shutdown).
+	(timer as { unref?: () => void }).unref?.();
 
 	return {
 		stop() {

@@ -24,6 +24,11 @@ import { IdempotencyStore } from "./idempotency.ts";
 
 const DEFAULT_MAX_BODY = 5 * 1024 * 1024;
 const DEFAULT_INGEST_RPM = 600;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+// Retry-After must reflect the actual rate-limit window. Hardcoding "10" while
+// the window is 60s causes well-behaved clients to thunder back at 10s and
+// repeatedly hit the limiter, amplifying load instead of relieving it.
+const RATE_LIMIT_RETRY_AFTER = String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000));
 
 class RateLimiter {
 	private windowMs: number;
@@ -116,17 +121,38 @@ class PerKeyRateLimiter {
 	}
 }
 
+// Origins must be either "*" or http(s)://host[:port]. Anything else
+// (javascript:, data:, file:, missing scheme) is rejected so a misconfig or
+// malicious header value can't be reflected into Access-Control-Allow-Origin.
+const VALID_ORIGIN_RE = /^https?:\/\/[^\s/]+$/;
+
+function isValidOrigin(origin: string): boolean {
+	return origin === "*" || VALID_ORIGIN_RE.test(origin);
+}
+
 function resolveCorsOrigin(
 	cors: ServerConfig["cors"],
 	requestOrigin: string | null,
 ): string | null {
 	if (!cors) return null;
 	if (cors === true) return "*";
-	if (typeof cors === "string") return cors;
+	if (typeof cors === "string") return isValidOrigin(cors) ? cors : null;
 	if (Array.isArray(cors) && requestOrigin && cors.includes(requestOrigin)) {
-		return requestOrigin;
+		return isValidOrigin(requestOrigin) ? requestOrigin : null;
 	}
 	return null;
+}
+
+function validateCorsConfig(cors: ServerConfig["cors"]): void {
+	if (!cors || cors === true) return;
+	const list = typeof cors === "string" ? [cors] : cors;
+	for (const o of list) {
+		if (!isValidOrigin(o)) {
+			throw new Error(
+				`[relog.dev] Invalid CORS origin: ${JSON.stringify(o)}. Must be "*" or http(s)://host[:port].`,
+			);
+		}
+	}
 }
 
 function corsHeaders(config: ServerConfig, requestOrigin: string | null): Record<string, string> {
@@ -165,7 +191,10 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	await aggregatesManager.init();
 	const widgetsManager = new WidgetsManager(getWidgetsPath());
 	await widgetsManager.init();
-	const ingestLimiter = new PerKeyRateLimiter(60_000, config.ingestRpm ?? DEFAULT_INGEST_RPM);
+	const ingestLimiter = new PerKeyRateLimiter(
+		RATE_LIMIT_WINDOW_MS,
+		config.ingestRpm ?? DEFAULT_INGEST_RPM,
+	);
 	const idempotency = new IdempotencyStore();
 
 	// /health is unauthenticated and cheap, but unbounded. A bot scanning
@@ -173,8 +202,9 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	// single misbehaving probe can't starve real load-balancer probes.
 	// Trust `x-forwarded-for` first (front a reverse proxy in prod);
 	// otherwise fall back to the socket peer address.
-	const healthLimiter = new PerKeyRateLimiter(60_000, 60);
+	const healthLimiter = new PerKeyRateLimiter(RATE_LIMIT_WINDOW_MS, 60);
 
+	validateCorsConfig(config.cors);
 	if (config.cors === true) {
 		console.warn(
 			"[relog.dev] CORS is configured as `true` (wildcard `*`). Do NOT use this in production — set `cors` to a specific origin or list of origins.",
@@ -221,13 +251,15 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 
 				// Health check before auth so load balancers can probe without credentials
 				if (method === "GET" && path === "/health") {
-					const xff = request.headers.get("x-forwarded-for");
+					// Only trust XFF when configured. Otherwise it is attacker-controlled
+					// and lets a single client spoof per-IP rate-limit buckets.
+					const xff = config.trustProxy ? request.headers.get("x-forwarded-for") : null;
 					const remoteIp =
 						xff?.split(",")[0]?.trim() || server.requestIP(request)?.address || "_anon";
 					if (!healthLimiter.check(remoteIp)) {
 						return Response.json(
 							{ error: "Too many requests" },
-							{ status: 429, headers: { "Retry-After": "10", ...cors } },
+							{ status: 429, headers: { "Retry-After": RATE_LIMIT_RETRY_AFTER, ...cors } },
 						);
 					}
 					const response = handleHealth(db, startTime, config.autoPrune);
@@ -249,7 +281,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					if (!ingestLimiter.check(auth.keyPrefix)) {
 						response = Response.json(
 							{ error: "Too many requests" },
-							{ status: 429, headers: { "Retry-After": "10" } },
+							{ status: 429, headers: { "Retry-After": RATE_LIMIT_RETRY_AFTER } },
 						);
 					} else {
 						response = await handleOtelTraces(
@@ -262,8 +294,11 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 						if (response.status === 200) streamManager.notify();
 					}
 				} else if (method === "POST" && path === "/v1/metrics") {
-					// OTel metrics not yet implemented — respond explicitly so exporters
-					// get a clear signal instead of a generic 404 that looks like a route typo.
+					// OTel metrics not yet implemented. Auth-gate the response so the
+					// endpoint can't be used to fingerprint the service unauthenticated;
+					// authorized exporters still get a clear 501 instead of a 404.
+					auth = checkRole(request, "ingest", keys, prefixLen);
+					if (auth.error) return auth.error;
 					response = Response.json(
 						{ error: "OTLP metrics endpoint not implemented" },
 						{ status: 501 },
@@ -274,7 +309,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					if (!ingestLimiter.check(auth.keyPrefix)) {
 						response = Response.json(
 							{ error: "Too many requests" },
-							{ status: 429, headers: { "Retry-After": "10" } },
+							{ status: 429, headers: { "Retry-After": RATE_LIMIT_RETRY_AFTER } },
 						);
 					} else {
 						response = await handleOtelLogs(request, db, maxBatchSize, auth.keyPrefix, idempotency);
@@ -288,7 +323,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 							{ error: "Too many requests" },
 							{
 								status: 429,
-								headers: { "Retry-After": "10" },
+								headers: { "Retry-After": RATE_LIMIT_RETRY_AFTER },
 							},
 						);
 					} else {
@@ -349,11 +384,22 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 						response = Response.json({ error: "Not found" }, { status: 404 });
 					} else {
 						const file = Bun.file(filePath);
-						if (await file.exists()) {
-							response = new Response(file);
-						} else {
-							response = new Response(Bun.file(join(root, "index.html")));
-						}
+						const exists = await file.exists();
+						const served = exists ? file : Bun.file(join(root, "index.html"));
+						// HTML must never be cached: the SPA shell holds references
+						// to hashed JS/CSS bundles, so a stale index.html points at
+						// 404'd assets after deploy. Hashed assets under /assets/
+						// (Vite default) are content-addressed and safe to cache
+						// indefinitely.
+						const isHtml = !exists || filePath.endsWith(".html");
+						const cacheControl = isHtml
+							? "no-cache, no-store, must-revalidate"
+							: filePath.includes("/assets/")
+								? "public, max-age=31536000, immutable"
+								: "public, max-age=3600";
+						response = new Response(served, {
+							headers: { "Cache-Control": cacheControl },
+						});
 					}
 				} else {
 					response = Response.json({ error: "Not found" }, { status: 404 });

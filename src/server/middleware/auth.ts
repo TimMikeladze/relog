@@ -94,5 +94,8 @@ export function checkRole(
 		return { error: Response.json({ error: "Forbidden" }, { status: 403 }) };
 	}
 
-	return { keyPrefix: token.slice(0, keyPrefixLength) };
+	// Clamp prefix length so a misconfigured `keyPrefixLength` (>= token.length)
+	// can't cause the full token to be persisted as the "prefix" in logs.
+	const safePrefixLen = Math.max(1, Math.min(keyPrefixLength, token.length - 1));
+	return { keyPrefix: token.slice(0, safePrefixLen) };
 }
