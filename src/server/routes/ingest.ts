@@ -177,7 +177,9 @@ export async function handleIngest(
 	for (const e of cleaned) {
 		if (e.meta && JSON.stringify(e.meta).length > MAX_META_JSON_LENGTH) {
 			return Response.json(
-				{ error: `Invalid log entry: 'meta' exceeds ${MAX_META_JSON_LENGTH} bytes after redaction` },
+				{
+					error: `Invalid log entry: 'meta' exceeds ${MAX_META_JSON_LENGTH} bytes after redaction`,
+				},
 				{ status: 400 },
 			);
 		}
