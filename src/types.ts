@@ -103,7 +103,10 @@ export interface ServerConfig {
 	autoPrune?: AutoPruneConfig;
 	archive?: ArchiveConfig;
 	uiDistPath?: string;
-	/** Path to sources YAML config file for continuous external log ingestion */
+	/**
+	 * Path to sources YAML config file for continuous external log ingestion.
+	 * @internal Experimental — not part of the public API. May change or be removed.
+	 */
 	sourcesConfigPath?: string;
 }
 

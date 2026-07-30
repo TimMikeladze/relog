@@ -23,7 +23,6 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Export** — JSON, CSV, and NDJSON export formats
 - **S3 archival** — archive old logs to S3/MinIO as Parquet files, then query both hot (SQLite) and cold (S3) data seamlessly via DuckDB
 - **Auto-prune** — automatic database maintenance with configurable size and age limits; archives to S3 before deleting when configured
-- **External sources** — continuously pull logs from GitHub Actions, Vercel, and other external systems into relog via a YAML config file
 - **Aggregates** — saved log filters with CRUD API for dashboards and quick views
 - **Docker & Fly.io** — production-ready Dockerfile and fly.toml for single-instance deployment with persistent SQLite volumes
 
@@ -72,15 +71,6 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 │  stats | prune      │
 │  mcp                │
 └─────────────────────┘
-
-┌─────────────────────┐         ┌──────────────────────────────────┐
-│  External Sources    │  poll   │       relog.dev server            │
-│                     │────────▶│                                  │
-│  GitHub Actions     │  HTTP   │  Source Runner (background)      │
-│  Vercel             │         │  ├─ adapter.pull(cursor)         │
-│  CloudWatch         │         │  ├─ db.insert()                  │
-│  (via sources.yaml) │         │  └─ cursor saved in SQLite       │
-└─────────────────────┘         └──────────────────────────────────┘
 
                                 ┌──────────────────────────────────┐
                                 │     AI Agents (Claude, etc.)     │
@@ -567,7 +557,6 @@ relog.dev start --port 3485 --admin-key mykey --cors true
 | `--s3-prefix`         | `logs`              | S3 key prefix for archived Parquet files                                                  |
 | `--s3-region`         | `us-east-1`         | S3 region                                                                                 |
 | `--s3-url-style`      | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                                 |
-| `--sources`           | —                   | Path to YAML config file for [external source ingestion](#external-sources)               |
 | `--no-ui`             | `false`             | Disable serving the web UI                                                                |
 | `--no-open`           | `false`             | Serve the web UI but skip auto-opening it in the browser                                  |
 
@@ -1394,179 +1383,6 @@ Each prune cycle (age- and size-based) is capped at a 30-second wall-clock budge
 ### Schema (Parquet)
 
 Archived Parquet files use INT64 for `id`, `pid`, and `created_at` so SQLite ROWIDs above 2³¹ never silently wrap into negative values on long-running instances.
-
-## External Sources
-
-Logs already exist in external systems — CI runners, deploy platforms, cloud services. Instead of switching between GitHub Actions, Vercel, and CloudWatch to investigate a single incident, relog can pull logs from all of them into one place.
-
-### Why This Matters
-
-A typical deploy failure involves three systems: GitHub Actions ran the build, your app started throwing errors, and your deploy platform shows 502s. Without unified logging, that's three UIs, three search syntaxes, and manual timeline correlation. With sources, it's one `relog search` or one SQL query across everything.
-
-Sources also feed into the MCP server — meaning Claude and other AI agents can see your CI failures alongside your app logs when debugging.
-
-### How It Works
-
-Sources are configured in a YAML file and run as background pollers alongside the server. Each source has an **adapter** (the external system) and a **poll interval**. The server tracks a **cursor** per source so it only fetches new data on each poll — surviving restarts without re-ingesting everything.
-
-```
-sources.yaml → Source Runner → Adapter.pull(cursor) → SQLite → SSE stream
-                  ↑ setInterval                            ↓
-                  └──── cursor saved ◀─────────────────────┘
-```
-
-**Failure handling:** transient errors back off exponentially (capped at 1h) with ±10% jitter so a shared upstream outage doesn't make every source retry in lock-step. After 24 consecutive failures the source is **disabled** with an actionable error log — restart relog after fixing the underlying problem (rotated token, deleted repo, etc.). Cursor strings are validated with a strict ISO-8601 regex on parse, so a corrupted cursor returns null and the source resumes from "now" rather than silently re-ingesting from epoch.
-
-### Configuration
-
-Create a `sources.yaml` file:
-
-```yaml
-sources:
-  - adapter: github-actions
-    repo: myorg/frontend
-    token: $GITHUB_TOKEN
-    every: 60
-
-  - adapter: github-actions
-    repo: myorg/api
-    token: $GITHUB_TOKEN
-    branch: main
-    every: 60
-```
-
-Start the server with `--sources`:
-
-```bash
-GITHUB_TOKEN=ghp_... relog.dev start --sources sources.yaml
-```
-
-Values starting with `$` are resolved from environment variables at startup — secrets never need to be written to disk.
-
-### GitHub Actions Adapter
-
-The `github-actions` adapter fetches completed workflow runs via the GitHub API, then pulls step-level detail for each run.
-
-**Config options:**
-
-| Option   | Required | Description                            |
-| -------- | -------- | -------------------------------------- |
-| `repo`   | yes      | GitHub repository (`owner/repo`)       |
-| `token`  | yes      | GitHub token (or `$ENV_VAR` reference) |
-| `branch` | no       | Filter to a specific branch            |
-| `every`  | yes      | Poll interval in seconds               |
-
-**What gets ingested:**
-
-Each workflow run produces one log entry per step, plus a summary entry per job. This gives granular visibility — which step failed? — while `trace_id` groups everything from the same run.
-
-| GitHub Actions field | relog field     | Example                        |
-| -------------------- | --------------- | ------------------------------ |
-| Repository           | `project`       | `myorg/api`                    |
-| Branch               | `branch`        | `main`                         |
-| Run ID               | `trace_id`      | `gha:7890123456`               |
-| Job name             | `service`       | `build`                        |
-| Commit SHA           | `version`       | `a1b2c3d4`                     |
-| Step name            | `message`       | `Run tests — success`          |
-| Step conclusion      | `level`         | `error` if failed, else `info` |
-| Workflow name        | `meta.workflow` | `CI`                           |
-| Run URL              | `meta.run_url`  | GitHub link to the run         |
-
-**Example: searching CI failures**
-
-```bash
-# find all failed steps across all repos
-relog.dev search --level error --grep "github-actions"
-
-# find failures on a specific repo's main branch
-relog.dev search --project myorg/api --branch main --level error
-
-# SQL: which workflows fail most?
-relog.dev query --sql "
-  SELECT json_extract(meta, '$.workflow') as workflow, COUNT(*) as failures
-  FROM logs
-  WHERE level = 'error' AND json_extract(meta, '$.source') = 'github-actions'
-  GROUP BY workflow
-  ORDER BY failures DESC
-"
-
-# tail CI results in real-time
-relog.dev tail --project myorg/api
-```
-
-### Production Example
-
-A full production setup with two repos, auto-prune, and S3 archival:
-
-```yaml
-# sources.yaml
-sources:
-  - adapter: github-actions
-    repo: myorg/frontend
-    token: $GITHUB_TOKEN
-    every: 60
-  - adapter: github-actions
-    repo: myorg/api
-    token: $GITHUB_TOKEN
-    every: 60
-```
-
-```bash
-GITHUB_TOKEN=ghp_... \
-RELOG_ADMIN_KEY=ops-secret \
-relog.dev start \
-  --sources sources.yaml \
-  --max-db-size 2gb \
-  --max-age-days 90 \
-  --s3-endpoint https://s3.amazonaws.com \
-  --s3-bucket my-logs \
-  --s3-access-key AKIA... \
-  --s3-secret-key secret...
-```
-
-Or with Docker:
-
-```bash
-docker run -p 3485:3485 -v relog_data:/data \
-  -e GITHUB_TOKEN=ghp_... \
-  -e RELOG_ADMIN_KEY=ops-secret \
-  -v ./sources.yaml:/etc/relog/sources.yaml \
-  relog start --sources /etc/relog/sources.yaml
-```
-
-### Writing Custom Adapters
-
-A source adapter is a single file that implements the `SourceAdapter` interface:
-
-```typescript
-import type { SourceAdapter, PullBatch } from "../types.ts";
-
-export const myAdapter: SourceAdapter = {
-	name: "my-system",
-
-	async *pull(config, cursor) {
-		// fetch new data since cursor (null on first run)
-		const items = await fetchNewItems(config.apiUrl, cursor);
-
-		for (const item of items) {
-			yield {
-				logs: [
-					{
-						timestamp: item.created_at,
-						level: item.success ? "info" : "error",
-						message: item.description,
-						service: "my-system",
-						project: config.project,
-					},
-				],
-				cursor: item.id, // opaque string — returned to you next time
-			};
-		}
-	},
-};
-```
-
-Register it in `src/sources/registry.ts` and it's immediately available in `sources.yaml`.
 
 ## Deploy
 

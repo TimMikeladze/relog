@@ -247,8 +247,6 @@ function App() {
 				<ValueProps />
 				{/* 5. Reduce complexity anxiety: "it's simple" */}
 				<Architecture />
-				{/* 5b. External sources — pull logs from CI/deploy/infra */}
-				<ExternalSources />
 				{/* 6. Product polish: see the real app */}
 				<AppScreenshots />
 				{/* 7. Reassurance checklist: yes, it does that too */}
@@ -1051,13 +1049,6 @@ function ArchitectureDiagram({ inView }: { inView: boolean }) {
 					<ArchNode label="TypeScript" sub="SDK" color="#6ee7b7" delay={0.1} inView={inView} />
 					<ArchNode label="Python" sub="SDK" color="#6ee7b7" delay={0.13} inView={inView} />
 					<ArchNode label="Browser" sub="SDK" color="#6ee7b7" delay={0.16} inView={inView} />
-					<ArchNode
-						label="Sources"
-						sub="GitHub Actions, etc."
-						color="#6ee7b7"
-						delay={0.19}
-						inView={inView}
-					/>
 				</div>
 			</div>
 
@@ -1255,137 +1246,6 @@ function ValueProps() {
 	);
 }
 
-// ─── External Sources — pull logs from CI/deploy/infra ─────────────────
-function ExternalSources() {
-	const ref = useRef(null);
-	const inView = useInView(ref, { once: true, margin: "-60px" });
-
-	const sources = [
-		{ name: "GitHub Actions", desc: "CI/CD workflow runs, jobs, steps", color: "text-white" },
-		{ name: "Vercel", desc: "Deploy logs, serverless functions", color: "text-muted" },
-		{ name: "CloudWatch", desc: "AWS service logs", color: "text-muted" },
-		{ name: "Docker", desc: "Container stdout/stderr", color: "text-muted" },
-		{ name: "Custom", desc: "Any API via adapter interface", color: "text-muted" },
-	];
-
-	const mappings = [
-		{ from: "Repository", to: "project", example: "myorg/api" },
-		{ from: "Branch", to: "branch", example: "main" },
-		{ from: "Run ID", to: "trace_id", example: "gha:7890123456" },
-		{ from: "Job name", to: "service", example: "build" },
-		{ from: "Commit SHA", to: "version", example: "a1b2c3d4" },
-		{ from: "Step result", to: "level", example: "error if failed" },
-	];
-
-	return (
-		<section ref={ref} className="max-w-5xl mx-auto px-5 sm:px-8 pb-14">
-			<Reveal>
-				<h2 className="text-lg font-semibold tracking-tight mb-2">External sources</h2>
-				<p className="text-[13px] text-muted mb-6 max-w-2xl">
-					Pull logs from GitHub Actions, Vercel, and other systems into relog automatically. One
-					timeline for app logs, CI failures, and deploy events — no more switching between UIs to
-					debug an incident.
-				</p>
-			</Reveal>
-
-			<div className="grid sm:grid-cols-2 gap-3">
-				{/* Left: why + sources list */}
-				<Reveal delay={0.1}>
-					<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 h-full">
-						<h3 className="text-[13px] font-medium text-fg mb-3">Configure once, pull forever</h3>
-						<p className="text-[11px] text-muted mb-3">
-							Define sources in a YAML file. The server polls each on an interval, tracks its cursor
-							in SQLite, and inserts logs directly — surviving restarts without re-fetching.
-						</p>
-						<div className="space-y-1.5">
-							{sources.map((s, i) => (
-								<motion.div
-									key={s.name}
-									initial={{ opacity: 0, x: -8 }}
-									animate={inView ? { opacity: 1, x: 0 } : {}}
-									transition={{ delay: 0.3 + i * 0.05, duration: 0.3 }}
-									className="flex items-center gap-2"
-								>
-									<span
-										className={`text-[11px] font-mono ${i === 0 ? "text-fg" : "text-muted/50"}`}
-									>
-										{s.name}
-									</span>
-									<span className="text-[10px] text-muted/40">{s.desc}</span>
-								</motion.div>
-							))}
-						</div>
-					</div>
-				</Reveal>
-
-				{/* Right: field mapping */}
-				<Reveal delay={0.15}>
-					<div className="rounded-lg border border-white/[0.06] bg-white/[0.015] p-4 h-full">
-						<h3 className="text-[13px] font-medium text-fg mb-3">GitHub Actions → relog fields</h3>
-						<div className="space-y-1.5">
-							{mappings.map((m, i) => (
-								<motion.div
-									key={m.from}
-									initial={{ opacity: 0, x: -8 }}
-									animate={inView ? { opacity: 1, x: 0 } : {}}
-									transition={{ delay: 0.4 + i * 0.04, duration: 0.3 }}
-									className="flex items-center gap-2 text-[11px]"
-								>
-									<span className="text-muted/50 w-[80px] shrink-0 font-mono">{m.from}</span>
-									<span className="text-muted/30">→</span>
-									<span className="text-accent font-mono">{m.to}</span>
-									<span className="text-muted/30 ml-auto font-mono text-[10px]">{m.example}</span>
-								</motion.div>
-							))}
-						</div>
-						<div className="mt-3 pt-3 border-t border-white/[0.04] text-[11px] text-muted">
-							Search CI failures with{" "}
-							<code className="text-accent/70">relog search --level error --project myorg/api</code>
-						</div>
-					</div>
-				</Reveal>
-			</div>
-
-			{/* Config example */}
-			<Reveal delay={0.25}>
-				<div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.015] p-4">
-					<div className="flex items-center gap-2 mb-2">
-						<span className="text-[10px] text-muted/50 font-mono">sources.yaml</span>
-					</div>
-					<pre className="text-[11px] font-mono text-dim leading-relaxed">
-						<span className="text-muted/40">sources:</span>
-						{"\n"}
-						<span className="text-muted/40">{"  "}- </span>
-						<span className="text-accent/70">adapter</span>
-						<span className="text-muted/40">: </span>
-						<span className="text-fg/80">github-actions</span>
-						{"\n"}
-						<span className="text-muted/40">{"    "}</span>
-						<span className="text-accent/70">repo</span>
-						<span className="text-muted/40">: </span>
-						<span className="text-fg/80">myorg/api</span>
-						{"\n"}
-						<span className="text-muted/40">{"    "}</span>
-						<span className="text-accent/70">token</span>
-						<span className="text-muted/40">: </span>
-						<span className="text-amber-400/70">$GITHUB_TOKEN</span>
-						{"\n"}
-						<span className="text-muted/40">{"    "}</span>
-						<span className="text-accent/70">every</span>
-						<span className="text-muted/40">: </span>
-						<span className="text-fg/80">60</span>
-					</pre>
-					<div className="mt-3 pt-3 border-t border-white/[0.04]">
-						<code className="text-[11px] font-mono text-muted/60">
-							GITHUB_TOKEN=ghp_... relog.dev start --sources sources.yaml
-						</code>
-					</div>
-				</div>
-			</Reveal>
-		</section>
-	);
-}
-
 // ─── Checklist — scannable feature list ───────────────────────────────
 function Checklist() {
 	const items = [
@@ -1406,7 +1266,6 @@ function Checklist() {
 		"MCP server",
 		"Role-based auth",
 		"Deployment context",
-		"External sources",
 		"Zero config",
 	];
 
@@ -1665,10 +1524,6 @@ function FAQ() {
 		{
 			q: "What does the MCP server do?",
 			a: "AI agents (Claude Code, Cursor, etc.) query your logs via Model Context Protocol tool use. Five tools: search_logs (filter by level/service/time), query_logs (SQL), get_stats (volume/health), tail_logs (recent entries), and get_log_context (surrounding logs for a given ID).",
-		},
-		{
-			q: "How do external sources work?",
-			a: "Define sources in a YAML config file and pass --sources to the server. Each source has an adapter (GitHub Actions, Vercel, etc.), a poll interval, and adapter-specific config. The server polls each source on its interval, tracks a cursor in SQLite so it only fetches new data, and inserts directly into the database. Secrets use $ENV_VAR references so nothing is stored on disk.",
 		},
 		{
 			q: "How does authentication work?",

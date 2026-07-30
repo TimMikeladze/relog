@@ -50,7 +50,11 @@ export const startCommand: Command = command({
 		),
 		noUi: boolean("no-ui").desc("Disable serving the web UI"),
 		noOpen: boolean("no-open").desc("Serve the web UI but skip opening it in the browser"),
-		sources: string().desc("Path to sources YAML config file for external log ingestion"),
+		// Experimental — external source polling is not part of the public surface yet.
+		// Kept functional so existing deployments keep working, hidden from --help.
+		sources: string()
+			.desc("Path to sources YAML config file for external log ingestion")
+			.hidden(),
 	},
 	handler: async (opts) => {
 		function parseKeys(raw: string | undefined): string[] {
