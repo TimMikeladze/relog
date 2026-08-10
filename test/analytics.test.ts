@@ -374,6 +374,21 @@ describe("AnalyticsStore", () => {
 		expect(o.views_per_session).toBe(10);
 	});
 
+	test("a session written in the same millisecond as the read is still counted", () => {
+		// `to` defaults to Date.now() at read time, so a read can land on the
+		// exact millisecond of a write. With an exclusive upper bound on
+		// started_at the session vanished while its pageviews still counted —
+		// the dashboard showed views with zero sessions.
+		const at = BASE_TIME + 5 * 60_000;
+		db.analytics.insert([event({ created_at: at, session_id: "s1" })]);
+		const o = db.analytics.overview({ site: "demo", from: at - HOUR_MS, to: at });
+		expect(o.views).toBe(1);
+		expect(o.sessions).toBe(1);
+
+		const points = db.analytics.timeseries({ site: "demo", from: at - HOUR_MS, to: at }, "hour");
+		expect(points.reduce((n, p) => n + p.sessions, 0)).toBe(1);
+	});
+
 	test("bounce rate counts single-pageview sessions", () => {
 		db.analytics.insert([
 			event({ session_id: "bounced", visitor_id: "v1" }),

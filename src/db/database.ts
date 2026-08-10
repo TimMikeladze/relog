@@ -345,6 +345,10 @@ export class RelogDatabase {
 	}
 
 	close(): void {
+		// Statements first: the analytics store caches prepared handles, and
+		// releasing them after the connection they belong to is a native-level
+		// use-after-free rather than a catchable error.
+		this.analytics.finalize();
 		this.readonlyDb.close();
 		this.db.close();
 	}

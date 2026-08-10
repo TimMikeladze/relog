@@ -1,4 +1,4 @@
-import type { Database, SQLQueryBindings } from "bun:sqlite";
+import type { Database, SQLQueryBindings, Statement } from "bun:sqlite";
 import {
 	CREATE_ANALYTICS_INDEXES,
 	CREATE_EVENTS_TABLE,
@@ -94,9 +94,26 @@ function dim(v: string | null | undefined): string {
 
 const PAGEVIEW = "pageview";
 
+interface WriteStatements {
+	raw: Statement;
+	rollup: Statement;
+	visitor: Statement;
+	session: Statement;
+}
+
 export class AnalyticsStore {
 	private db: Database;
 	private readonlyDb: Database;
+	/**
+	 * The four write statements, prepared once and reused. Collect is the
+	 * hottest path in the system and re-parsing this SQL on every batch is
+	 * pure waste; caching also keeps the number of live native statement
+	 * handles bounded rather than proportional to traffic.
+	 *
+	 * Lazy, so a RelogDatabase that never sees an analytics event never pays
+	 * for them.
+	 */
+	private writeStmts: WriteStatements | null = null;
 	readonly salts: VisitorSalts;
 
 	constructor(db: Database, readonlyDb: Database) {
@@ -113,6 +130,69 @@ export class AnalyticsStore {
 		this.salts = new VisitorSalts(db);
 	}
 
+	private writeStatements(): WriteStatements {
+		if (this.writeStmts) return this.writeStmts;
+		this.writeStmts = {
+			raw: this.db.prepare(`
+				INSERT INTO events (
+					site, name, visitor_id, session_id, hostname, path, path_raw, title,
+					referrer_host, referrer_path, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
+					country, region, city, browser, os, device, screen, language,
+					props, revenue, duration_ms, key_prefix, created_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			`),
+			rollup: this.db.prepare(`
+				INSERT INTO event_rollups (
+					site, bucket, name, path, referrer_host, utm_source, utm_medium, utm_campaign,
+					country, device, browser, os, views, revenue, duration_sum, duration_count
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+				ON CONFLICT(site, bucket, name, path, referrer_host, utm_source, utm_medium, utm_campaign, country, device, browser, os)
+				DO UPDATE SET
+					views = views + 1,
+					revenue = revenue + excluded.revenue,
+					duration_sum = duration_sum + excluded.duration_sum,
+					duration_count = duration_count + excluded.duration_count
+			`),
+			visitor: this.db.prepare(
+				"INSERT INTO visitor_hours (site, bucket, visitor_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
+			),
+			session: this.db.prepare(`
+				INSERT INTO sessions (
+					site, session_id, visitor_id, started_at, last_seen_at, views, events,
+					entry_path, exit_path, referrer_host, utm_source, country, device, browser, os
+				) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+				ON CONFLICT(site, session_id) DO UPDATE SET
+					last_seen_at = MAX(last_seen_at, excluded.last_seen_at),
+					started_at = MIN(started_at, excluded.started_at),
+					views = views + excluded.views,
+					events = events + 1,
+					-- entry_path sticks to the first pageview; a session that opens with a
+					-- custom event would otherwise never get one.
+					entry_path = COALESCE(entry_path, excluded.entry_path),
+					exit_path = COALESCE(excluded.exit_path, exit_path)
+			`),
+		};
+		return this.writeStmts;
+	}
+
+	/**
+	 * Releases the cached statements. Called before the owning database is
+	 * closed: a live statement handle outliving its connection is exactly the
+	 * shape of bug that surfaces as a native crash at process teardown rather
+	 * than as an error anyone can read.
+	 */
+	finalize(): void {
+		if (!this.writeStmts) return;
+		for (const stmt of Object.values(this.writeStmts)) {
+			try {
+				stmt.finalize();
+			} catch {
+				// Already finalized, or the connection went first. Nothing to do.
+			}
+		}
+		this.writeStmts = null;
+	}
+
 	/**
 	 * Writes raw rows, rollups, visitor set and session state in one
 	 * transaction. Rollups are maintained synchronously rather than by a
@@ -122,48 +202,12 @@ export class AnalyticsStore {
 	 */
 	insert(events: AnalyticsEvent[], keyPrefix?: string, storeRaw = true): void {
 		if (events.length === 0) return;
-
-		const rawStmt = this.db.prepare(`
-			INSERT INTO events (
-				site, name, visitor_id, session_id, hostname, path, path_raw, title,
-				referrer_host, referrer_path, utm_source, utm_medium, utm_campaign, utm_term, utm_content,
-				country, region, city, browser, os, device, screen, language,
-				props, revenue, duration_ms, key_prefix, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`);
-
-		const rollupStmt = this.db.prepare(`
-			INSERT INTO event_rollups (
-				site, bucket, name, path, referrer_host, utm_source, utm_medium, utm_campaign,
-				country, device, browser, os, views, revenue, duration_sum, duration_count
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-			ON CONFLICT(site, bucket, name, path, referrer_host, utm_source, utm_medium, utm_campaign, country, device, browser, os)
-			DO UPDATE SET
-				views = views + 1,
-				revenue = revenue + excluded.revenue,
-				duration_sum = duration_sum + excluded.duration_sum,
-				duration_count = duration_count + excluded.duration_count
-		`);
-
-		const visitorStmt = this.db.prepare(
-			"INSERT INTO visitor_hours (site, bucket, visitor_id) VALUES (?, ?, ?) ON CONFLICT DO NOTHING",
-		);
-
-		const sessionStmt = this.db.prepare(`
-			INSERT INTO sessions (
-				site, session_id, visitor_id, started_at, last_seen_at, views, events,
-				entry_path, exit_path, referrer_host, utm_source, country, device, browser, os
-			) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(site, session_id) DO UPDATE SET
-				last_seen_at = MAX(last_seen_at, excluded.last_seen_at),
-				started_at = MIN(started_at, excluded.started_at),
-				views = views + excluded.views,
-				events = events + 1,
-				-- entry_path sticks to the first pageview; a session that opens with a
-				-- custom event would otherwise never get one.
-				entry_path = COALESCE(entry_path, excluded.entry_path),
-				exit_path = COALESCE(excluded.exit_path, exit_path)
-		`);
+		const {
+			raw: rawStmt,
+			rollup: rollupStmt,
+			visitor: visitorStmt,
+			session: sessionStmt,
+		} = this.writeStatements();
 
 		this.db.transaction(() => {
 			for (const e of events) {
@@ -277,7 +321,7 @@ export class AnalyticsStore {
 					COALESCE(SUM(CASE WHEN views <= 1 THEN 1 ELSE 0 END), 0) AS bounced,
 					COALESCE(SUM(last_seen_at - started_at), 0) AS duration_sum,
 					COALESCE(SUM(views), 0) AS session_views
-				 FROM sessions WHERE site = ? AND started_at >= ? AND started_at < ?`,
+				 FROM sessions WHERE site = ? AND started_at >= ? AND started_at <= ?`,
 			)
 			.get(site, from, to) as {
 			sessions: number;
@@ -339,7 +383,7 @@ export class AnalyticsStore {
 		const sessionRows = this.readonlyDb
 			.prepare(
 				`SELECT (started_at / ${step}) * ${step} AS b, COUNT(*) AS n FROM sessions
-				 WHERE site = ? AND started_at >= ? AND started_at < ? GROUP BY b`,
+				 WHERE site = ? AND started_at >= ? AND started_at <= ? GROUP BY b`,
 			)
 			.all(site, start, to) as { b: number; n: number }[];
 		for (const r of sessionRows) bump(r.b, "sessions", r.n);
@@ -372,7 +416,7 @@ export class AnalyticsStore {
 					        COUNT(*) AS views,
 					        COUNT(DISTINCT visitor_id) AS visitors
 					 FROM events
-					 WHERE site = ? AND name = ? AND created_at >= ? AND created_at < ?
+					 WHERE site = ? AND name = ? AND created_at >= ? AND created_at <= ?
 					 GROUP BY value ORDER BY views DESC LIMIT ?`,
 				)
 				.all(site, eventName, from, to, cap) as BreakdownRow[];
