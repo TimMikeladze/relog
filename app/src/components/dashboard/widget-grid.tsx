@@ -1,10 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import {
-	type Layout,
-	type LayoutItem,
-	ReactGridLayout as RGLBase,
-	WidthProvider,
-} from "react-grid-layout/legacy";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type Layout, type LayoutItem, ReactGridLayout as RGLBase } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import type { Widget } from "@/types";
@@ -12,8 +7,36 @@ import type { Widget } from "@/types";
 const COLS = 12;
 const ROW_HEIGHT = 60;
 const MARGIN: readonly [number, number] = [12, 12];
+const FALLBACK_WIDTH = 1280;
 
-const ReactGridLayoutWithWidth = WidthProvider(RGLBase);
+/**
+ * Measure the grid container ourselves instead of using RGL's `WidthProvider`.
+ * That helper reads its container from a passive effect, so mounting the
+ * dashboard right after a view switch (the app shell swaps the filter panel in
+ * and out) captured the previous layout's width and never corrected itself —
+ * the element never resizes again, so its ResizeObserver stays quiet and the
+ * widgets sat at the wrong width until the next window resize.
+ */
+function useContainerWidth() {
+	const ref = useRef<HTMLDivElement>(null);
+	const [width, setWidth] = useState(0);
+
+	useLayoutEffect(() => {
+		const node = ref.current;
+		if (!node) return;
+		const measure = () => setWidth(node.getBoundingClientRect().width);
+		measure();
+		// jsdom has no ResizeObserver — the one-shot measure above is enough there.
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(measure);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, []);
+
+	// The layout effect measures before the first paint, so the fallback only
+	// ever reaches the DOM in environments without layout (jsdom).
+	return [ref, width || FALLBACK_WIDTH] as const;
+}
 
 export interface WidgetGridProps {
 	widgets: Widget[];
@@ -26,6 +49,7 @@ export interface WidgetGridProps {
 }
 
 export function WidgetGrid({ widgets, editMode, onLayoutChange, renderWidget }: WidgetGridProps) {
+	const [containerRef, width] = useContainerWidth();
 	const pendingRef = useRef<Map<string, Widget["layout"]>>(new Map());
 	const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -118,23 +142,26 @@ export function WidgetGrid({ widgets, editMode, onLayoutChange, renderWidget }: 
 	);
 
 	return (
-		<ReactGridLayoutWithWidth
-			className="layout"
-			layout={layout}
-			cols={COLS}
-			rowHeight={ROW_HEIGHT}
-			isDraggable={editMode}
-			isResizable={editMode}
-			onLayoutChange={handleLayoutChange}
-			compactType="vertical"
-			margin={MARGIN}
-			draggableCancel=".widget-no-drag"
-		>
-			{widgets.map((w) => (
-				<div key={w.id} className="overflow-hidden rounded-lg border border-border bg-card">
-					{renderWidget(w)}
-				</div>
-			))}
-		</ReactGridLayoutWithWidth>
+		<div ref={containerRef} className="w-full">
+			<RGLBase
+				className="layout"
+				width={width}
+				layout={layout}
+				cols={COLS}
+				rowHeight={ROW_HEIGHT}
+				isDraggable={editMode}
+				isResizable={editMode}
+				onLayoutChange={handleLayoutChange}
+				compactType="vertical"
+				margin={MARGIN}
+				draggableCancel=".widget-no-drag"
+			>
+				{widgets.map((w) => (
+					<div key={w.id} className="overflow-hidden rounded-lg border border-border bg-card">
+						{renderWidget(w)}
+					</div>
+				))}
+			</RGLBase>
+		</div>
 	);
 }

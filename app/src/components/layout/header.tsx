@@ -1,36 +1,45 @@
 import { cn } from "@/lib/utils";
 import type { Filters, View } from "@/types";
-import { Settings, Moon, Sun, Command, Search } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { useEffect, useState, useRef, useCallback } from "react";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
-const views: { id: View; label: string }[] = [
-	{ id: "explore", label: "Explore" },
-	{ id: "traces", label: "Traces" },
-	{ id: "query", label: "Query" },
-	{ id: "dashboard", label: "Dashboard" },
+const VIEW_TITLES: Record<View, { title: string; hint: string }> = {
+	explore: { title: "Explore", hint: "Search and inspect log records" },
+	traces: { title: "Traces", hint: "Follow requests across services" },
+	query: { title: "Query", hint: "Run SQL against the log store" },
+	dashboard: { title: "Dashboard", hint: "Charts built from your logs" },
+};
+
+/** Filters surfaced as removable chips in the topbar. */
+const CHIP_KEYS: (keyof Filters)[] = [
+	"level",
+	"service",
+	"project",
+	"branch",
+	"version",
+	"deployment_id",
+	"trace_id",
+	"from",
+	"to",
+	"bookmarked",
+	// `around_id` pins Explore into "jump to this log" mode; without a chip
+	// there is no way back out of it.
+	"around_id",
 ];
 
 export function Header({
 	currentView,
-	onViewChange,
-	onSettingsClick,
-	onCommandPalette,
 	filters,
 	onUpdateFilter,
+	onClearFilters,
 }: {
 	currentView: View;
-	onViewChange: (view: View) => void;
-	onSettingsClick: () => void;
-	onCommandPalette: () => void;
 	filters?: Filters;
 	onUpdateFilter?: (key: keyof Filters, value: string | undefined) => void;
+	onClearFilters?: () => void;
 }) {
-	const [dark, setDark] = useState(() => {
-		if (typeof window === "undefined") return true;
-		const stored = localStorage.getItem("relog:theme");
-		if (stored) return stored === "dark";
-		return window.matchMedia("(prefers-color-scheme: dark)").matches;
-	});
 	const searchRef = useRef<HTMLInputElement>(null);
 	const [localGrep, setLocalGrep] = useState(filters?.grep || "");
 	const grepTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -54,40 +63,27 @@ export function Header({
 
 	useEffect(() => () => clearTimeout(grepTimerRef.current), []);
 
-	useEffect(() => {
-		document.documentElement.classList.toggle("dark", dark);
-		localStorage.setItem("relog:theme", dark ? "dark" : "light");
-	}, [dark]);
-
 	const showSearch = currentView === "explore" || currentView === "traces";
+	const view = VIEW_TITLES[currentView] ?? VIEW_TITLES.explore;
+	const chips = filters
+		? CHIP_KEYS.filter((k) => filters[k]).map((k) => ({ key: k, value: filters[k] as string }))
+		: [];
 
 	return (
-		<header className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-4">
-			<div className="flex items-center gap-4 shrink-0">
-				<span className="text-sm font-semibold tracking-tight">relog.dev</span>
-				<nav className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
-					{views.map((v) => (
-						<button
-							key={v.id}
-							type="button"
-							onClick={() => onViewChange(v.id)}
-							className={cn(
-								"rounded-sm px-2.5 py-1 text-xs font-medium transition-colors",
-								currentView === v.id
-									? "bg-background text-foreground shadow-sm"
-									: "text-muted-foreground hover:text-foreground",
-							)}
-						>
-							{v.label}
-						</button>
-					))}
-				</nav>
+		<header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+			<SidebarTrigger className="h-7 w-7 text-muted-foreground" />
+			<Separator orientation="vertical" className="mr-1 h-4" />
+
+			<div className="flex min-w-0 shrink-0 flex-col leading-tight">
+				<span className="truncate text-xs font-semibold tracking-tight">{view.title}</span>
+				<span className="hidden truncate text-[10px] text-muted-foreground lg:block">
+					{view.hint}
+				</span>
 			</div>
 
-			{/* Search bar */}
-			{showSearch && filters && onUpdateFilter && (
-				<div className="flex flex-1 items-center">
-					<div className="relative w-full max-w-xl">
+			{showSearch && filters && onUpdateFilter ? (
+				<div className="flex min-w-0 flex-1 items-center gap-2 pl-2">
+					<div className="relative w-full max-w-md">
 						<Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 						<input
 							ref={searchRef}
@@ -95,37 +91,43 @@ export function Header({
 							placeholder="Search logs..."
 							value={localGrep}
 							onChange={handleGrepChange}
-							className="h-8 w-full rounded-md border border-border bg-muted/50 pl-9 pr-3 text-xs outline-none placeholder:text-muted-foreground focus:bg-background focus:ring-1 focus:ring-ring transition-colors"
+							className="h-8 w-full rounded-md border border-border bg-muted/50 pl-9 pr-3 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:bg-background focus:ring-1 focus:ring-ring"
 						/>
 					</div>
-				</div>
-			)}
-			{!showSearch && <div className="flex-1" />}
 
-			<div className="flex items-center gap-1 shrink-0">
-				<button
-					type="button"
-					onClick={() => setDark(!dark)}
-					className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-				>
-					{dark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
-				</button>
-				<button
-					type="button"
-					onClick={onCommandPalette}
-					className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-				>
-					<Command className="h-3 w-3" />
-					<span>K</span>
-				</button>
-				<button
-					type="button"
-					onClick={onSettingsClick}
-					className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-				>
-					<Settings className="h-3.5 w-3.5" />
-				</button>
-			</div>
+					{chips.length > 0 && (
+						<div className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto xl:flex">
+							{chips.map((chip) => (
+								<button
+									key={chip.key}
+									type="button"
+									onClick={() => onUpdateFilter(chip.key, undefined)}
+									title={`Remove ${chip.key} filter`}
+									className={cn(
+										"group flex h-6 shrink-0 items-center gap-1 rounded-full border border-border bg-muted/40 pl-2 pr-1.5 text-[10px] text-muted-foreground",
+										"transition-colors hover:border-destructive/40 hover:text-foreground",
+									)}
+								>
+									<span className="font-medium text-foreground/80">{chip.key}</span>
+									<span className="max-w-[10rem] truncate">{chip.value}</span>
+									<X className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100" />
+								</button>
+							))}
+							{onClearFilters && chips.length > 0 && (
+								<button
+									type="button"
+									onClick={onClearFilters}
+									className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+								>
+									Clear all
+								</button>
+							)}
+						</div>
+					)}
+				</div>
+			) : (
+				<div className="flex-1" />
+			)}
 		</header>
 	);
 }

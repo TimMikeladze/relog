@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { apiPost } from "@/api/client";
-import type { Bookmark, Filters, QueryResult, View } from "@/types";
-import { useBookmarks } from "@/hooks/use-bookmarks";
+import type { Filters, QueryResult, View } from "@/types";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -15,9 +14,6 @@ import {
 	PanelLeftClose,
 	PanelLeftOpen,
 	CalendarIcon,
-	Bookmark as BookmarkIcon,
-	FileText,
-	X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -293,16 +289,13 @@ export function FilterSidebar({
 	onUpdateFilter,
 	onUpdateFilters,
 	onClearFilters,
-	onBookmarkClick,
 }: {
 	filters: Filters;
 	view: View;
 	onUpdateFilter: (key: keyof Filters, value: string | undefined) => void;
 	onUpdateFilters: (updates: Partial<Filters>) => void;
 	onClearFilters: () => void;
-	onBookmarkClick?: (b: Bookmark) => void;
 }) {
-	const { bookmarks, remove } = useBookmarks();
 	const [collapsed, setCollapsed] = useState(false);
 	const [facets, setFacets] = useState<FacetCounts>({
 		level: {},
@@ -368,7 +361,6 @@ export function FilterSidebar({
 		{ icon: GitBranch, label: "Branch", filter: "branch" as const },
 		{ icon: Rocket, label: "Deploy", filter: "deployment_id" as const },
 		...(view === "traces" ? [{ icon: Route, label: "Trace", filter: "trace_id" as const }] : []),
-		{ icon: BookmarkIcon, label: "Bookmarks", filter: "bookmarked" as const },
 	];
 
 	if (collapsed) {
@@ -520,79 +512,6 @@ export function FilterSidebar({
 							onChange={(v) => onUpdateFilter("trace_id", v || undefined)}
 							className="h-7 w-full rounded border border-border bg-background px-2 text-xs outline-none placeholder:text-muted-foreground focus:ring-1 focus:ring-ring"
 						/>
-					</Section>
-				)}
-				{bookmarks.length > 0 && (
-					<Section title={`Bookmarks (${bookmarks.length})`} defaultOpen>
-						<div className="space-y-1">
-							<button
-								type="button"
-								onClick={() =>
-									onUpdateFilter("bookmarked", filters.bookmarked === "true" ? undefined : "true")
-								}
-								className={cn(
-									"flex w-full items-center gap-2 rounded px-2 py-1 text-xs transition-colors",
-									filters.bookmarked === "true"
-										? "bg-primary/15 text-primary font-medium"
-										: "text-foreground hover:bg-muted/50",
-								)}
-							>
-								<span
-									className={cn(
-										"flex h-3 w-3 shrink-0 items-center justify-center rounded-sm border transition-colors",
-										filters.bookmarked === "true"
-											? "border-primary bg-primary text-primary-foreground"
-											: "border-muted-foreground/40",
-									)}
-								>
-									{filters.bookmarked === "true" && (
-										<svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none">
-											<path
-												d="M2.5 6L5 8.5L9.5 3.5"
-												stroke="currentColor"
-												strokeWidth="1.5"
-												strokeLinecap="round"
-												strokeLinejoin="round"
-											/>
-										</svg>
-									)}
-								</span>
-								Show bookmarked only
-							</button>
-							<div className="mt-1 space-y-0.5">
-								{bookmarks.map((b) => (
-									<div
-										key={b.id}
-										className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-muted/40"
-									>
-										<button
-											type="button"
-											onClick={() => onBookmarkClick?.(b)}
-											className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-										>
-											{b.type === "trace" ? (
-												<Route className="h-3 w-3 shrink-0 text-muted-foreground" />
-											) : (
-												<FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
-											)}
-											<span className="min-w-0 flex-1 truncate text-[10px]">{b.label}</span>
-											{b.level && (
-												<span className="shrink-0 text-[9px] text-muted-foreground uppercase">
-													{b.level}
-												</span>
-											)}
-										</button>
-										<button
-											type="button"
-											onClick={() => remove(b.id)}
-											className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-										>
-											<X className="h-2.5 w-2.5" />
-										</button>
-									</div>
-								))}
-							</div>
-						</div>
 					</Section>
 				)}
 			</div>

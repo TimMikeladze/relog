@@ -172,9 +172,7 @@ export function AppSidebar({
 						<Circle
 							className={cn(
 								"absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-sidebar",
-								health?.ok
-									? "fill-emerald-400 text-emerald-400"
-									: "fill-zinc-500 text-zinc-500",
+								health?.ok ? "fill-emerald-400 text-emerald-400" : "fill-zinc-500 text-zinc-500",
 							)}
 						/>
 					</span>
@@ -260,9 +258,11 @@ export function AppSidebar({
 				{bookmarks.length > 0 && !collapsed && (
 					<SidebarGroup>
 						<SidebarGroupLabel>Saved ({bookmarks.length})</SidebarGroupLabel>
-						<SidebarGroupContent>
+						{/* Scrolls rather than truncating — this is the only place
+						    bookmarks can be opened or removed. */}
+						<SidebarGroupContent className="max-h-64 overflow-y-auto">
 							<SidebarMenu>
-								{bookmarks.slice(0, 8).map((b) => (
+								{bookmarks.map((b) => (
 									<SidebarMenuItem key={b.id}>
 										<SidebarMenuButton
 											onClick={() => onBookmarkClick?.(b)}

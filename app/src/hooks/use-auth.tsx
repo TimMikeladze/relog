@@ -8,7 +8,6 @@ import {
 	type ReactNode,
 } from "react";
 import { apiGet, setAuthKey, getAuthKey, setBaseUrl, getBaseUrl } from "@/api/client";
-import type { HealthResponse } from "@/types";
 
 interface AuthState {
 	/**
@@ -67,7 +66,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 	const checkAuth = useCallback(async () => {
 		clearRetry();
 		try {
-			await apiGet<HealthResponse>("/health");
+			// Probe a role-protected endpoint, not `/health` — health is public, so
+			// probing it reported "authenticated" against a key-protected server
+			// and every view then rendered "Unauthorized" with no key prompt.
+			await apiGet<unknown>("/logs?limit=1");
 			backoffRef.current = INITIAL_BACKOFF_MS;
 			setState((s) => ({
 				...s,
@@ -130,7 +132,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 		localStorage.setItem(STORAGE_KEY, key);
 		setState((s) => ({ ...s, key, status: "checking" }));
 		try {
-			await apiGet<HealthResponse>("/health");
+			// Same protected probe as `checkAuth` — a public endpoint would
+			// accept any key the user types.
+			await apiGet<unknown>("/logs?limit=1");
 			setState((s) => ({ ...s, status: "authenticated", error: undefined }));
 		} catch (err: unknown) {
 			// Distinguish "wrong key" (401) from "server down" — clearing

@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Filters, View } from "@/types";
 
+const VIEWS: View[] = ["explore", "traces", "query", "dashboard"];
+
 function parseHash(): { view: View; filters: Filters; page: number } {
 	const hash = window.location.hash.slice(1);
 	const [path, search] = hash.split("?");
-	const view = (path || "explore") as View;
+	// Anything else — a stale bookmark, a typo, "#/" — falls back to explore.
+	// Consumers index lookup tables by view, so an unknown value would crash.
+	const view = VIEWS.includes(path as View) ? (path as View) : "explore";
 	const params = new URLSearchParams(search || "");
 
 	const filters: Filters = {};
@@ -81,6 +85,26 @@ export function useHashState() {
 		[state.filters],
 	);
 
+	/**
+	 * Switch view and change filters in one hash write. Calling `updateFilter`
+	 * and then `setView` loses the filter: both read `state.filters` from the
+	 * same render, so the second write rebuilds the hash without the update.
+	 */
+	const navigate = useCallback(
+		(view: View, updates: Partial<Filters>) => {
+			const next = { ...state.filters };
+			for (const [k, v] of Object.entries(updates)) {
+				if (v) {
+					(next as Record<string, string>)[k] = v;
+				} else {
+					delete (next as Record<string, string | undefined>)[k];
+				}
+			}
+			window.location.hash = buildHash(view, next, 1);
+		},
+		[state.filters],
+	);
+
 	const setFilters = useCallback(
 		(filters: Filters) => {
 			window.location.hash = buildHash(state.view, filters, 1);
@@ -124,7 +148,7 @@ export function useHashState() {
 	);
 
 	return useMemo(
-		() => ({ ...state, setView, setFilters, updateFilter, updateFilters, setPage }),
-		[state, setView, setFilters, updateFilter, updateFilters, setPage],
+		() => ({ ...state, setView, setFilters, updateFilter, updateFilters, setPage, navigate }),
+		[state, setView, setFilters, updateFilter, updateFilters, setPage, navigate],
 	);
 }
