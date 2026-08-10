@@ -20,10 +20,14 @@ import { handleAggregates } from "./routes/aggregates.ts";
 import { WidgetsManager } from "./widgets.ts";
 import { handleWidgets } from "./routes/widgets.ts";
 import { handleOtelTraces, handleOtelLogs } from "./routes/otel.ts";
+import { handleCollect } from "./routes/collect.ts";
+import { handleAnalytics, handleTrackerScript } from "./routes/analytics.ts";
+import { type AnalyticsPruneHandle, startAnalyticsPrune } from "../analytics/retention.ts";
 import { IdempotencyStore } from "./idempotency.ts";
 
 const DEFAULT_MAX_BODY = 5 * 1024 * 1024;
 const DEFAULT_INGEST_RPM = 600;
+const DEFAULT_COLLECT_RPM = 600;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 // Retry-After must reflect the actual rate-limit window. Hardcoding "10" while
 // the window is 60s causes well-behaved clients to thunder back at 10s and
@@ -178,6 +182,7 @@ export interface ServerInstance {
 	widgetsManager: WidgetsManager;
 	shutdown: () => Promise<void>;
 	pruneHandle?: PruneHandle;
+	analyticsPruneHandle?: AnalyticsPruneHandle;
 	sourcesHandle?: SourcesHandle;
 }
 
@@ -203,6 +208,21 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	// Trust `x-forwarded-for` first (front a reverse proxy in prod);
 	// otherwise fall back to the socket peer address.
 	const healthLimiter = new PerKeyRateLimiter(RATE_LIMIT_WINDOW_MS, 60);
+
+	// /collect is reachable by anonymous browsers by design, so it gets its own
+	// per-IP bucket rather than sharing the per-key ingest limiter — otherwise
+	// one visitor's tab could exhaust the budget for every application shipping
+	// logs through the same key.
+	const analytics = config.analytics;
+	const collectLimiter = new PerKeyRateLimiter(
+		RATE_LIMIT_WINDOW_MS,
+		analytics?.collectRpm ?? DEFAULT_COLLECT_RPM,
+	);
+	if (analytics?.enabled && (!analytics.sites || analytics.sites.length === 0)) {
+		console.warn(
+			"[relog.dev] Analytics is enabled with no `sites` allowlist. /collect will accept events for any site id — set `analytics.sites` in production.",
+		);
+	}
 
 	validateCorsConfig(config.cors);
 	if (config.cors === true) {
@@ -249,13 +269,72 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 				const path = url.pathname;
 				const method = request.method;
 
+				// Only trust XFF when configured. Otherwise it is attacker-controlled
+				// and lets a single client spoof per-IP rate-limit buckets.
+				const socketAddress = () => server.requestIP(request)?.address ?? null;
+				const remoteAddress = (): string => {
+					const xff = config.trustProxy ? request.headers.get("x-forwarded-for") : null;
+					return xff?.split(",")[0]?.trim() || socketAddress() || "_anon";
+				};
+
+				// The tracker runs on other people's sites, so the analytics
+				// endpoints must answer cross-origin regardless of the `cors`
+				// setting, which governs the authenticated read/ingest API. Both
+				// are anonymous, credential-free and rate-limited, so a wildcard
+				// here grants nothing that a plain HTTP client did not already have.
+				const isPublicAnalyticsPath = path === "/collect" || path === "/script.js";
+				if (analytics?.enabled && isPublicAnalyticsPath && method === "OPTIONS") {
+					return new Response(null, {
+						status: 204,
+						headers: {
+							"Access-Control-Allow-Origin": "*",
+							"Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+							"Access-Control-Allow-Headers": "Content-Type",
+							"Access-Control-Max-Age": "86400",
+						},
+					});
+				}
+
+				if (analytics?.enabled && method === "GET" && path === "/script.js") {
+					const response = handleTrackerScript(request);
+					response.headers.set("Access-Control-Allow-Origin", "*");
+					return response;
+				}
+
+				if (analytics?.enabled && method === "POST" && path === "/collect") {
+					// A public collect endpoint keyed by anything the client controls
+					// is trivially bypassed, so the bucket is the remote address.
+					if (!collectLimiter.check(remoteAddress())) {
+						return new Response(null, {
+							status: 429,
+							headers: {
+								"Retry-After": RATE_LIMIT_RETRY_AFTER,
+								"Access-Control-Allow-Origin": "*",
+							},
+						});
+					}
+					let collectKeyPrefix: string | undefined;
+					if (analytics.requireKey) {
+						const auth = checkRole(request, "ingest", keys, config.keyPrefixLength ?? 6);
+						if (auth.error) {
+							auth.error.headers.set("Access-Control-Allow-Origin", "*");
+							return auth.error;
+						}
+						collectKeyPrefix = auth.keyPrefix;
+					}
+					const response = await handleCollect(request, db, {
+						config: analytics,
+						trustProxy: config.trustProxy === true,
+						socketAddress: socketAddress(),
+						keyPrefix: collectKeyPrefix,
+					});
+					response.headers.set("Access-Control-Allow-Origin", "*");
+					return response;
+				}
+
 				// Health check before auth so load balancers can probe without credentials
 				if (method === "GET" && path === "/health") {
-					// Only trust XFF when configured. Otherwise it is attacker-controlled
-					// and lets a single client spoof per-IP rate-limit buckets.
-					const xff = config.trustProxy ? request.headers.get("x-forwarded-for") : null;
-					const remoteIp =
-						xff?.split(",")[0]?.trim() || server.requestIP(request)?.address || "_anon";
+					const remoteIp = remoteAddress();
 					if (!healthLimiter.check(remoteIp)) {
 						return Response.json(
 							{ error: "Too many requests" },
@@ -367,6 +446,14 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					}
 					if (auth.error) return auth.error;
 					response = await handleAggregates(request, aggregatesManager, auth.keyPrefix);
+				} else if (method === "GET" && path.startsWith("/analytics/")) {
+					if (!analytics?.enabled) {
+						response = Response.json({ error: "Analytics is not enabled" }, { status: 404 });
+					} else {
+						auth = checkRole(request, "read", keys, prefixLen);
+						if (auth.error) return auth.error;
+						response = await handleAnalytics(request, db, auth.keyPrefix);
+					}
 				} else if (path.startsWith("/widgets")) {
 					if (method === "GET") {
 						auth = checkRole(request, "read", keys, prefixLen);
@@ -423,6 +510,8 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		? startAutoPrune(db, config.autoPrune, config.archive, () => duckdb.refreshView())
 		: undefined;
 
+	const analyticsPruneHandle = analytics?.enabled ? startAnalyticsPrune(db, analytics) : undefined;
+
 	let sourcesHandle: SourcesHandle | undefined;
 	if (sourceConfigs && sourceConfigs.length > 0) {
 		sourcesHandle = startSources(db, streamManager, sourceConfigs);
@@ -432,6 +521,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const shutdown = async () => {
 		await sourcesHandle?.stop();
 		pruneHandle?.stop();
+		analyticsPruneHandle?.stop();
 		streamManager.shutdown();
 		// Stop accepting new connections, drain in-flight up to 5s, then force-close
 		const drained = await Promise.race([
@@ -454,6 +544,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		widgetsManager,
 		shutdown,
 		pruneHandle,
+		analyticsPruneHandle,
 		sourcesHandle,
 	};
 }

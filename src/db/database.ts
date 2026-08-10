@@ -1,5 +1,6 @@
 import { Database, type SQLQueryBindings } from "bun:sqlite";
 import { CREATE_INDEXES, CREATE_LOGS_TABLE, CREATE_SOURCE_CURSORS_TABLE } from "./schema.ts";
+import { AnalyticsStore } from "./analytics.ts";
 import type { IngestPayload, LogEntry, StreamFilters } from "../types.ts";
 import { parseMeta } from "./util.ts";
 import { getDefaultDbPath } from "../paths.ts";
@@ -57,6 +58,12 @@ const UPSERT_CURSOR_SQL =
 export class RelogDatabase {
 	private db: Database;
 	private readonlyDb: Database;
+	/**
+	 * Web-analytics tables live in the same SQLite file and share this
+	 * connection pair on purpose: a second writer to the same file would
+	 * contend for the write lock with the log ingest path for no benefit.
+	 */
+	readonly analytics: AnalyticsStore;
 
 	constructor(path: string = getDefaultDbPath()) {
 		this.db = new Database(path, { create: true });
@@ -75,6 +82,8 @@ export class RelogDatabase {
 			create: false,
 		});
 		this.readonlyDb.exec("PRAGMA busy_timeout = 5000");
+
+		this.analytics = new AnalyticsStore(this.db, this.readonlyDb);
 	}
 
 	insert(entries: IngestPayload[], keyPrefix?: string): void {

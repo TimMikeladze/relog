@@ -17,6 +17,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Deployment context** — first-class `version` and `deployment_id` fields for tracking releases
 - **Child loggers** — inherit service, meta, and trace context from parent loggers
 - **Role-based API keys** — three roles (ingest, read, admin) with hierarchical Bearer token auth; supports multiple keys per role for multi-app environments
+- **Web analytics** — cookieless, GDPR-friendly pageview and event analytics in the same database as your logs: a one-line `<script>` tag, server-side bot filtering and enrichment, pre-aggregated rollups, and SQL that can join traffic against errors
 - **Browser logging** — client-side logger with batched proxy delivery, error capture, and session tracking
 - **Next.js integration** — drop-in console capture, request logging, error tracking, and browser proxy
 - **MCP server** — AI agents (Claude Code, Cursor, etc.) can query logs via Model Context Protocol
@@ -537,28 +538,38 @@ Start the log server.
 relog.dev start --port 3485 --admin-key mykey --cors true
 ```
 
-| Option                | Default             | Description                                                                               |
-| --------------------- | ------------------- | ----------------------------------------------------------------------------------------- |
-| `--port`              | `3485`              | Port to listen on                                                                         |
-| `--db`                | `~/.relog/relog.db` | SQLite database file path                                                                 |
-| `--ingest-key`        | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars      |
-| `--read-key`          | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars          |
-| `--admin-key`         | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars        |
-| `--key-prefix-length` | `6`                 | Number of API key characters stored per log for auditing (0 to disable)                   |
-| `--cors`              | `false`             | Enable CORS headers                                                                       |
-| `--max-db-size`       | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes |
-| `--max-age-days`      | `30`                | Auto-prune logs older than N days                                                         |
-| `--prune-interval`    | `60`                | How often to check auto-prune thresholds, in seconds                                      |
-| `--no-prune`          | `false`             | Disable automatic pruning entirely                                                        |
-| `--s3-endpoint`       | —                   | S3/MinIO endpoint for archiving and reading archived data                                 |
-| `--s3-bucket`         | —                   | S3 bucket name                                                                            |
-| `--s3-access-key`     | —                   | S3 access key ID                                                                          |
-| `--s3-secret-key`     | —                   | S3 secret access key                                                                      |
-| `--s3-prefix`         | `logs`              | S3 key prefix for archived Parquet files                                                  |
-| `--s3-region`         | `us-east-1`         | S3 region                                                                                 |
-| `--s3-url-style`      | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                                 |
-| `--no-ui`             | `false`             | Disable serving the web UI                                                                |
-| `--no-open`           | `false`             | Serve the web UI but skip auto-opening it in the browser                                  |
+| Option                       | Default             | Description                                                                                             |
+| ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| `--port`                     | `3485`              | Port to listen on                                                                                       |
+| `--db`                       | `~/.relog/relog.db` | SQLite database file path                                                                               |
+| `--ingest-key`               | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars                    |
+| `--read-key`                 | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars                        |
+| `--admin-key`                | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars                      |
+| `--key-prefix-length`        | `6`                 | Number of API key characters stored per log for auditing (0 to disable)                                 |
+| `--cors`                     | `false`             | Enable CORS headers                                                                                     |
+| `--max-db-size`              | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes               |
+| `--max-age-days`             | `30`                | Auto-prune logs older than N days                                                                       |
+| `--prune-interval`           | `60`                | How often to check auto-prune thresholds, in seconds                                                    |
+| `--no-prune`                 | `false`             | Disable automatic pruning entirely                                                                      |
+| `--s3-endpoint`              | —                   | S3/MinIO endpoint for archiving and reading archived data                                               |
+| `--s3-bucket`                | —                   | S3 bucket name                                                                                          |
+| `--s3-access-key`            | —                   | S3 access key ID                                                                                        |
+| `--s3-secret-key`            | —                   | S3 secret access key                                                                                    |
+| `--s3-prefix`                | `logs`              | S3 key prefix for archived Parquet files                                                                |
+| `--s3-region`                | `us-east-1`         | S3 region                                                                                               |
+| `--s3-url-style`             | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                                               |
+| `--no-ui`                    | `false`             | Disable serving the web UI                                                                              |
+| `--no-open`                  | `false`             | Serve the web UI but skip auto-opening it in the browser                                                |
+| `--trust-proxy`              | `false`             | Trust `X-Forwarded-For` for client IP and geo. Only enable behind a known reverse proxy                 |
+| `--analytics`                | `false`             | Enable [web analytics](#web-analytics): serves `/script.js`, accepts `/collect`, exposes `/analytics/*` |
+| `--analytics-sites`          | —                   | Comma-separated allowlist of site ids accepted by `/collect`. Strongly recommended                      |
+| `--analytics-key`            | `false`             | Require an ingest API key on `/collect` (server-side collection only)                                   |
+| `--analytics-bots`           | `false`             | Count known bots and crawlers as visitors                                                               |
+| `--analytics-dnt`            | `false`             | Drop events from clients sending `DNT: 1`                                                               |
+| `--analytics-no-raw`         | `false`             | Store only rollups, not raw events. Cheaper, but loses per-dimension unique visitors                    |
+| `--analytics-raw-days`       | `90`                | Days to keep raw analytics events                                                                       |
+| `--analytics-aggregate-days` | `730`               | Days to keep analytics rollups, sessions, and visitor hours                                             |
+| `--analytics-rpm`            | `600`               | Per-IP `/collect` requests per minute                                                                   |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
@@ -1041,26 +1052,169 @@ with log.event("http_request") as ev:
 
 `ev.error(exc)` automatically sets `span_status_code=2` when any OTel field is present.
 
+## Web Analytics
+
+relog can double as a self-hosted, cookieless web-analytics service — the Umami/Plausible shape — reusing the same SQLite file, auth, retention, SQL endpoint, and MCP server as the logs.
+
+Enable it explicitly:
+
+```bash
+relog.dev start --analytics --analytics-sites my-site,docs
+```
+
+Then drop one tag on the pages you want to measure:
+
+```html
+<script defer src="http://localhost:3485/script.js" data-site="my-site"></script>
+```
+
+That's the whole integration. Pageviews, SPA route changes, referrers, UTMs, and time-on-page are tracked automatically.
+
+### Custom events
+
+```js
+relog("signup", { plan: "pro" });
+relog("purchase", { plan: "pro", revenue: 49 });
+```
+
+Or declaratively, with no JavaScript of your own:
+
+```html
+<button data-relog-event="signup" data-relog-plan="pro">Start free trial</button>
+```
+
+To capture calls that fire before the script has loaded, add the standard stub before it:
+
+```html
+<script>
+	window.relog =
+		window.relog ||
+		function () {
+			(window.relog.q = window.relog.q || []).push(arguments);
+		};
+</script>
+```
+
+### Script tag options
+
+| Attribute             | Default             | Description                                              |
+| --------------------- | ------------------- | -------------------------------------------------------- |
+| `data-site`           | — (required)        | Site id. Must be in `--analytics-sites` when that is set |
+| `data-host`           | script's own origin | Origin to send events to                                 |
+| `data-auto`           | `true`              | Track pageviews automatically; `false` for manual only   |
+| `data-exclude-search` | `false`             | Drop query strings from stored paths (UTMs still parsed) |
+| `data-domains`        | —                   | Comma-separated hostnames allowed to report              |
+
+### How visitors are counted
+
+There is no cookie and no stored IP address. Each event's visitor id is derived server-side as `sha256(daily_salt + site + ip + user_agent)`, truncated to 128 bits. The salt is random per UTC day and old salts are deleted, so once a day rolls over nobody — including whoever holds the database — can map a known IP back to historical rows.
+
+The trade-offs are the standard ones for this approach: a visitor is counted fresh each UTC day, and two people behind the same NAT on the same browser collapse into one. The numbers are comparative, not forensic.
+
+Everything else the client sends is treated as untrusted. Country, browser, OS, and device are derived server-side from the request; a supplied `visitor_id` is ignored; client timestamps far from now are replaced with server time; custom props are capped and run through the same secret redaction as log ingest.
+
+Country/region/city come from your edge proxy's headers (Cloudflare, Vercel, CloudFront, Fly) and are only read when `--trust-proxy` is set — otherwise any client could forge its own location.
+
+### Storage model
+
+Three aggregate tables are written synchronously with every event, so dashboards never wait on a background job and never disagree with the raw data:
+
+| Table           | Grain                                       | Backs                                            |
+| --------------- | ------------------------------------------- | ------------------------------------------------ |
+| `event_rollups` | hour × path × referrer × UTM × geo × device | views, revenue, time-on-page                     |
+| `visitor_hours` | one row per (site, hour, visitor)           | unique visitors (counts, never sums, per bucket) |
+| `sessions`      | one row per session                         | bounce rate, session duration, entry/exit pages  |
+| `events`        | raw event stream                            | per-dimension uniques, realtime, ad-hoc SQL      |
+
+Paths are normalized at ingest (`/orders/8123` → `/orders/:id`) so dimension cardinality stays bounded — without it the rollup table degenerates into one row per pageview.
+
+Raw events are prunable independently of the aggregates (`--analytics-raw-days`, default 90; `--analytics-aggregate-days`, default 730). With `--analytics-no-raw`, only rollups are stored: dashboards keep working at a fraction of the storage, at the cost of per-dimension unique visitors and the realtime page list. When a query range predates raw retention, breakdowns report views from the rollups and `visitors: null` rather than a wrong number.
+
+### Analytics HTTP API
+
+| Method | Path                    | Role       | Description                                         |
+| ------ | ----------------------- | ---------- | --------------------------------------------------- |
+| `GET`  | `/script.js`            | —          | The tracker. Public, cached, CORS `*`               |
+| `POST` | `/collect`              | — / ingest | Receive events. Public unless `--analytics-key`     |
+| `GET`  | `/analytics/overview`   | read       | Views, visitors, sessions, bounce rate, duration    |
+| `GET`  | `/analytics/timeseries` | read       | Bucketed views/visitors/sessions (`unit=hour\|day`) |
+| `GET`  | `/analytics/breakdown`  | read       | Top values for a dimension (`dimension=path`, …)    |
+| `GET`  | `/analytics/realtime`   | read       | Active sessions and pages in the last N minutes     |
+| `GET`  | `/analytics/events`     | read       | Custom event names with counts                      |
+| `GET`  | `/analytics/sites`      | read       | Sites seen, most recently active first              |
+| `GET`  | `/analytics/stats`      | read       | Row counts across the analytics tables              |
+
+Read endpoints accept either `period=24h|7d|30d|12mo` or absolute `from`/`to` epoch milliseconds. `dimension` is one of `name`, `path`, `referrer_host`, `utm_source`, `utm_medium`, `utm_campaign`, `country`, `device`, `browser`, `os`.
+
+```bash
+curl "http://localhost:3485/analytics/overview?site=my-site&period=7d"
+curl "http://localhost:3485/analytics/breakdown?site=my-site&period=30d&dimension=referrer_host"
+```
+
+`/collect` and `/script.js` answer cross-origin regardless of the `--cors` setting — the tracker runs on other people's pages. `/collect` is rate-limited per remote address (`--analytics-rpm`, default 600) and, when `--trust-proxy` is off, buckets by socket address so the header cannot be forged.
+
+`/analytics/*` sits behind the `read` role like the rest of the read API. `/collect` is open by default because a key embedded in a public tracker script is not a secret; use `--analytics-sites` to bound what can be written. `--analytics-key` requires an ingest key and is meant for server-side or first-party-proxied collection.
+
+### Joining traffic against errors
+
+The analytics tables are exposed to `/query`, the CLI, and the MCP server as ordinary SQL views — which is the point of keeping them in the same database:
+
+```sql
+SELECT
+  strftime(to_timestamp(r.bucket / 1000), '%Y-%m-%d %H:00') AS hour,
+  SUM(r.views) AS views,
+  (SELECT COUNT(*) FROM logs l
+    WHERE l.level = 'error' AND l.created_at >= r.bucket AND l.created_at < r.bucket + 3600000
+  ) AS errors
+FROM event_rollups r
+WHERE r.site = 'my-site' AND r.name = 'pageview'
+GROUP BY r.bucket
+ORDER BY r.bucket DESC
+```
+
+An agent with the MCP server attached can ask "why did signups drop Tuesday" and get both the funnel numbers and the errors behind them.
+
+### Bots and Do Not Track
+
+Known crawlers, headless browsers, HTTP clients, link-preview fetchers, and AI scrapers are dropped before anything is written; pass `--analytics-bots` to count them. Bot requests get `202`, not an error, so they don't retry. `--analytics-dnt` additionally drops events from clients sending `DNT: 1`.
+
+### Programmatic use
+
+```typescript
+import { RelogDatabase } from "relog.dev";
+
+const db = new RelogDatabase("./relog.db");
+const range = { site: "my-site", from: Date.now() - 7 * 86_400_000, to: Date.now() };
+
+db.analytics.overview(range);
+db.analytics.timeseries(range, "day");
+db.analytics.breakdown(range, "referrer_host", 10);
+db.analytics.realtime("my-site");
+```
+
 ## HTTP API
 
-| Method   | Path              | Role   | Description                               |
-| -------- | ----------------- | ------ | ----------------------------------------- |
-| `POST`   | `/ingest`         | ingest | Send log records (single object or array) |
-| `POST`   | `/v1/traces`      | ingest | OTLP/JSON traces (OpenTelemetry)          |
-| `POST`   | `/v1/logs`        | ingest | OTLP/JSON logs (OpenTelemetry)            |
-| `GET`    | `/logs`           | read   | Search logs with query params             |
-| `GET`    | `/traces`         | read   | List traces grouped by `trace_id`         |
-| `GET`    | `/stream`         | read   | SSE stream of new logs                    |
-| `POST`   | `/query`          | read   | Run read-only SQL                         |
-| `POST`   | `/query/stream`   | read   | Streaming SQL query results (NDJSON)      |
-| `POST`   | `/histogram`      | read   | Time-bucketed log counts                  |
-| `POST`   | `/prune`          | admin  | Delete logs before timestamp              |
-| `GET`    | `/aggregates`     | read   | List saved aggregates                     |
-| `GET`    | `/aggregates/:id` | read   | Get a single aggregate                    |
-| `POST`   | `/aggregates`     | admin  | Create a saved aggregate                  |
-| `PUT`    | `/aggregates/:id` | admin  | Update a saved aggregate                  |
-| `DELETE` | `/aggregates/:id` | admin  | Delete a saved aggregate                  |
-| `GET`    | `/health`         | —      | Server health (no auth required)          |
+| Method   | Path              | Role   | Description                                            |
+| -------- | ----------------- | ------ | ------------------------------------------------------ |
+| `POST`   | `/ingest`         | ingest | Send log records (single object or array)              |
+| `POST`   | `/v1/traces`      | ingest | OTLP/JSON traces (OpenTelemetry)                       |
+| `POST`   | `/v1/logs`        | ingest | OTLP/JSON logs (OpenTelemetry)                         |
+| `GET`    | `/logs`           | read   | Search logs with query params                          |
+| `GET`    | `/traces`         | read   | List traces grouped by `trace_id`                      |
+| `GET`    | `/stream`         | read   | SSE stream of new logs                                 |
+| `POST`   | `/query`          | read   | Run read-only SQL                                      |
+| `POST`   | `/query/stream`   | read   | Streaming SQL query results (NDJSON)                   |
+| `POST`   | `/histogram`      | read   | Time-bucketed log counts                               |
+| `POST`   | `/prune`          | admin  | Delete logs before timestamp                           |
+| `GET`    | `/aggregates`     | read   | List saved aggregates                                  |
+| `GET`    | `/aggregates/:id` | read   | Get a single aggregate                                 |
+| `POST`   | `/aggregates`     | admin  | Create a saved aggregate                               |
+| `PUT`    | `/aggregates/:id` | admin  | Update a saved aggregate                               |
+| `DELETE` | `/aggregates/:id` | admin  | Delete a saved aggregate                               |
+| `GET`    | `/health`         | —      | Server health (no auth required)                       |
+| `POST`   | `/collect`        | —      | Analytics events (see [Web Analytics](#web-analytics)) |
+| `GET`    | `/script.js`      | —      | Analytics tracker script                               |
+| `GET`    | `/analytics/*`    | read   | Analytics read API                                     |
 
 All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, `/histogram`, and `admin` for `/prune` and write operations on `/aggregates`.
 

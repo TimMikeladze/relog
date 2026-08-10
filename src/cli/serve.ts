@@ -1,7 +1,7 @@
 import { type Command, boolean, command, number, string } from "@drizzle-team/brocli";
 import { startServer } from "../server/server.ts";
 import { getAppDistPath, getDefaultDbPath } from "../paths.ts";
-import type { ArchiveConfig, AutoPruneConfig } from "../types.ts";
+import type { AnalyticsConfig, ArchiveConfig, AutoPruneConfig } from "../types.ts";
 import { parseSize } from "./shared.ts";
 
 const DEFAULT_MAX_DB_SIZE = "500mb";
@@ -48,13 +48,32 @@ export const startCommand: Command = command({
 		trustProxy: boolean("trust-proxy").desc(
 			"Trust X-Forwarded-For for client IP. Only enable behind a known reverse proxy.",
 		),
+		analytics: boolean().desc(
+			"Enable web analytics: serves /script.js, accepts /collect, exposes /analytics/*",
+		),
+		analyticsSites: string("analytics-sites").desc(
+			"Comma-separated allowlist of site ids accepted by /collect. Strongly recommended.",
+		),
+		analyticsKey: boolean("analytics-key").desc(
+			"Require an ingest API key on /collect (server-side collection only — a key in a public tracker is not a secret)",
+		),
+		analyticsBots: boolean("analytics-bots").desc("Count known bots and crawlers as visitors"),
+		analyticsDnt: boolean("analytics-dnt").desc("Drop events from clients sending DNT: 1"),
+		analyticsNoRaw: boolean("analytics-no-raw").desc(
+			"Store only rollups, not raw events. Cheaper, but loses per-dimension unique visitors",
+		),
+		analyticsRawDays: number("analytics-raw-days")
+			.desc("Days to keep raw analytics events")
+			.default(90),
+		analyticsAggregateDays: number("analytics-aggregate-days")
+			.desc("Days to keep analytics rollups, sessions and visitor hours")
+			.default(730),
+		analyticsRpm: number("analytics-rpm").desc("Per-IP /collect requests per minute").default(600),
 		noUi: boolean("no-ui").desc("Disable serving the web UI"),
 		noOpen: boolean("no-open").desc("Serve the web UI but skip opening it in the browser"),
 		// Experimental — external source polling is not part of the public surface yet.
 		// Kept functional so existing deployments keep working, hidden from --help.
-		sources: string()
-			.desc("Path to sources YAML config file for external log ingestion")
-			.hidden(),
+		sources: string().desc("Path to sources YAML config file for external log ingestion").hidden(),
 	},
 	handler: async (opts) => {
 		function parseKeys(raw: string | undefined): string[] {
@@ -107,6 +126,22 @@ export const startCommand: Command = command({
 			};
 		}
 
+		let analytics: AnalyticsConfig | undefined;
+		if (opts.analytics) {
+			const sites = parseKeys(opts.analyticsSites);
+			analytics = {
+				enabled: true,
+				sites: sites.length ? sites : undefined,
+				requireKey: opts.analyticsKey,
+				includeBots: opts.analyticsBots,
+				respectDnt: opts.analyticsDnt,
+				storeRawEvents: !opts.analyticsNoRaw,
+				rawRetentionDays: opts.analyticsRawDays,
+				aggregateRetentionDays: opts.analyticsAggregateDays,
+				collectRpm: opts.analyticsRpm,
+			};
+		}
+
 		const uiDistPath = opts.noUi ? undefined : (getAppDistPath() ?? undefined);
 
 		const { server, shutdown } = await startServer({
@@ -120,6 +155,7 @@ export const startCommand: Command = command({
 			trustProxy: opts.trustProxy,
 			autoPrune,
 			archive,
+			analytics,
 			uiDistPath,
 			sourcesConfigPath: opts.sources,
 		});
@@ -137,6 +173,14 @@ export const startCommand: Command = command({
 			if (autoPrune.maxAgeDays) parts.push(`max-age=${autoPrune.maxAgeDays}d`);
 			parts.push(`interval=${autoPrune.intervalSeconds}s`);
 			console.log(`  auto-prune: ${parts.join(", ")}`);
+		}
+		if (analytics) {
+			console.log(
+				`  analytics: enabled (sites=${analytics.sites?.join(",") ?? "any"}, raw=${analytics.storeRawEvents ? `${analytics.rawRetentionDays}d` : "off"})`,
+			);
+			console.log(
+				`    tracker: <script defer src="${url}/script.js" data-site="my-site"></script>`,
+			);
 		}
 
 		if (uiDistPath && !opts.noOpen) {

@@ -94,6 +94,33 @@ async function withTimeout<T>(
 	}
 }
 
+/**
+ * Analytics tables are exposed as plain views so `/query` and the MCP server
+ * can join them against `logs` — asking "did the checkout error spike line up
+ * with the conversion drop" in one statement is the whole reason analytics
+ * lives in this database rather than a separate product.
+ *
+ * They are not unioned with Parquet: only `logs` is archived to S3 today, and
+ * the analytics rollups are small enough to stay hot indefinitely.
+ */
+const ANALYTICS_VIEWS = ["events", "event_rollups", "visitor_hours", "sessions"] as const;
+
+async function createAnalyticsViews(conn: DuckDBConnection): Promise<void> {
+	for (const table of ANALYTICS_VIEWS) {
+		try {
+			await conn.run(`CREATE OR REPLACE VIEW ${table} AS SELECT * FROM hot.${table}`);
+		} catch (err) {
+			// A database written by an older relog has no analytics tables yet.
+			// The log read path must not fail because of it.
+			console.warn(
+				`[relog.dev] DuckDB: skipping view for missing table "${table}": ${
+					err instanceof Error ? err.message : err
+				}`,
+			);
+		}
+	}
+}
+
 export class DuckDBReader {
 	private instance: DuckDBInstance | null = null;
 	private sqlitePath: string;
@@ -182,6 +209,7 @@ export class DuckDBReader {
 			} else {
 				await conn.run("CREATE OR REPLACE VIEW logs AS SELECT * FROM hot.logs");
 			}
+			await createAnalyticsViews(conn);
 			// Only assign instance after full success
 			this.instance = instance;
 		} catch (err) {

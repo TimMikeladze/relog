@@ -78,6 +78,42 @@ export interface AutoPruneConfig {
 	retry?: RetryConfig;
 }
 
+export interface AnalyticsConfig {
+	/** Master switch for /collect, /script.js and /analytics/*. Default: false. */
+	enabled: boolean;
+	/**
+	 * Allowlist of site ids accepted by /collect. Strongly recommended: the
+	 * collect endpoint must be reachable by anonymous browsers, so without an
+	 * allowlist anyone who finds the URL can create unlimited sites.
+	 */
+	sites?: string[];
+	/**
+	 * Require an ingest key on /collect. Off by default because a key embedded
+	 * in a public tracker script is not a secret; turn it on for server-side
+	 * or first-party-proxied collection where a key can actually be kept.
+	 */
+	requireKey?: boolean;
+	/** Per-IP collect requests per minute. Default: 600. */
+	collectRpm?: number;
+	/** Count known bots and crawlers as visitors. Default: false. */
+	includeBots?: boolean;
+	/** Drop events from clients sending `DNT: 1`. Default: false. */
+	respectDnt?: boolean;
+	/**
+	 * Keep the raw per-event rows. Rollups are always written, so disabling
+	 * this still gives working dashboards at a fraction of the storage — at
+	 * the cost of per-dimension unique visitors and the realtime page list.
+	 * Default: true.
+	 */
+	storeRawEvents?: boolean;
+	/** Store the un-normalized path alongside the normalized one. Default: false. */
+	storeRawPaths?: boolean;
+	/** Days to keep raw events. Rollups outlive them. Default: 90. */
+	rawRetentionDays?: number;
+	/** Days to keep rollups, visitor hours and sessions. Default: 730. */
+	aggregateRetentionDays?: number;
+}
+
 export interface ServerConfig {
 	port: number;
 	dbPath: string;
@@ -102,6 +138,7 @@ export interface ServerConfig {
 	trustProxy?: boolean;
 	autoPrune?: AutoPruneConfig;
 	archive?: ArchiveConfig;
+	analytics?: AnalyticsConfig;
 	uiDistPath?: string;
 	/**
 	 * Path to sources YAML config file for continuous external log ingestion.
