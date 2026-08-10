@@ -11,11 +11,11 @@ import {
 } from "./analytics-schema.ts";
 import { VisitorSalts } from "../analytics/visitor.ts";
 
-export const HOUR_MS = 3_600_000;
-export const DAY_MS = 86_400_000;
+export const HOUR_MS: number = 3_600_000;
+export const DAY_MS: number = 86_400_000;
 
 /** Sessions idle longer than this are considered ended (Umami/GA convention). */
-export const SESSION_TIMEOUT_MS = 30 * 60_000;
+export const SESSION_TIMEOUT_MS: number = 30 * 60_000;
 
 export interface AnalyticsEvent {
 	site: string;
@@ -61,6 +61,12 @@ export interface TimeseriesPoint {
 	views: number;
 	visitors: number;
 	sessions: number;
+}
+
+export interface RealtimeSummary {
+	active_sessions: number;
+	window_ms: number;
+	pages: { value: string; views: number }[];
 }
 
 export interface BreakdownRow {
@@ -401,7 +407,7 @@ export class AnalyticsStore {
 	 * visitor hash is stable for a whole UTC day, so counting those would keep
 	 * reporting people who closed the tab hours ago.
 	 */
-	realtime(site: string, windowMs = 5 * 60_000, now = Date.now()) {
+	realtime(site: string, windowMs: number = 5 * 60_000, now: number = Date.now()): RealtimeSummary {
 		const since = now - windowMs;
 		const active = this.readonlyDb
 			.prepare("SELECT COUNT(*) AS n FROM sessions WHERE site = ? AND last_seen_at >= ?")

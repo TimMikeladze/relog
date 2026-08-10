@@ -23,7 +23,7 @@ export interface AnalyticsPruneHandle {
 export function pruneAnalyticsOnce(
 	db: RelogDatabase,
 	config: AnalyticsConfig,
-	now = Date.now(),
+	now: number = Date.now(),
 ): { rawDeleted: number; aggregatesDeleted: number } {
 	const rawDays = config.rawRetentionDays ?? DEFAULT_RAW_RETENTION_DAYS;
 	const aggDays = config.aggregateRetentionDays ?? DEFAULT_AGGREGATE_RETENTION_DAYS;
