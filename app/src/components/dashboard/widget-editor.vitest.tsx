@@ -28,8 +28,9 @@ describe("WidgetEditor", () => {
 	const baseProps = {
 		filterFrom: 0,
 		filterTo: 1000,
-		service: null,
-		project: null,
+		dashboardId: "logs",
+		variables: [{ name: "service", type: "select" as const }],
+		values: { service: "" },
 		onCancel: vi.fn(),
 		onSave: vi.fn(async () => {}),
 	};

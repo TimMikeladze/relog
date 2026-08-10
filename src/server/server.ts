@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { RelogDatabase } from "../db/database.ts";
 import { DuckDBReader } from "../db/duckdb.ts";
-import { getAggregatesPath, getWidgetsPath } from "../paths.ts";
+import { getAggregatesPath, getDashboardsPath, getWidgetsPath } from "../paths.ts";
 import { type PruneHandle, startAutoPrune } from "../pruner.ts";
 import { type SourcesHandle, startSources } from "../sources/runner.ts";
 import { loadSourcesConfig } from "../sources/config.ts";
@@ -19,6 +19,8 @@ import { AggregatesManager } from "./aggregates.ts";
 import { handleAggregates } from "./routes/aggregates.ts";
 import { WidgetsManager } from "./widgets.ts";
 import { handleWidgets } from "./routes/widgets.ts";
+import { DashboardsManager } from "./dashboards.ts";
+import { handleDashboards } from "./routes/dashboards.ts";
 import { handleOtelTraces, handleOtelLogs } from "./routes/otel.ts";
 import { handleCollect } from "./routes/collect.ts";
 import { handleAnalytics, handleTrackerScript } from "./routes/analytics.ts";
@@ -180,6 +182,7 @@ export interface ServerInstance {
 	streamManager: StreamManager;
 	aggregatesManager: AggregatesManager;
 	widgetsManager: WidgetsManager;
+	dashboardsManager: DashboardsManager;
 	shutdown: () => Promise<void>;
 	pruneHandle?: PruneHandle;
 	analyticsPruneHandle?: AnalyticsPruneHandle;
@@ -192,10 +195,12 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	const maxBody = config.maxBodySize ?? DEFAULT_MAX_BODY;
 	const maxBatchSize = config.maxBatchSize ?? 1000;
 	const streamManager = new StreamManager(db, config.streamDebounceMs);
-	const aggregatesManager = new AggregatesManager(getAggregatesPath());
+	const aggregatesManager = new AggregatesManager(getAggregatesPath(config.dataDir));
 	await aggregatesManager.init();
-	const widgetsManager = new WidgetsManager(getWidgetsPath());
+	const widgetsManager = new WidgetsManager(getWidgetsPath(config.dataDir));
 	await widgetsManager.init();
+	const dashboardsManager = new DashboardsManager(getDashboardsPath(config.dataDir));
+	await dashboardsManager.init();
 	const ingestLimiter = new PerKeyRateLimiter(
 		RATE_LIMIT_WINDOW_MS,
 		config.ingestRpm ?? DEFAULT_INGEST_RPM,
@@ -462,6 +467,19 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 					}
 					if (auth.error) return auth.error;
 					response = await handleWidgets(request, widgetsManager, auth.keyPrefix);
+				} else if (path.startsWith("/dashboards")) {
+					if (method === "GET") {
+						auth = checkRole(request, "read", keys, prefixLen);
+					} else {
+						auth = checkRole(request, "admin", keys, prefixLen);
+					}
+					if (auth.error) return auth.error;
+					response = await handleDashboards(
+						request,
+						dashboardsManager,
+						widgetsManager,
+						auth.keyPrefix,
+					);
 				} else if (method === "GET" && config.uiDistPath) {
 					// Serve the bundled web UI with SPA fallback
 					// Prevent path traversal by resolving and checking the path stays within root
@@ -542,6 +560,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 		streamManager,
 		aggregatesManager,
 		widgetsManager,
+		dashboardsManager,
 		shutdown,
 		pruneHandle,
 		analyticsPruneHandle,

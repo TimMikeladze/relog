@@ -13,6 +13,9 @@ export const startCommand: Command = command({
 	options: {
 		port: number().desc("Port to listen on").default(3485),
 		db: string().desc("SQLite database path").default(getDefaultDbPath()),
+		dataDir: string("data-dir").desc(
+			"Directory for saved dashboards, widgets and aggregates (default: ~/.relog)",
+		),
 		ingestKey: string("ingest-key").desc(
 			"API key(s) for ingest role, comma-separated. Also reads RELOG_INGEST_KEY* env vars",
 		),
@@ -147,6 +150,7 @@ export const startCommand: Command = command({
 		const { server, shutdown } = await startServer({
 			port: opts.port,
 			dbPath: opts.db,
+			dataDir: opts.dataDir,
 			ingestKeys,
 			readKeys,
 			adminKeys,

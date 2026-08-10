@@ -4,11 +4,16 @@ import { useHashParam } from "@/hooks/use-hash-param";
 import { useHealth } from "@/hooks/use-health";
 import { useWidgetData } from "@/hooks/use-widget-data";
 import { useCanEditWidgets, useWidgets } from "@/hooks/use-widgets";
+import { DEFAULT_DASHBOARD_ID, useDashboards, useVariableOptions } from "@/hooks/use-dashboards";
 import { FilterBar, TIME_RANGES } from "@/components/dashboard/filter-bar";
 import { WidgetGrid } from "@/components/dashboard/widget-grid";
 import { WidgetRenderer } from "@/components/dashboard/widget-renderer";
 import { WidgetEditor } from "@/components/dashboard/widget-editor";
-import type { Widget } from "@/types";
+import { DashboardPicker } from "@/components/dashboard/dashboard-picker";
+import { DashboardEditor } from "@/components/dashboard/dashboard-editor";
+import { VariableControls } from "@/components/dashboard/variable-controls";
+import { defaultVarValues } from "@/components/dashboard/sql-vars";
+import type { Dashboard, DashboardVariable, Widget } from "@/types";
 
 const HIDDEN_KEY = "relog:hidden-widgets";
 
@@ -24,35 +29,71 @@ function writeHidden(set: Set<string>): void {
 	localStorage.setItem(HIDDEN_KEY, JSON.stringify(Array.from(set)));
 }
 
+const NO_VARIABLES: DashboardVariable[] = [];
+
 export function DashboardView({ enabled }: { enabled: boolean }) {
 	const { widgets, loading: widgetsLoading, create, update, remove, refetch } = useWidgets();
-	const [timeRangeLabel, setTimeRangeLabel] = useHashParam("range", "24h");
-	const [service, setService] = useHashParam("service", "");
-	const [project, setProject] = useHashParam("project", "");
+	const {
+		dashboards,
+		loading: dashboardsLoading,
+		create: createDashboard,
+		update: updateDashboard,
+		remove: removeDashboard,
+	} = useDashboards();
+
+	const [dashboardId, setDashboardId] = useHashParam("dashboard", DEFAULT_DASHBOARD_ID);
+	const [timeRangeLabel, setTimeRangeLabel] = useHashParam("range", "");
 	const [refreshMsStr, setRefreshMsStr] = useHashParam("refresh", "0");
 	const [editMode, setEditMode] = useState(false);
 	const [refreshKey, setRefreshKey] = useState(0);
 	const [hidden, setHidden] = useState<Set<string>>(() => readHidden());
 	const [editor, setEditor] = useState<
 		{ open: true; widget?: Widget; snapshot: { from: number; to: number } } | { open: false }
-	>({
-		open: false,
-	});
-	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
-	const timeRange = TIME_RANGES.find((t) => t.label === timeRangeLabel) ?? TIME_RANGES[2];
+	>({ open: false });
+	const [dashboardEditor, setDashboardEditor] = useState<
+		{ open: true; dashboard?: Dashboard } | { open: false }
+	>({ open: false });
 
-	const openEditor = useCallback(
-		(widget?: Widget) => {
-			const now = Date.now();
-			setEditor({
-				open: true,
-				widget,
-				snapshot: { from: now - timeRange.ms, to: now },
-			});
-		},
-		[timeRange.ms],
+	const activeId = dashboardId || DEFAULT_DASHBOARD_ID;
+	const dashboard = useMemo(
+		() => dashboards.find((d) => d.id === activeId),
+		[dashboards, activeId],
+	);
+	const variables = dashboard?.variables ?? NO_VARIABLES;
+
+	// An explicit range in the URL wins so a shared link keeps its range;
+	// otherwise the dashboard's own default applies, which is what makes a
+	// 7-day analytics dashboard and a 1-hour ops dashboard both feel right on
+	// first open.
+	const timeRange = useMemo(() => {
+		const label = timeRangeLabel || dashboard?.defaultTimeRange || "24h";
+		return TIME_RANGES.find((t) => t.label === label) ?? TIME_RANGES[2]!;
+	}, [timeRangeLabel, dashboard?.defaultTimeRange]);
+
+	// Variable values live per dashboard so switching back and forth doesn't
+	// carry a `site` filter onto a dashboard that has no such variable.
+	const [valuesByDashboard, setValuesByDashboard] = useState<
+		Record<string, Record<string, string>>
+	>({});
+	const values = useMemo(
+		() => valuesByDashboard[activeId] ?? defaultVarValues(variables),
+		[valuesByDashboard, activeId, variables],
 	);
 
+	const setValue = useCallback(
+		(name: string, value: string) => {
+			setValuesByDashboard((prev) => ({
+				...prev,
+				[activeId]: { ...(prev[activeId] ?? defaultVarValues(variables)), [name]: value },
+			}));
+		},
+		[activeId, variables],
+	);
+
+	const { options: variableOptions } = useVariableOptions(variables, refreshKey);
+
+	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
+	const canEdit = useCanEditWidgets();
 	const { data: health } = useHealth(enabled, 15_000);
 
 	useEffect(() => {
@@ -61,7 +102,30 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		return () => clearInterval(t);
 	}, [refreshMs]);
 
-	const visibleWidgets = useMemo(() => widgets.filter((w) => !hidden.has(w.id)), [widgets, hidden]);
+	// Widgets predating dashboards carry no dashboardId; they belong to the
+	// default dashboard rather than disappearing.
+	const dashboardWidgets = useMemo(
+		() => widgets.filter((w) => (w.dashboardId ?? DEFAULT_DASHBOARD_ID) === activeId),
+		[widgets, activeId],
+	);
+
+	const visibleWidgets = useMemo(
+		() => dashboardWidgets.filter((w) => !hidden.has(w.id)),
+		[dashboardWidgets, hidden],
+	);
+
+	const hiddenHere = useMemo(
+		() => dashboardWidgets.filter((w) => hidden.has(w.id)).length,
+		[dashboardWidgets, hidden],
+	);
+
+	const openEditor = useCallback(
+		(widget?: Widget) => {
+			const now = Date.now();
+			setEditor({ open: true, widget, snapshot: { from: now - timeRange.ms, to: now } });
+		},
+		[timeRange.ms],
+	);
 
 	const handleLayoutChange = useCallback(
 		(updates: { id: string; layout: Widget["layout"] }[], opts?: { keepalive?: boolean }) => {
@@ -98,18 +162,24 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 		[remove],
 	);
 
-	const canEdit = useCanEditWidgets();
-
-	const filters = useMemo(
-		() => ({
-			timeRange: timeRange.label,
-			service: service || null,
-			project: project || null,
-		}),
-		[timeRange.label, service, project],
+	const handleDeleteDashboard = useCallback(
+		async (d: Dashboard) => {
+			if (!confirm(`Delete dashboard "${d.name}" and all of its widgets? This cannot be undone.`)) {
+				return;
+			}
+			await removeDashboard(d.id);
+			if (activeId === d.id) setDashboardId(DEFAULT_DASHBOARD_ID);
+			await refetch();
+		},
+		[removeDashboard, activeId, setDashboardId, refetch],
 	);
 
-	if (widgetsLoading && widgets.length === 0) {
+	const filters = useMemo(
+		() => ({ timeRange: timeRange.label, values, variables }),
+		[timeRange.label, values, variables],
+	);
+
+	if ((widgetsLoading || dashboardsLoading) && widgets.length === 0) {
 		return (
 			<div className="flex flex-1 items-center justify-center">
 				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -120,12 +190,32 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 	return (
 		<div className="flex flex-1 flex-col gap-3 overflow-hidden p-4">
 			<FilterBar
+				leading={
+					<DashboardPicker
+						dashboards={dashboards}
+						activeId={activeId}
+						onSelect={(id) => {
+							setDashboardId(id);
+							// Range is per-dashboard; clearing lets the newly selected
+							// dashboard's default take effect.
+							setTimeRangeLabel("");
+						}}
+						onCreate={() => setDashboardEditor({ open: true })}
+						onEdit={(d) => setDashboardEditor({ open: true, dashboard: d })}
+						onDelete={handleDeleteDashboard}
+						canEdit={canEdit}
+					/>
+				}
+				variableControls={
+					<VariableControls
+						variables={variables}
+						values={values}
+						options={variableOptions}
+						onChange={setValue}
+					/>
+				}
 				timeRange={timeRange.label}
 				onTimeRange={setTimeRangeLabel}
-				service={service || null}
-				onService={(v) => setService(v ?? "")}
-				project={project || null}
-				onProject={(v) => setProject(v ?? "")}
 				refreshMs={refreshMs}
 				onRefreshMs={(v) => setRefreshMsStr(String(v))}
 				loading={widgetsLoading}
@@ -149,9 +239,9 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 				}
 			/>
 
-			{hidden.size > 0 && (
+			{hiddenHere > 0 && (
 				<div className="text-xs text-muted-foreground">
-					{hidden.size} hidden ·{" "}
+					{hiddenHere} hidden ·{" "}
 					<button
 						type="button"
 						onClick={() => {
@@ -166,23 +256,33 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 			)}
 
 			<div className="flex-1 overflow-auto">
-				<WidgetGrid
-					widgets={visibleWidgets}
-					editMode={editMode}
-					onLayoutChange={handleLayoutChange}
-					renderWidget={(w) => (
-						<WidgetTile
-							widget={w}
-							filters={filters}
-							refreshKey={refreshKey}
-							editMode={editMode}
-							onEdit={() => openEditor(w)}
-							onDuplicate={() => handleDuplicate(w)}
-							onDelete={() => handleDelete(w)}
-							onHide={() => toggleHidden(w.id)}
-						/>
-					)}
-				/>
+				{visibleWidgets.length === 0 ? (
+					<EmptyDashboard
+						canEdit={canEdit}
+						onAddWidget={() => {
+							setEditMode(true);
+							openEditor();
+						}}
+					/>
+				) : (
+					<WidgetGrid
+						widgets={visibleWidgets}
+						editMode={editMode}
+						onLayoutChange={handleLayoutChange}
+						renderWidget={(w) => (
+							<WidgetTile
+								widget={w}
+								filters={filters}
+								refreshKey={refreshKey}
+								editMode={editMode}
+								onEdit={() => openEditor(w)}
+								onDuplicate={() => handleDuplicate(w)}
+								onDelete={() => handleDelete(w)}
+								onHide={() => toggleHidden(w.id)}
+							/>
+						)}
+					/>
+				)}
 			</div>
 
 			{editor.open && (
@@ -190,8 +290,9 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 					initial={editor.widget}
 					filterFrom={editor.snapshot.from}
 					filterTo={editor.snapshot.to}
-					service={service || null}
-					project={project || null}
+					dashboardId={activeId}
+					variables={variables}
+					values={values}
 					onCancel={() => setEditor({ open: false })}
 					onSave={async (w) => {
 						if (editor.widget?.id && w.id === editor.widget.id) {
@@ -202,6 +303,44 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 						setEditor({ open: false });
 					}}
 				/>
+			)}
+
+			{dashboardEditor.open && (
+				<DashboardEditor
+					initial={dashboardEditor.dashboard}
+					onCancel={() => setDashboardEditor({ open: false })}
+					onSave={async (d) => {
+						if (dashboardEditor.dashboard) {
+							await updateDashboard(d.id, d);
+						} else {
+							await createDashboard(d);
+							setDashboardId(d.id);
+							setTimeRangeLabel("");
+						}
+						setDashboardEditor({ open: false });
+					}}
+				/>
+			)}
+		</div>
+	);
+}
+
+function EmptyDashboard({ canEdit, onAddWidget }: { canEdit: boolean; onAddWidget: () => void }) {
+	return (
+		<div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+			<p className="text-sm font-medium">No widgets on this dashboard</p>
+			<p className="max-w-md text-xs text-muted-foreground">
+				Widgets are SQL queries rendered as charts. They can read this dashboard's variables as{" "}
+				<code>{"${name}"}</code> placeholders.
+			</p>
+			{canEdit && (
+				<button
+					type="button"
+					onClick={onAddWidget}
+					className="mt-2 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground"
+				>
+					Add widget
+				</button>
 			)}
 		</div>
 	);
@@ -218,7 +357,7 @@ function WidgetTile({
 	onHide,
 }: {
 	widget: Widget;
-	filters: { timeRange: string; service: string | null; project: string | null };
+	filters: { timeRange: string; values: Record<string, string>; variables: DashboardVariable[] };
 	refreshKey: number;
 	editMode: boolean;
 	onEdit: () => void;

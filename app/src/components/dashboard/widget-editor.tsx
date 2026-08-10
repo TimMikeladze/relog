@@ -6,9 +6,9 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { X } from "lucide-react";
 import { apiPost } from "@/api/client";
-import type { QueryResult, Widget, WidgetKind, WidgetOptions } from "@/types";
+import type { DashboardVariable, QueryResult, Widget, WidgetKind, WidgetOptions } from "@/types";
 import { WidgetRenderer } from "./widget-renderer";
-import { substituteVars } from "./sql-vars";
+import { substituteVars, undeclaredPlaceholders } from "./sql-vars";
 
 const KINDS: { value: WidgetKind; label: string }[] = [
 	{ value: "stat", label: "Stat" },
@@ -40,8 +40,11 @@ export interface WidgetEditorProps {
 	initial?: Widget;
 	filterFrom: number;
 	filterTo: number;
-	service: string | null;
-	project: string | null;
+	/** The dashboard this widget belongs to; its variables are in scope. */
+	dashboardId: string;
+	variables: DashboardVariable[];
+	/** Current variable values, used to make the preview match the dashboard. */
+	values: Record<string, string>;
 	onSave: (w: Omit<Widget, "createdAt" | "updatedAt">) => Promise<void>;
 	onCancel: () => void;
 }
@@ -84,6 +87,27 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		[id, name, kind, sqlText, options],
 	);
 
+	// The preview runs with the dashboard's live variable values, so what the
+	// author sees while editing is what the tile will show once saved.
+	const valuesKey = JSON.stringify(props.values);
+	const previewVars = useMemo(() => {
+		const vars: Record<string, string | number | null> = {
+			from: props.filterFrom,
+			to: props.filterTo,
+		};
+		for (const [k, v] of Object.entries(JSON.parse(valuesKey) as Record<string, string>)) {
+			vars[k] = v === "" ? null : v;
+		}
+		return vars as { from: number; to: number } & Record<string, string | number | null>;
+	}, [props.filterFrom, props.filterTo, valuesKey]);
+
+	// A `${typo}` would otherwise become NULL and quietly widen the widget's
+	// scope. Surfacing it next to the editor catches it while it is still cheap.
+	const undeclared = useMemo(
+		() => undeclaredPlaceholders(sqlText, props.variables),
+		[sqlText, props.variables],
+	);
+
 	useEffect(() => {
 		if (!editorHost.current) return;
 		const state = EditorState.create({
@@ -108,11 +132,12 @@ export function WidgetEditor(props: WidgetEditorProps) {
 			setPreviewLoading(true);
 			setPreviewError(null);
 			try {
-				const resolved = substituteVars(sqlText, {
-					from: props.filterFrom,
-					to: props.filterTo,
-					service: props.service,
-					project: props.project,
+				const resolved = substituteVars(sqlText, previewVars, {
+					variables: props.variables,
+					// The SQL is mid-edit; an as-yet-undeclared placeholder should
+					// show up as a warning under the editor, not as a thrown error
+					// that blanks the preview on every keystroke.
+					lenient: true,
 				});
 				const res = await apiPost<QueryResult>("/query", { sql: resolved });
 				setPreviewRows(res.rows ?? []);
@@ -124,7 +149,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 			}
 		}, 500);
 		return () => clearTimeout(t);
-	}, [sqlText, props.filterFrom, props.filterTo, props.service, props.project]);
+	}, [sqlText, previewVars, props.variables]);
 
 	const handleKindChange = useCallback((k: WidgetKind) => {
 		setKind(k);
@@ -160,11 +185,9 @@ export function WidgetEditor(props: WidgetEditorProps) {
 		// then 4xx on every dashboard refresh.
 		setSaving(true);
 		try {
-			const resolved = substituteVars(sqlText, {
-				from: props.filterFrom,
-				to: props.filterTo,
-				service: props.service,
-				project: props.project,
+			const resolved = substituteVars(sqlText, previewVars, {
+				variables: props.variables,
+				lenient: true,
 			});
 			try {
 				await apiPost<QueryResult>("/query", { sql: `EXPLAIN ${resolved}` });
@@ -183,6 +206,7 @@ export function WidgetEditor(props: WidgetEditorProps) {
 				options,
 				layout: props.initial?.layout ?? { x: 0, y: 0, w: 6, h: 4 },
 				timeRange,
+				dashboardId: props.dashboardId,
 				builtin: false,
 			});
 		} finally {
@@ -262,8 +286,17 @@ export function WidgetEditor(props: WidgetEditorProps) {
 								className="min-h-[220px] overflow-hidden rounded-md border border-border"
 							/>
 							<span className="text-[10px] text-muted-foreground">
-								Vars: $&#123;from&#125; $&#123;to&#125; $&#123;service&#125; $&#123;project&#125;
+								Vars:{" "}
+								{["from", "to", ...props.variables.map((v) => v.name)]
+									.map((n) => `\${${n}}`)
+									.join(" ")}
 							</span>
+							{undeclared.length > 0 && (
+								<span className="text-[10px] text-amber-600 dark:text-amber-500">
+									Not declared on this dashboard: {undeclared.map((n) => `\${${n}}`).join(" ")} —
+									these resolve to NULL. Add them as dashboard variables to filter by them.
+								</span>
+							)}
 						</div>
 						<label className="flex flex-col gap-1">
 							<span className="text-muted-foreground">Options (JSON)</span>

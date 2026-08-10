@@ -199,6 +199,8 @@ export interface Widget {
 	options: WidgetOptions;
 	layout: WidgetLayout;
 	timeRange?: string;
+	/** Dashboard this widget belongs to. Absent means the default dashboard. */
+	dashboardId?: string;
 	createdAt: number;
 	updatedAt: number;
 	builtin?: boolean;
@@ -207,4 +209,43 @@ export interface Widget {
 export interface WidgetsFile {
 	version: 1;
 	widgets: Widget[];
+}
+
+export type VariableType = "text" | "select" | "number";
+
+export interface VariableOption {
+	label: string;
+	value: string;
+}
+
+/**
+ * A dashboard variable becomes a `${name}` placeholder available to every
+ * widget on that dashboard. Declaring them per dashboard is what keeps the
+ * dashboard generic — nothing here knows what a "service" or a "site" is.
+ */
+export interface DashboardVariable {
+	name: string;
+	label?: string;
+	description?: string;
+	type: VariableType;
+	default?: string | number | null;
+	options?: VariableOption[];
+	/** SQL producing a `value` column and an optional `label` column. */
+	optionsSql?: string;
+	/** Offer an "All" choice that substitutes NULL. Default: true. */
+	includeAll?: boolean;
+}
+
+export interface Dashboard {
+	id: string;
+	name: string;
+	description?: string;
+	/** lucide-react icon name; falls back to a generic icon when unrecognized. */
+	icon?: string;
+	order?: number;
+	variables?: DashboardVariable[];
+	defaultTimeRange?: string;
+	createdAt: number;
+	updatedAt: number;
+	builtin?: boolean;
 }

@@ -13,12 +13,28 @@ export function getDefaultDbPath(): string {
 	return join(getDataDir(), "relog.db");
 }
 
-export function getAggregatesPath(): string {
-	return join(getDataDir(), "aggregates.json");
+/**
+ * The JSON side-stores (aggregates, widgets, dashboards) default to `~/.relog`
+ * but accept an override so a server can be pointed at its own state
+ * directory. Without this, two servers on one machine — or a test run —
+ * silently share and overwrite each other's saved dashboards.
+ */
+function resolveStorePath(dataDir: string | undefined, filename: string): string {
+	if (!dataDir) return join(getDataDir(), filename);
+	mkdirSync(dataDir, { recursive: true });
+	return join(dataDir, filename);
 }
 
-export function getWidgetsPath(): string {
-	return join(getDataDir(), "widgets.json");
+export function getAggregatesPath(dataDir?: string): string {
+	return resolveStorePath(dataDir, "aggregates.json");
+}
+
+export function getWidgetsPath(dataDir?: string): string {
+	return resolveStorePath(dataDir, "widgets.json");
+}
+
+export function getDashboardsPath(dataDir?: string): string {
+	return resolveStorePath(dataDir, "dashboards.json");
 }
 
 export function getAppDistPath(): string | null {

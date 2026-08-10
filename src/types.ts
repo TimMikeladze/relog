@@ -117,6 +117,12 @@ export interface AnalyticsConfig {
 export interface ServerConfig {
 	port: number;
 	dbPath: string;
+	/**
+	 * Directory for the JSON side-stores (aggregates, widgets, dashboards).
+	 * Defaults to `~/.relog`. Set it when running more than one server on a
+	 * machine, or they will overwrite each other's saved dashboards.
+	 */
+	dataDir?: string;
 	ingestKeys?: string[];
 	readKeys?: string[];
 	adminKeys?: string[];
@@ -326,6 +332,12 @@ export interface Widget {
 	options: WidgetOptions;
 	layout: WidgetLayout;
 	timeRange?: string;
+	/**
+	 * Dashboard this widget belongs to. Absent means the default dashboard,
+	 * so widgets created before dashboards existed keep showing up where
+	 * their author left them.
+	 */
+	dashboardId?: string;
 	createdAt: number;
 	updatedAt: number;
 	builtin?: boolean;
@@ -334,4 +346,64 @@ export interface Widget {
 export interface WidgetsFile {
 	version: 1;
 	widgets: Widget[];
+}
+
+/**
+ * A dashboard variable becomes a `${name}` placeholder available to every
+ * widget on that dashboard.
+ *
+ * This is what keeps the dashboard layer generic. The widget SQL is already
+ * arbitrary, but before variables the only things a user could filter by were
+ * `service` and `project` — hardcoded because logs happen to have those
+ * columns. A dashboard over analytics wants `site`, one over a Kubernetes
+ * cluster wants `namespace`, one over a multi-tenant app wants `tenant`.
+ * Declaring them per dashboard means none of that has to be known here.
+ */
+export type VariableType = "text" | "select" | "number";
+
+export interface VariableOption {
+	label: string;
+	value: string;
+}
+
+export interface DashboardVariable {
+	/** Placeholder name. Referenced in widget SQL as `${name}`. */
+	name: string;
+	label?: string;
+	description?: string;
+	type: VariableType;
+	/** Initial value. Omit (or use null) to start on "All" for a select. */
+	default?: string | number | null;
+	/** Static choices for a `select`. */
+	options?: VariableOption[];
+	/**
+	 * SQL that produces the choices for a `select`, as a `value` column and an
+	 * optional `label` column. Lets a variable enumerate whatever is actually
+	 * in the database — sites, services, tenants — without the server knowing
+	 * what any of those are.
+	 */
+	optionsSql?: string;
+	/** Offer an "All" choice that substitutes NULL. Default: true. */
+	includeAll?: boolean;
+}
+
+export interface Dashboard {
+	id: string;
+	name: string;
+	description?: string;
+	/** lucide-react icon name, rendered by the client if it recognizes it. */
+	icon?: string;
+	/** Ordering in the dashboard picker; lower sorts first. */
+	order?: number;
+	variables?: DashboardVariable[];
+	/** Default time range label (`1h`, `24h`, `7d`, …) when first opened. */
+	defaultTimeRange?: string;
+	createdAt: number;
+	updatedAt: number;
+	builtin?: boolean;
+}
+
+export interface DashboardsFile {
+	version: 1;
+	dashboards: Dashboard[];
 }

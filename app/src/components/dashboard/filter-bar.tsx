@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
 import { Loader2, Lock, Pencil, Plus, RefreshCw } from "lucide-react";
-import { apiPost } from "@/api/client";
-import type { QueryResult } from "@/types";
+import type { ReactNode } from "react";
 
 export const TIME_RANGES = [
 	{ label: "1h", ms: 3_600_000 },
@@ -21,10 +19,14 @@ export const REFRESH_OPTIONS = [
 export interface FilterBarProps {
 	timeRange: string;
 	onTimeRange: (label: string) => void;
-	service: string | null;
-	onService: (s: string | null) => void;
-	project: string | null;
-	onProject: (p: string | null) => void;
+	/**
+	 * Dashboard-specific controls, rendered between the time range and the
+	 * status readout. The bar itself knows nothing about what they filter —
+	 * that is the dashboard's business, not the toolbar's.
+	 */
+	variableControls?: ReactNode;
+	/** Dashboard picker, rendered leftmost. */
+	leading?: ReactNode;
 	refreshMs: number;
 	onRefreshMs: (ms: number) => void;
 	loading: boolean;
@@ -54,42 +56,10 @@ function formatBytes(n: number): string {
 }
 
 export function FilterBar(props: FilterBarProps) {
-	const [services, setServices] = useState<string[]>([]);
-	const [projects, setProjects] = useState<string[]>([]);
-
-	useEffect(() => {
-		let cancelled = false;
-		// Monotonic request id: only the most-recently-issued load is allowed
-		// to write state, so a slow earlier response cannot overwrite the
-		// fresher one issued before it resolved.
-		let requestSeq = 0;
-		const load = () => {
-			const seq = ++requestSeq;
-			Promise.all([
-				apiPost<QueryResult>("/query", {
-					sql: "SELECT DISTINCT service FROM logs WHERE service IS NOT NULL ORDER BY service LIMIT 500",
-				}),
-				apiPost<QueryResult>("/query", {
-					sql: "SELECT DISTINCT project FROM logs WHERE project IS NOT NULL ORDER BY project LIMIT 500",
-				}),
-			])
-				.then(([s, p]) => {
-					if (cancelled || seq !== requestSeq) return;
-					setServices(s.rows.map((r) => String(r.service)));
-					setProjects(p.rows.map((r) => String(r.project)));
-				})
-				.catch(() => {});
-		};
-		load();
-		const id = setInterval(load, 60_000);
-		return () => {
-			cancelled = true;
-			clearInterval(id);
-		};
-	}, []);
-
 	return (
 		<div className="flex flex-wrap items-center gap-2">
+			{props.leading}
+
 			<div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
 				{TIME_RANGES.map((tr) => (
 					<button
@@ -107,31 +77,7 @@ export function FilterBar(props: FilterBarProps) {
 				))}
 			</div>
 
-			<select
-				className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-				value={props.service ?? ""}
-				onChange={(e) => props.onService(e.target.value || null)}
-			>
-				<option value="">All services</option>
-				{services.map((s) => (
-					<option key={s} value={s}>
-						{s}
-					</option>
-				))}
-			</select>
-
-			<select
-				className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-				value={props.project ?? ""}
-				onChange={(e) => props.onProject(e.target.value || null)}
-			>
-				<option value="">All projects</option>
-				{projects.map((p) => (
-					<option key={p} value={p}>
-						{p}
-					</option>
-				))}
-			</select>
+			{props.variableControls}
 
 			<div className="flex-1" />
 

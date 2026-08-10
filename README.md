@@ -17,6 +17,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **Deployment context** — first-class `version` and `deployment_id` fields for tracking releases
 - **Child loggers** — inherit service, meta, and trace context from parent loggers
 - **Role-based API keys** — three roles (ingest, read, admin) with hierarchical Bearer token auth; supports multiple keys per role for multi-app environments
+- **Generic dashboards** — named dashboards of SQL-backed widgets with per-dashboard variables (`${site}`, `${namespace}`, `${tenant}` — whatever you declare), rendered as stats, lines, bars, tables, heatmaps and gauges
 - **Web analytics** — cookieless, GDPR-friendly pageview and event analytics in the same database as your logs: a one-line `<script>` tag, server-side bot filtering and enrichment, pre-aggregated rollups, and SQL that can join traffic against errors
 - **Browser logging** — client-side logger with batched proxy delivery, error capture, and session tracking
 - **Next.js integration** — drop-in console capture, request logging, error tracking, and browser proxy
@@ -538,38 +539,39 @@ Start the log server.
 relog.dev start --port 3485 --admin-key mykey --cors true
 ```
 
-| Option                       | Default             | Description                                                                                             |
-| ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
-| `--port`                     | `3485`              | Port to listen on                                                                                       |
-| `--db`                       | `~/.relog/relog.db` | SQLite database file path                                                                               |
-| `--ingest-key`               | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars                    |
-| `--read-key`                 | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars                        |
-| `--admin-key`                | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars                      |
-| `--key-prefix-length`        | `6`                 | Number of API key characters stored per log for auditing (0 to disable)                                 |
-| `--cors`                     | `false`             | Enable CORS headers                                                                                     |
-| `--max-db-size`              | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes               |
-| `--max-age-days`             | `30`                | Auto-prune logs older than N days                                                                       |
-| `--prune-interval`           | `60`                | How often to check auto-prune thresholds, in seconds                                                    |
-| `--no-prune`                 | `false`             | Disable automatic pruning entirely                                                                      |
-| `--s3-endpoint`              | —                   | S3/MinIO endpoint for archiving and reading archived data                                               |
-| `--s3-bucket`                | —                   | S3 bucket name                                                                                          |
-| `--s3-access-key`            | —                   | S3 access key ID                                                                                        |
-| `--s3-secret-key`            | —                   | S3 secret access key                                                                                    |
-| `--s3-prefix`                | `logs`              | S3 key prefix for archived Parquet files                                                                |
-| `--s3-region`                | `us-east-1`         | S3 region                                                                                               |
-| `--s3-url-style`             | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                                               |
-| `--no-ui`                    | `false`             | Disable serving the web UI                                                                              |
-| `--no-open`                  | `false`             | Serve the web UI but skip auto-opening it in the browser                                                |
-| `--trust-proxy`              | `false`             | Trust `X-Forwarded-For` for client IP and geo. Only enable behind a known reverse proxy                 |
-| `--analytics`                | `false`             | Enable [web analytics](#web-analytics): serves `/script.js`, accepts `/collect`, exposes `/analytics/*` |
-| `--analytics-sites`          | —                   | Comma-separated allowlist of site ids accepted by `/collect`. Strongly recommended                      |
-| `--analytics-key`            | `false`             | Require an ingest API key on `/collect` (server-side collection only)                                   |
-| `--analytics-bots`           | `false`             | Count known bots and crawlers as visitors                                                               |
-| `--analytics-dnt`            | `false`             | Drop events from clients sending `DNT: 1`                                                               |
-| `--analytics-no-raw`         | `false`             | Store only rollups, not raw events. Cheaper, but loses per-dimension unique visitors                    |
-| `--analytics-raw-days`       | `90`                | Days to keep raw analytics events                                                                       |
-| `--analytics-aggregate-days` | `730`               | Days to keep analytics rollups, sessions, and visitor hours                                             |
-| `--analytics-rpm`            | `600`               | Per-IP `/collect` requests per minute                                                                   |
+| Option                       | Default             | Description                                                                                                   |
+| ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `--port`                     | `3485`              | Port to listen on                                                                                             |
+| `--db`                       | `~/.relog/relog.db` | SQLite database file path                                                                                     |
+| `--ingest-key`               | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars                          |
+| `--read-key`                 | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars                              |
+| `--admin-key`                | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars                            |
+| `--key-prefix-length`        | `6`                 | Number of API key characters stored per log for auditing (0 to disable)                                       |
+| `--cors`                     | `false`             | Enable CORS headers                                                                                           |
+| `--max-db-size`              | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes                     |
+| `--max-age-days`             | `30`                | Auto-prune logs older than N days                                                                             |
+| `--prune-interval`           | `60`                | How often to check auto-prune thresholds, in seconds                                                          |
+| `--no-prune`                 | `false`             | Disable automatic pruning entirely                                                                            |
+| `--s3-endpoint`              | —                   | S3/MinIO endpoint for archiving and reading archived data                                                     |
+| `--s3-bucket`                | —                   | S3 bucket name                                                                                                |
+| `--s3-access-key`            | —                   | S3 access key ID                                                                                              |
+| `--s3-secret-key`            | —                   | S3 secret access key                                                                                          |
+| `--s3-prefix`                | `logs`              | S3 key prefix for archived Parquet files                                                                      |
+| `--s3-region`                | `us-east-1`         | S3 region                                                                                                     |
+| `--s3-url-style`             | `path`              | S3 URL style: `path` for MinIO/Tigris, `vhost` for AWS S3                                                     |
+| `--no-ui`                    | `false`             | Disable serving the web UI                                                                                    |
+| `--no-open`                  | `false`             | Serve the web UI but skip auto-opening it in the browser                                                      |
+| `--data-dir`                 | `~/.relog`          | Directory for saved dashboards, widgets and aggregates. Set it when running more than one server on a machine |
+| `--trust-proxy`              | `false`             | Trust `X-Forwarded-For` for client IP and geo. Only enable behind a known reverse proxy                       |
+| `--analytics`                | `false`             | Enable [web analytics](#web-analytics): serves `/script.js`, accepts `/collect`, exposes `/analytics/*`       |
+| `--analytics-sites`          | —                   | Comma-separated allowlist of site ids accepted by `/collect`. Strongly recommended                            |
+| `--analytics-key`            | `false`             | Require an ingest API key on `/collect` (server-side collection only)                                         |
+| `--analytics-bots`           | `false`             | Count known bots and crawlers as visitors                                                                     |
+| `--analytics-dnt`            | `false`             | Drop events from clients sending `DNT: 1`                                                                     |
+| `--analytics-no-raw`         | `false`             | Store only rollups, not raw events. Cheaper, but loses per-dimension unique visitors                          |
+| `--analytics-raw-days`       | `90`                | Days to keep raw analytics events                                                                             |
+| `--analytics-aggregate-days` | `730`               | Days to keep analytics rollups, sessions, and visitor hours                                                   |
+| `--analytics-rpm`            | `600`               | Per-IP `/collect` requests per minute                                                                         |
 
 **Role hierarchy:** admin > read > ingest. An admin key can access all routes, a read key can also ingest, and an ingest key can only write logs. If no keys are configured, auth is disabled.
 
@@ -1052,6 +1054,71 @@ with log.event("http_request") as ev:
 
 `ev.error(exc)` automatically sets `span_status_code=2` when any OTel field is present.
 
+## Dashboards
+
+The web UI's Dashboard tab is a generic, SQL-backed dashboard system. A dashboard is a named set of widgets plus the **variables** viewers can change across all of them at once. Two ship built in — **Logs** and **Web Analytics** — and neither is special-cased: both are ordinary dashboards defined as data.
+
+A widget is a SQL query and a chart kind (`stat`, `line`, `bar`, `table`, `status-grid`, `heatmap`, `gauge`, `sparkline`). Its SQL can reference `${from}` and `${to}`, which the time-range picker always supplies, plus any variable its dashboard declares.
+
+### Variables
+
+Variables are what keep this generic. Before them, the only filters were `service` and `project` — hardcoded, because logs happen to have those columns. A dashboard over analytics wants `site`; one over a Kubernetes cluster wants `namespace`; one over a multi-tenant app wants `tenant`. Declaring them per dashboard means none of that is known in advance:
+
+```json
+{
+	"id": "ops",
+	"name": "Ops",
+	"defaultTimeRange": "6h",
+	"variables": [
+		{
+			"name": "namespace",
+			"label": "Namespace",
+			"type": "select",
+			"optionsSql": "SELECT DISTINCT json_extract(meta, '$.namespace') AS value FROM logs",
+			"includeAll": true
+		},
+		{ "name": "threshold", "label": "Slower than (ms)", "type": "number", "default": 500 }
+	]
+}
+```
+
+Each becomes a control in the toolbar and a `${name}` placeholder in that dashboard's widget SQL:
+
+```sql
+SELECT COUNT(*) AS value
+FROM logs
+WHERE created_at BETWEEN ${from} AND ${to}
+  AND (${namespace} IS NULL OR json_extract(meta, '$.namespace') = ${namespace})
+  AND (${threshold} IS NULL OR duration_ms > ${threshold})
+```
+
+The `(${var} IS NULL OR col = ${var})` idiom is the convention throughout: an unset variable means "all", with no second query and no branching in the client.
+
+| Field        | Meaning                                                                                                                      |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `name`       | Placeholder name. Must match `[a-zA-Z_][a-zA-Z0-9_]*`; `from` and `to` are reserved                                          |
+| `type`       | `select`, `text`, or `number`                                                                                                |
+| `options`    | Fixed choices for a `select`                                                                                                 |
+| `optionsSql` | SQL producing a `value` column, optionally a `label` column — lets a variable enumerate whatever is actually in the database |
+| `default`    | Initial value; omit to start on "All"                                                                                        |
+| `includeAll` | Offer an "All" choice that substitutes NULL. Default: true                                                                   |
+
+Substitution is typed and always safe: `number` variables become bare numeric literals (a non-numeric value reads as unset), everything else becomes a single-quoted string with embedded quotes doubled. There is no path by which a variable value becomes SQL syntax. A placeholder the dashboard does not declare is an error rather than a silent NULL — otherwise a typo would quietly widen a widget's scope and show plausible numbers for the wrong thing.
+
+### Dashboards HTTP API
+
+| Method   | Path              | Role  | Description                             |
+| -------- | ----------------- | ----- | --------------------------------------- |
+| `GET`    | `/dashboards`     | read  | List dashboards                         |
+| `GET`    | `/dashboards/:id` | read  | One dashboard together with its widgets |
+| `POST`   | `/dashboards`     | admin | Create a dashboard                      |
+| `PUT`    | `/dashboards/:id` | admin | Update a dashboard                      |
+| `DELETE` | `/dashboards/:id` | admin | Delete a dashboard and its widgets      |
+
+Widgets belong to a dashboard via `dashboardId`; a widget without one shows on the default `logs` dashboard, so widgets created before dashboards existed stay where their author left them. Built-in dashboards and widgets cannot be modified or deleted — only hidden, or duplicated and then edited.
+
+Dashboards, widgets, and aggregates persist as JSON under `~/.relog`. Point a server at its own copy with `--data-dir` when running more than one on a machine; otherwise they share and overwrite each other's saved dashboards.
+
 ## Web Analytics
 
 relog can double as a self-hosted, cookieless web-analytics service — the Umami/Plausible shape — reusing the same SQLite file, auth, retention, SQL endpoint, and MCP server as the logs.
@@ -1215,6 +1282,11 @@ db.analytics.realtime("my-site");
 | `POST`   | `/collect`        | —      | Analytics events (see [Web Analytics](#web-analytics)) |
 | `GET`    | `/script.js`      | —      | Analytics tracker script                               |
 | `GET`    | `/analytics/*`    | read   | Analytics read API                                     |
+| `GET`    | `/dashboards`     | read   | List dashboards (see [Dashboards](#dashboards))        |
+| `GET`    | `/dashboards/:id` | read   | A dashboard together with its widgets                  |
+| `POST`   | `/dashboards`     | admin  | Create a dashboard                                     |
+| `PUT`    | `/dashboards/:id` | admin  | Update a dashboard                                     |
+| `DELETE` | `/dashboards/:id` | admin  | Delete a dashboard and its widgets                     |
 
 All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, `/histogram`, and `admin` for `/prune` and write operations on `/aggregates`.
 

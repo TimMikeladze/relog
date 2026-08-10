@@ -1,4 +1,4 @@
-import { unlinkSync } from "node:fs";
+import { rmSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -594,9 +594,13 @@ async function withServer(
 	extra: Partial<ServerConfig> = {},
 ): Promise<void> {
 	const dbPath = tmpPath("srv");
+	// Own data directory: the JSON side-stores otherwise default to ~/.relog,
+	// which would leak test state into the developer's real install.
+	const dataDir = `${dbPath}-data`;
 	const instance = await startServer({
 		port: 0,
 		dbPath,
+		dataDir,
 		analytics,
 		...extra,
 	});
@@ -605,6 +609,7 @@ async function withServer(
 	} finally {
 		await instance.shutdown();
 		cleanupDb(dbPath);
+		rmSync(dataDir, { recursive: true, force: true });
 	}
 }
 

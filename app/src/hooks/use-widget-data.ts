@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiPost } from "@/api/client";
 import { substituteVars, type SqlVars } from "@/components/dashboard/sql-vars";
 import { withQueryGate } from "@/lib/query-gate";
-import type { QueryResult, Widget } from "@/types";
+import type { DashboardVariable, QueryResult, Widget } from "@/types";
 
 const TIME_RANGE_MS: Record<string, number> = {
 	"1h": 3_600_000,
@@ -16,21 +16,24 @@ export const QUERY_TIMEOUT_MS = 15_000;
 
 export interface WidgetFilters {
 	timeRange: string;
-	service?: string | null;
-	project?: string | null;
+	/** Current value of every variable the dashboard declares, keyed by name. */
+	values?: Record<string, string>;
+	/** Declarations, needed to type each value on its way into SQL. */
+	variables?: DashboardVariable[];
 	nowMs?: number;
 }
 
 export function resolveVars(widget: Widget, filters: WidgetFilters): SqlVars {
 	const now = filters.nowMs ?? Date.now();
+	// A widget may pin its own range — useful for a "last hour" tile sitting on
+	// a 30-day dashboard — otherwise it follows the dashboard's picker.
 	const rangeKey = widget.timeRange ?? filters.timeRange;
 	const span = TIME_RANGE_MS[rangeKey] ?? TIME_RANGE_MS["24h"];
-	return {
-		from: now - span,
-		to: now,
-		service: filters.service ?? null,
-		project: filters.project ?? null,
-	};
+	const vars: SqlVars = { from: now - span, to: now };
+	for (const [name, value] of Object.entries(filters.values ?? {})) {
+		vars[name] = value === "" ? null : value;
+	}
+	return vars;
 }
 
 export interface WidgetDataState {
@@ -61,14 +64,23 @@ export function useWidgetData(
 	// unrelated parent state change re-fired the query and stole the next
 	// auto-refresh tick. Note: nowMs is intentionally tracked because
 	// changing it must trigger a re-query.
+	//
+	// Variable values and declarations are objects/arrays rebuilt each render,
+	// so they are compared by serialized content rather than identity.
+	const valuesKey = JSON.stringify(filters.values ?? {});
+	const variablesKey = JSON.stringify(
+		(filters.variables ?? []).map((v) => [v.name, v.type] as const),
+	);
 	const stableFilters = useMemo(
 		() => ({
 			timeRange: filters.timeRange,
-			service: filters.service ?? null,
-			project: filters.project ?? null,
+			values: JSON.parse(valuesKey) as Record<string, string>,
+			variables: (JSON.parse(variablesKey) as [string, DashboardVariable["type"]][]).map(
+				([name, type]) => ({ name, type }) as DashboardVariable,
+			),
 			nowMs: filters.nowMs ?? null,
 		}),
-		[filters.timeRange, filters.service, filters.project, filters.nowMs],
+		[filters.timeRange, valuesKey, variablesKey, filters.nowMs],
 	);
 
 	const run = useCallback(async () => {
@@ -80,12 +92,12 @@ export function useWidgetData(
 		try {
 			const effectiveFilters: WidgetFilters = {
 				timeRange: stableFilters.timeRange,
-				service: stableFilters.service,
-				project: stableFilters.project,
+				values: stableFilters.values,
+				variables: stableFilters.variables,
 				nowMs: stableFilters.nowMs ?? undefined,
 			};
 			const vars = resolveVars(widget, effectiveFilters);
-			const sql = substituteVars(widget.sql, vars);
+			const sql = substituteVars(widget.sql, vars, { variables: stableFilters.variables });
 			let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 			const timeoutPromise = new Promise<QueryResult>((_, reject) => {
 				timeoutHandle = setTimeout(() => reject(new Error("__timeout__")), QUERY_TIMEOUT_MS);
