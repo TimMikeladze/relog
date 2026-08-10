@@ -14,9 +14,12 @@ NODE_ENV = "production"
 [http_service]
 internal_port = 3485
 force_https = true
-auto_stop_machines = "off"
+# Scale to zero when idle; an incoming request (UI load or log ingest) starts
+# the machine back up. The SQLite file lives on the volume, so a stop/start
+# cycle keeps all data.
+auto_stop_machines = "stop"
 auto_start_machines = true
-min_machines_running = 1
+min_machines_running = 0
 
 [[http_service.checks]]
 grace_period = "15s"
@@ -28,7 +31,7 @@ path = "/health"
 [mounts]
 source = "relog_data"
 destination = "/data"
-initial_size = "3gb"
+initial_size = "1gb"
 
 [[vm]]
 size = "shared-cpu-1x"
