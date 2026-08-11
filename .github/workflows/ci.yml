@@ -96,6 +96,48 @@ jobs:
         working-directory: python
         run: uv run pytest tests/ --ignore=tests/test_integration.py -v
 
+  deploy:
+    name: Deploy to Fly
+    runs-on: ubuntu-latest
+    # Gated on `ci` only. That job builds and tests the server being shipped;
+    # the Python jobs cover a client library that is released separately via
+    # tags, so a failure there shouldn't hold back a server deploy.
+    needs: [ci]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Deliberately NOT the workflow-level concurrency group: that one sets
+    # cancel-in-progress, which is right for CI and wrong for a deploy —
+    # killing flyctl mid-release can leave the app on a half-applied version.
+    # Deploys queue instead.
+    concurrency:
+      group: deploy-fly
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # flyctl's own auth error is opaque, and a deploy that silently no-ops is
+      # worse than a red build — say exactly what is missing and how to fix it.
+      - name: Require FLY_API_TOKEN
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN is not set. Create one with 'fly tokens create deploy -a relog' and add it with 'gh secret set FLY_API_TOKEN'."
+            exit 1
+          fi
+
+      - name: Setup flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # --remote-only builds the image on Fly's builders, so the runner needs
+      # no Docker setup and the build layers stay cached between deploys.
+      - name: Deploy
+        run: flyctl deploy --remote-only --wait-timeout 10m
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
   python-integration:
     name: Python Integration
     runs-on: ubuntu-latest
