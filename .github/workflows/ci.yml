@@ -138,6 +138,54 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
+      # `flyctl deploy` returning 0 does not mean the app serves traffic. With
+      # min_machines_running = 0 it does not wait on a health check, so a
+      # machine that boots but never binds to the port ships as a green build
+      # over a dead site — which is exactly what happened on the first
+      # automated deploy. Probe the real URL before calling this a success.
+      - name: Verify the deploy serves traffic
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          app=$(awk -F'"' '/^app *=/ {print $2; exit}' fly.toml)
+          url="https://${app}.fly.dev/health"
+
+          probe() {
+            for i in $(seq 1 "$1"); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$url" || true)
+              if [ "$code" = "200" ]; then
+                echo "healthy (HTTP 200) after $i attempt(s)"
+                return 0
+              fi
+              echo "  attempt $i/$1: HTTP ${code:-none}"
+              sleep 10
+            done
+            return 1
+          }
+
+          # The first request also wakes the machine, so this exercises the same
+          # cold-start path a real visitor hits rather than a warmed-up one.
+          echo "Probing $url"
+          probe 12 && exit 0
+
+          # Known failure mode: the machine starts, opens the database, then
+          # stalls before binding. A restart clears it. Do that once so a wedged
+          # boot doesn't leave the site down, but warn loudly — a deploy that
+          # needed a restart is a bug to chase, not a normal outcome.
+          echo "::warning title=Deploy needed a restart::App did not answer after the deploy; restarting once. If this recurs, investigate the cold-boot stall rather than relying on this retry."
+          flyctl apps restart "$app"
+
+          if probe 12; then
+            echo "::warning::Recovered only after a restart."
+            exit 0
+          fi
+
+          echo "::error::App is not serving after deploy and restart."
+          flyctl status -a "$app" || true
+          flyctl logs -a "$app" --no-tail | tail -50 || true
+          exit 1
+
   python-integration:
     name: Python Integration
     runs-on: ubuntu-latest
