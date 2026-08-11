@@ -4,10 +4,17 @@ import { useLogs } from "@/hooks/use-logs";
 import { useStream } from "@/hooks/use-stream";
 import { useBookmarks } from "@/hooks/use-bookmarks";
 import { LogTable } from "@/components/log-table";
-import { TimelineChart, HoverStats } from "@/components/timeline-chart";
+import { LogEmptyState } from "@/components/log-empty";
+import { TimelineChart } from "@/components/timeline-chart";
+import {
+	LIVE_ACTIVE_CLASS,
+	ToolbarButton,
+	ToolbarSegment,
+	ToolbarSegments,
+} from "@/components/layout/toolbar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Filters } from "@/types";
 import {
-	Circle,
 	Download,
 	Loader2,
 	Pause,
@@ -24,11 +31,13 @@ export function ExploreView({
 	enabled,
 	onNavigateTrace,
 	onUpdateFilters,
+	onClearFilters,
 }: {
 	filters: Filters;
 	enabled: boolean;
 	onNavigateTrace?: (traceId: string) => void;
 	onUpdateFilters: (updates: Partial<Filters>) => void;
+	onClearFilters: () => void;
 }) {
 	const { isBookmarked } = useBookmarks();
 	const [live, setLive] = useHashParam("live");
@@ -37,10 +46,8 @@ export function ExploreView({
 	const [bucketGranularity, setBucketGranularity] = useState<number | undefined>(undefined);
 
 	const stream = useStream(filters, enabled && live === "1");
-	const { rows, total, loading, loadingMore, error, hasMore, loadMore, refetch } = useLogs(
-		filters,
-		enabled,
-	);
+	const { rows, total, loading, loadingMore, error, loadMoreError, hasMore, loadMore, refetch } =
+		useLogs(filters, enabled);
 
 	const [refreshKey, setRefreshKey] = useState(0);
 	const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
@@ -151,201 +158,139 @@ export function ExploreView({
 			return false;
 		})();
 
+	const isLive = live === "1";
+
 	return (
 		<div className="flex flex-1 flex-col overflow-hidden">
 			<TimelineChart
-				from={live === "1" ? "15m" : filters.from}
-				to={live === "1" ? undefined : filters.to}
+				from={isLive ? "15m" : filters.from}
+				to={isLive ? undefined : filters.to}
 				filters={filters as Record<string, string | undefined>}
-				refreshKey={live === "1" ? refreshKey : rows.length > 0 ? 1 : 0}
-				buckets={bucketGranularity ?? (live === "1" ? 45 : undefined)}
-				onTimeRangeSelect={live === "1" ? undefined : handleTimeRangeSelect}
+				refreshKey={isLive ? refreshKey : rows.length > 0 ? 1 : 0}
+				buckets={bucketGranularity ?? (isLive ? 45 : undefined)}
+				onBucketsChange={setBucketGranularity}
+				onTimeRangeSelect={isLive ? undefined : handleTimeRangeSelect}
 				onResetTimeRange={
-					live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined
+					!isLive ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined
 				}
-			>
-				{(hoverBucket) => (
+				leading={
 					<>
-						<button
-							type="button"
+						<ToolbarButton
 							onClick={toggleLive}
-							className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
-								live === "1"
-									? "bg-emerald-500/15 text-emerald-500"
-									: "text-muted-foreground hover:bg-muted hover:text-foreground"
-							}`}
+							active={isLive}
+							icon={Radio}
+							activeClassName={LIVE_ACTIVE_CLASS}
 						>
-							<Radio className="h-3 w-3" />
 							Live
-						</button>
+						</ToolbarButton>
 
-						{live === "1" && (
-							<>
-								<div className="h-3 w-px bg-border" />
-								<div className="flex items-center gap-1.5">
-									<Circle
-										className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
-									/>
-									<span className="text-[10px] text-muted-foreground">
-										{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
-									</span>
-								</div>
-								<span className="text-[10px] text-muted-foreground tabular-nums">
-									{stream.logs.length.toLocaleString()} events
-								</span>
-							</>
-						)}
-
-						{live !== "1" && loading && (
-							<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-						)}
-						{live !== "1" && error && <span className="text-xs text-destructive">{error}</span>}
-						{live !== "1" && !loading && (
-							<span className="text-[10px] text-muted-foreground">
-								{total.toLocaleString()} results
-								{total > 0 && ` (${rows.length} loaded)`}
+						{isLive ? (
+							<span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+								{stream.paused
+									? "Paused"
+									: stream.connected
+										? `${stream.logs.length.toLocaleString()} events`
+										: "Disconnected"}
+							</span>
+						) : loading ? (
+							<Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+						) : error ? (
+							<span className="shrink-0 text-2xs text-destructive">{error}</span>
+						) : (
+							<span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+								{total.toLocaleString()} {total === 1 ? "result" : "results"}
+								{total > rows.length && ` · ${rows.length.toLocaleString()} loaded`}
 							</span>
 						)}
-
-						<HoverStats bucket={hoverBucket} />
-
-						<div className="flex-1" />
-
-						<div className="flex items-center rounded-md border border-border overflow-hidden">
-							<button
-								type="button"
-								onClick={() => setDetailMode("inline")}
-								title="Inline detail"
-								className={`flex items-center px-1.5 py-0.5 transition-colors ${
-									detailMode === "inline"
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								<AlignLeft className="h-3 w-3" />
-							</button>
-							<button
-								type="button"
-								onClick={() => setDetailMode("panel")}
-								title="Side panel"
-								className={`flex items-center px-1.5 py-0.5 transition-colors ${
-									detailMode === "panel"
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								<PanelRight className="h-3 w-3" />
-							</button>
-						</div>
-
-						<div className="flex items-center rounded-md border border-border px-2 py-0.5">
-							<select
-								value={bucketGranularity?.toString() || ""}
-								onChange={(e) =>
-									setBucketGranularity(e.target.value ? Number(e.target.value) : undefined)
-								}
-								title="Chart bucket granularity"
-								className="text-[10px] bg-transparent border-0 text-muted-foreground hover:text-foreground cursor-pointer outline-none appearance-none"
-							>
-								<option value="">Auto granularity</option>
-								<option value="60">Granular (60 buckets)</option>
-								<option value="45">Normal (45 buckets)</option>
-								<option value="30">Coarse (30 buckets)</option>
-								<option value="20">Very coarse (20 buckets)</option>
-								<option value="12">Ultra coarse (12 buckets)</option>
-							</select>
-						</div>
-
-						{live === "1" && (
-							<>
-								<button
-									type="button"
-									onClick={stream.clear}
-									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-								>
-									<Trash2 className="h-3 w-3" />
-									Clear
-								</button>
-								<button
-									type="button"
-									onClick={stream.paused ? stream.resume : stream.pause}
-									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-								>
-									{stream.paused ? (
-										<>
-											<Play className="h-3 w-3" />
-											Resume
-										</>
-									) : (
-										<>
-											<Pause className="h-3 w-3" />
-											Pause
-										</>
-									)}
-								</button>
-							</>
-						)}
-
-						{live !== "1" && (
-							<>
-								<div className="relative">
-									<button
-										type="button"
-										onClick={() => setShowExport(!showExport)}
-										className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-									>
-										<Download className="h-3 w-3" />
-										Export
-									</button>
-									{showExport && (
-										<div className="absolute right-0 top-full z-10 mt-1 rounded-md border border-border bg-popover p-1 shadow-md">
-											<button
-												type="button"
-												onClick={() => exportData("json")}
-												className="block w-full rounded px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted"
-											>
-												Download JSON
-											</button>
-											<button
-												type="button"
-												onClick={() => exportData("csv")}
-												className="block w-full rounded px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-muted"
-											>
-												Download CSV
-											</button>
-										</div>
-									)}
-								</div>
-								<button
-									type="button"
-									onClick={refetch}
-									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-								>
-									<RefreshCw className="h-3 w-3" />
-									Refresh
-								</button>
-							</>
-						)}
 					</>
-				)}
-			</TimelineChart>
+				}
+				trailing={
+					<>
+						{isLive && (
+							<>
+								<ToolbarButton onClick={stream.clear} icon={Trash2}>
+									Clear
+								</ToolbarButton>
+								<ToolbarButton
+									onClick={stream.paused ? stream.resume : stream.pause}
+									icon={stream.paused ? Play : Pause}
+								>
+									{stream.paused ? "Resume" : "Pause"}
+								</ToolbarButton>
+							</>
+						)}
+
+						{!isLive && (
+							<>
+								<Popover open={showExport} onOpenChange={setShowExport}>
+									<PopoverTrigger
+										className="flex h-6 shrink-0 items-center gap-1 rounded-md px-1.5 text-2xs text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+										title="Export the loaded rows"
+									>
+										<Download className="size-3" />
+										Export
+									</PopoverTrigger>
+									<PopoverContent align="end" sideOffset={6} className="w-44 gap-0 p-1">
+										<button
+											type="button"
+											onClick={() => exportData("json")}
+											className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
+										>
+											Download JSON
+										</button>
+										<button
+											type="button"
+											onClick={() => exportData("csv")}
+											className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-accent"
+										>
+											Download CSV
+										</button>
+									</PopoverContent>
+								</Popover>
+								<ToolbarButton onClick={refetch} icon={RefreshCw} title="Refresh results">
+									Refresh
+								</ToolbarButton>
+							</>
+						)}
+
+						<div className="mx-0.5 h-3 w-px shrink-0 bg-border" />
+
+						<ToolbarSegments>
+							<ToolbarSegment
+								active={detailMode === "inline"}
+								onClick={() => setDetailMode("inline")}
+								title="Expand details inline"
+								icon={AlignLeft}
+							/>
+							<ToolbarSegment
+								active={detailMode === "panel"}
+								onClick={() => setDetailMode("panel")}
+								title="Show details in a side panel"
+								icon={PanelRight}
+							/>
+						</ToolbarSegments>
+					</>
+				}
+			/>
 			<LogTable
 				logs={logs}
-				autoScroll={live === "1"}
+				autoScroll={isLive}
 				showDate={showDate}
 				detailMode={(detailMode ?? "panel") as "inline" | "panel"}
-				emptyMessage={
-					live === "1"
-						? stream.connected
-							? "Waiting for logs..."
-							: "Not connected"
-						: loading
-							? "Loading..."
-							: "No logs found"
+				empty={
+					<LogEmptyState
+						filters={filters}
+						loading={!isLive && loading}
+						live={isLive}
+						streamConnected={stream.connected}
+						onUpdateFilters={onUpdateFilters}
+						onClearFilters={onClearFilters}
+					/>
 				}
 				onNavigateTrace={onNavigateTrace}
-				onLoadMore={live === "1" ? undefined : loadMore}
+				onLoadMore={isLive ? undefined : loadMore}
 				loadingMore={loadingMore}
+				loadMoreError={loadMoreError}
 				hasMore={hasMore}
 			/>
 		</div>

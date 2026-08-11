@@ -1,16 +1,18 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import {
-	LineChart,
-	Line,
+	Area,
+	AreaChart,
 	BarChart,
 	Bar,
 	XAxis,
 	YAxis,
 	CartesianGrid,
+	ReferenceLine,
 	ResponsiveContainer,
 	ReferenceArea,
 } from "recharts";
 import { apiPost } from "@/api/client";
+import { levelColor } from "@/lib/log-filters";
 
 export interface TimelineBucket {
 	time: number;
@@ -24,7 +26,16 @@ export interface TimelineBucket {
 	total: number;
 }
 
-export type ChartType = "line" | "bar";
+/**
+ * Both modes stack. Six independent lines on a shared axis meant `info` in the
+ * thousands squashed `error` in the single digits flat onto the baseline — the
+ * one series anybody opens a log viewer to find.
+ */
+export type ChartType = "area" | "bar";
+
+export function normalizeChartType(value: string | null): ChartType {
+	return value === "bar" ? "bar" : "area";
+}
 
 interface TimelineStripProps {
 	from?: string;
@@ -40,16 +51,30 @@ interface TimelineStripProps {
 	onHoverBucket?: (bucket: TimelineBucket | null) => void;
 }
 
-export const LEVEL_COLORS: Record<string, string> = {
-	fatal: "oklch(0.75 0.20 340)",
-	error: "oklch(0.72 0.20 25)",
-	warn: "oklch(0.85 0.16 85)",
-	info: "oklch(0.80 0.15 170)",
-	debug: "oklch(0.75 0.14 260)",
-	trace: "oklch(0.70 0.06 270)",
-};
-
+/**
+ * Stacking order, most severe on top so a spike in `fatal` sits against the
+ * chart's own edge rather than riding on a moving baseline of `info`.
+ */
 export const LEVELS_ORDER = ["fatal", "error", "warn", "info", "debug", "trace"] as const;
+
+/** Kept as a named export so callers don't reach past this module for colours. */
+export { levelColor };
+
+/** Bottom margin leaves room for the axis labels; the rest bleeds to the edge. */
+const CHART_MARGIN = { top: 4, right: 0, bottom: 0, left: 0 };
+
+/** Filter keys `POST /histogram` accepts. */
+const HISTOGRAM_FILTER_KEYS = [
+	"level",
+	"service",
+	"project",
+	"branch",
+	"version",
+	"deployment_id",
+	"trace_id",
+	"span_id",
+	"grep",
+] as const;
 
 function parseRelativeTime(rel: string): number {
 	const match = rel.match(/^(\d+)([smhdwMy])$/);
@@ -97,7 +122,7 @@ export function TimelineStrip({
 	buckets,
 	height = 120,
 	bare = false,
-	chartType = "line",
+	chartType = "area",
 	normalized = false,
 	onTimeRangeSelect,
 	onHoverBucket,
@@ -105,6 +130,7 @@ export function TimelineStrip({
 	const [data, setData] = useState<TimelineBucket[]>([]);
 	const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
 	const [dragEndIndex, setDragEndIndex] = useState<number | null>(null);
+	const [hoverTime, setHoverTime] = useState<number | null>(null);
 	const isDragging = useRef(false);
 
 	const timeRange = useMemo(() => {
@@ -126,11 +152,14 @@ export function TimelineStrip({
 	useEffect(() => {
 		const { startMs, endMs, rangeMs } = timeRange;
 
+		// Every dimension the histogram endpoint understands. Forwarding only
+		// four of them meant filtering by deployment or text left the chart
+		// describing a different result set than the table below it.
 		const histoFilters: Record<string, string> = {};
-		if (filters?.level) histoFilters.level = filters.level;
-		if (filters?.service) histoFilters.service = filters.service;
-		if (filters?.project) histoFilters.project = filters.project;
-		if (filters?.branch) histoFilters.branch = filters.branch;
+		for (const key of HISTOGRAM_FILTER_KEYS) {
+			const value = filters?.[key];
+			if (value) histoFilters[key] = value;
+		}
 
 		const body: Record<string, unknown> = {
 			from: startMs,
@@ -168,7 +197,9 @@ export function TimelineStrip({
 		(state: any) => {
 			if (state?.activeTooltipIndex != null) {
 				const idx = Number(state.activeTooltipIndex);
-				onHoverBucket?.(data[idx] ?? null);
+				const bucket = data[idx] ?? null;
+				onHoverBucket?.(bucket);
+				setHoverTime(bucket?.time ?? null);
 			}
 			if (!isDragging.current || state?.activeTooltipIndex == null) return;
 			setDragEndIndex(Number(state.activeTooltipIndex));
@@ -178,6 +209,7 @@ export function TimelineStrip({
 
 	const handleMouseLeave = useCallback(() => {
 		onHoverBucket?.(null);
+		setHoverTime(null);
 	}, [onHoverBucket]);
 
 	const handleMouseUp = useCallback(() => {
@@ -229,21 +261,48 @@ export function TimelineStrip({
 			? chartData[Math.max(dragStartIndex, dragEndIndex)]?.time
 			: undefined;
 
-	if (data.length === 0) return null;
+	const wrapperClass = bare ? "" : "shrink-0 border-b border-border px-4 pb-1 pt-2";
 
-	const wrapperClass = bare ? "" : "shrink-0 border-b border-border px-4 py-2";
+	// An empty result used to unmount the whole strip, so the toolbar and the
+	// rows below jumped up 120px and back as you paged through ranges. Hold the
+	// frame and say why it's blank instead. All-zero buckets count as empty:
+	// the endpoint returns a full set of them, which otherwise drew as a
+	// flatline that reads like a rendering failure.
+	if (data.every((bucket) => bucket.total === 0)) {
+		return (
+			<div className={wrapperClass}>
+				<div
+					style={{ height }}
+					className="flex items-center justify-center rounded-md border border-dashed border-border/70 text-2xs text-muted-foreground"
+				>
+					No activity in this range
+				</div>
+			</div>
+		);
+	}
 
 	const xAxisProps = {
 		dataKey: "time" as const,
 		type: "number" as const,
 		domain: ["dataMin", "dataMax"] as [string, string],
 		tickFormatter: (ts: number) => formatTimeLabel(ts, timeRange.rangeMs),
-		tick: { fontSize: 9, fill: "var(--color-muted-foreground)" },
+		tick: { fontSize: 10, fill: "var(--color-muted-foreground)" },
 		axisLine: false,
 		tickLine: false,
 		interval: "preserveStartEnd" as const,
 		minTickGap: 60,
 	};
+
+	const grid = (
+		<CartesianGrid vertical={false} stroke="var(--color-grid-line)" strokeDasharray="2 4" />
+	);
+
+	// Marks the bucket the toolbar's hover readout is describing — without it
+	// the numbers change but nothing says which column they belong to.
+	const cursor =
+		hoverTime != null ? (
+			<ReferenceLine x={hoverTime} stroke="var(--color-foreground)" strokeOpacity={0.25} />
+		) : null;
 
 	const mouseHandlers = {
 		onMouseDown: onTimeRangeSelect ? handleMouseDown : undefined,
@@ -277,143 +336,65 @@ export function TimelineStrip({
 						<BarChart
 							data={chartData}
 							stackOffset={normalized ? "expand" : undefined}
-							margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+							margin={CHART_MARGIN}
 							{...mouseHandlers}
 						>
-							<CartesianGrid
-								vertical={false}
-								strokeDasharray="3 3"
-								stroke="var(--color-border)"
-								strokeOpacity={0.4}
-							/>
+							{grid}
 							<XAxis {...xAxisProps} />
 							<YAxis hide />
 							{refArea}
-							<Bar
-								dataKey="fatal"
-								stackId="1"
-								fill={LEVEL_COLORS.fatal}
-								fillOpacity={0.55}
-								stroke={LEVEL_COLORS.fatal}
-								strokeOpacity={0.5}
-								strokeWidth={1}
-							/>
-							<Bar
-								dataKey="error"
-								stackId="1"
-								fill={LEVEL_COLORS.error}
-								fillOpacity={0.55}
-								stroke={LEVEL_COLORS.error}
-								strokeOpacity={0.5}
-								strokeWidth={1}
-							/>
-							<Bar
-								dataKey="warn"
-								stackId="1"
-								fill={LEVEL_COLORS.warn}
-								fillOpacity={0.55}
-								stroke={LEVEL_COLORS.warn}
-								strokeOpacity={0.5}
-								strokeWidth={1}
-							/>
-							<Bar
-								dataKey="info"
-								stackId="1"
-								fill={LEVEL_COLORS.info}
-								fillOpacity={0.55}
-								stroke={LEVEL_COLORS.info}
-								strokeOpacity={0.5}
-								strokeWidth={1}
-							/>
-							<Bar
-								dataKey="debug"
-								stackId="1"
-								fill={LEVEL_COLORS.debug}
-								fillOpacity={0.55}
-								stroke={LEVEL_COLORS.debug}
-								strokeOpacity={0.5}
-								strokeWidth={1}
-							/>
-							<Bar
-								dataKey="trace"
-								stackId="1"
-								fill={LEVEL_COLORS.trace}
-								fillOpacity={0.55}
-								stroke={LEVEL_COLORS.trace}
-								strokeOpacity={0.5}
-								strokeWidth={1}
-							/>
+							{cursor}
+							{LEVELS_ORDER.map((level) => (
+								<Bar
+									key={level}
+									dataKey={level}
+									stackId="level"
+									fill={levelColor(level)}
+									fillOpacity={0.85}
+									isAnimationActive={false}
+								/>
+							))}
 						</BarChart>
 					) : (
-						<LineChart
+						<AreaChart
 							data={chartData}
-							margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+							stackOffset={normalized ? "expand" : undefined}
+							margin={CHART_MARGIN}
 							{...mouseHandlers}
 						>
-							<CartesianGrid
-								vertical={false}
-								strokeDasharray="3 3"
-								stroke="var(--color-border)"
-								strokeOpacity={0.4}
-							/>
+							<defs>
+								{LEVELS_ORDER.map((level) => (
+									<linearGradient
+										key={level}
+										id={`level-fill-${level}`}
+										x1="0"
+										y1="0"
+										x2="0"
+										y2="1"
+									>
+										<stop offset="0%" stopColor={levelColor(level)} stopOpacity={0.55} />
+										<stop offset="100%" stopColor={levelColor(level)} stopOpacity={0.15} />
+									</linearGradient>
+								))}
+							</defs>
+							{grid}
 							<XAxis {...xAxisProps} />
 							<YAxis hide />
 							{refArea}
-							<Line
-								type="monotone"
-								dataKey="fatal"
-								stroke={LEVEL_COLORS.fatal}
-								strokeWidth={2.5}
-								strokeOpacity={0.85}
-								dot={false}
-								fill="none"
-							/>
-							<Line
-								type="monotone"
-								dataKey="error"
-								stroke={LEVEL_COLORS.error}
-								strokeWidth={2.5}
-								strokeOpacity={0.85}
-								dot={false}
-								fill="none"
-							/>
-							<Line
-								type="monotone"
-								dataKey="warn"
-								stroke={LEVEL_COLORS.warn}
-								strokeWidth={2.5}
-								strokeOpacity={0.85}
-								dot={false}
-								fill="none"
-							/>
-							<Line
-								type="monotone"
-								dataKey="info"
-								stroke={LEVEL_COLORS.info}
-								strokeWidth={2.5}
-								strokeOpacity={0.85}
-								dot={false}
-								fill="none"
-							/>
-							<Line
-								type="monotone"
-								dataKey="debug"
-								stroke={LEVEL_COLORS.debug}
-								strokeWidth={2.5}
-								strokeOpacity={0.85}
-								dot={false}
-								fill="none"
-							/>
-							<Line
-								type="monotone"
-								dataKey="trace"
-								stroke={LEVEL_COLORS.trace}
-								strokeWidth={2.5}
-								strokeOpacity={0.85}
-								dot={false}
-								fill="none"
-							/>
-						</LineChart>
+							{cursor}
+							{LEVELS_ORDER.map((level) => (
+								<Area
+									key={level}
+									type="monotone"
+									dataKey={level}
+									stackId="level"
+									stroke={levelColor(level)}
+									strokeWidth={1.5}
+									fill={`url(#level-fill-${level})`}
+									isAnimationActive={false}
+								/>
+							))}
+						</AreaChart>
 					)}
 				</ResponsiveContainer>
 			</div>

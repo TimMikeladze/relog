@@ -1,81 +1,193 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter/opsz.css";
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   Tokens
+   ---------------------------------------------------------------------------
+   Two ladders drive the whole app:
+
+   1. Surfaces — background (ground) < card (rails/bars) < popover (overlays),
+      with `muted` and `accent` as the two hover fills that sit on top of any
+      of them. Every panel picks a rung; nothing invents its own gray.
+   2. Levels   — one definition of the six log levels, consumed by the rows,
+      the badge, the chart, and the facet menus. They used to be declared in
+      four files with four different hues (`info` was emerald, cyan, and teal
+      depending on where you looked).
+--------------------------------------------------------------------------- */
+
 :root {
+	/* Drives every native control the app doesn't draw itself — the
+	   datetime-local pickers in the time menu, form autofill, and the default
+	   scrollbar rendering. Without it the date picker stays light-on-light
+	   inside the dark UI. */
+	color-scheme: light;
+
 	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
+	--foreground: oklch(0.21 0.006 264);
+	--card: oklch(0.99 0.001 264);
+	--card-foreground: oklch(0.21 0.006 264);
 	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.67 0.16 58);
+	--popover-foreground: oklch(0.21 0.006 264);
+	--primary: oklch(0.65 0.17 55);
 	--primary-foreground: oklch(0.99 0.02 95);
-	--secondary: oklch(0.967 0.001 286.375);
-	--secondary-foreground: oklch(0.21 0.006 285.885);
-	--muted: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.556 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
+	--secondary: oklch(0.968 0.002 264);
+	--secondary-foreground: oklch(0.28 0.006 264);
+	--muted: oklch(0.968 0.002 264);
+	--muted-foreground: oklch(0.53 0.011 264);
+	--accent: oklch(0.945 0.003 264);
+	--accent-foreground: oklch(0.21 0.006 264);
 	--destructive: oklch(0.58 0.22 27);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
-	--chart-1: oklch(0.88 0.15 92);
-	--chart-2: oklch(0.77 0.16 70);
-	--chart-3: oklch(0.67 0.16 58);
-	--chart-4: oklch(0.56 0.15 49);
-	--chart-5: oklch(0.47 0.12 46);
-	--radius: 0.625rem;
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.145 0 0);
-	--sidebar-primary: oklch(0.67 0.16 58);
+	--border: oklch(0.918 0.003 264);
+	--border-strong: oklch(0.86 0.004 264);
+	--input: oklch(0.918 0.003 264);
+	--ring: oklch(0.65 0.17 55);
+	--radius: 0.5rem;
+
+	--sidebar: oklch(0.982 0.002 264);
+	--sidebar-foreground: oklch(0.21 0.006 264);
+	--sidebar-primary: oklch(0.65 0.17 55);
 	--sidebar-primary-foreground: oklch(0.99 0.02 95);
-	--sidebar-accent: oklch(0.97 0 0);
-	--sidebar-accent-foreground: oklch(0.205 0 0);
-	--sidebar-border: oklch(0.922 0 0);
-	--sidebar-ring: oklch(0.708 0 0);
+	--sidebar-accent: oklch(0.94 0.003 264);
+	--sidebar-accent-foreground: oklch(0.21 0.006 264);
+	--sidebar-border: oklch(0.918 0.003 264);
+	--sidebar-ring: oklch(0.65 0.17 55);
+
+	/* Log levels. Severity maps to salience: `trace`/`debug`/`info` are
+	   deliberately low-chroma because they're 95% of every screen, and the
+	   three levels worth interrupting someone for get the saturation. A palette
+	   where `info` shouts as loudly as `error` is a palette that says nothing. */
+	--level-trace: oklch(0.55 0.008 264);
+	--level-debug: oklch(0.54 0.055 260);
+	--level-info: oklch(0.53 0.07 205);
+	--level-warn: oklch(0.6 0.15 65);
+	--level-error: oklch(0.55 0.22 27);
+	--level-fatal: oklch(0.52 0.24 340);
+
+	/* Sequential ramp — one hue, light to dark. Encodes magnitude only. */
+	--chart-1: oklch(0.78 0.15 82);
+	--chart-2: oklch(0.7 0.16 66);
+	--chart-3: oklch(0.63 0.17 54);
+	--chart-4: oklch(0.54 0.15 44);
+	--chart-5: oklch(0.45 0.12 40);
+
+	/* Categorical series — identity, not magnitude. Assigned in this fixed
+	   order and never cycled: the order is what keeps adjacent pairs apart
+	   under protanopia and deuteranopia. Dashboard line charts used to cycle a
+	   six-hex array, so the 7th series silently reused the 1st series' colour.
+	   Validated against this app's own surfaces (#fbfcfc / #141517). */
+	--series-1: #2a78d6;
+	--series-2: #eb6834;
+	--series-3: #1baf7a;
+	--series-4: #eda100;
+	--series-5: #e87ba4;
+	--series-6: #008300;
+	--series-7: #4a3aa7;
+	--series-8: #e34948;
+	/* Slot 9+ folds to ink rather than inventing a hue. */
+	--series-overflow: oklch(0.53 0.011 264);
+
+	/* Status — reserved meaning, never reused as a series colour.
+	   Stepped per theme, because these are used as small text and icons, not
+	   just as marks: the palette's mark-weight green and amber measure 3.3:1
+	   and 1.8:1 on a white surface, which is unreadable at 11px. These steps
+	   clear 4.5:1 in both themes. */
+	--status-good: #006300;
+	--status-warning: #7a5200;
+	--status-critical: #b32323;
+
+	--grid-line: oklch(0.92 0.003 264);
+	--row-stripe: oklch(0 0 0 / 2.5%);
+	--shadow-overlay: 0 1px 2px oklch(0 0 0 / 6%), 0 8px 24px -6px oklch(0 0 0 / 12%);
 }
 
 .dark {
-	--background: oklch(0.145 0 0);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.205 0 0);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.205 0 0);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.77 0.16 70);
-	--primary-foreground: oklch(0.28 0.07 46);
-	--secondary: oklch(0.274 0.006 286.033);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.269 0 0);
-	--muted-foreground: oklch(0.708 0 0);
-	--accent: oklch(0.371 0 0);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.556 0 0);
-	--chart-1: oklch(0.88 0.15 92);
-	--chart-2: oklch(0.77 0.16 70);
-	--chart-3: oklch(0.67 0.16 58);
-	--chart-4: oklch(0.56 0.15 49);
-	--chart-5: oklch(0.47 0.12 46);
-	--sidebar: oklch(0.205 0 0);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.77 0.16 70);
-	--sidebar-primary-foreground: oklch(0.28 0.07 46);
-	--sidebar-accent: oklch(0.269 0 0);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.556 0 0);
+	color-scheme: dark;
+
+	/* A hair of blue in the ground keeps near-black from reading as brown next
+	   to the amber accent, without becoming a visible tint. */
+	--background: oklch(0.16 0.004 264);
+	--foreground: oklch(0.96 0.002 264);
+	--card: oklch(0.196 0.005 264);
+	--card-foreground: oklch(0.96 0.002 264);
+	--popover: oklch(0.225 0.006 264);
+	--popover-foreground: oklch(0.96 0.002 264);
+	--primary: oklch(0.78 0.16 68);
+	--primary-foreground: oklch(0.24 0.06 46);
+	--secondary: oklch(0.27 0.007 264);
+	--secondary-foreground: oklch(0.96 0.002 264);
+	--muted: oklch(1 0 0 / 6%);
+	--muted-foreground: oklch(0.68 0.01 264);
+	--accent: oklch(1 0 0 / 10%);
+	--accent-foreground: oklch(0.98 0.002 264);
+	--destructive: oklch(0.7 0.19 22);
+	--border: oklch(1 0 0 / 8%);
+	--border-strong: oklch(1 0 0 / 15%);
+	--input: oklch(1 0 0 / 12%);
+	--ring: oklch(0.78 0.16 68);
+
+	--sidebar: oklch(0.183 0.004 264);
+	--sidebar-foreground: oklch(0.96 0.002 264);
+	--sidebar-primary: oklch(0.78 0.16 68);
+	--sidebar-primary-foreground: oklch(0.24 0.06 46);
+	--sidebar-accent: oklch(1 0 0 / 7%);
+	--sidebar-accent-foreground: oklch(0.98 0.002 264);
+	--sidebar-border: oklch(1 0 0 / 8%);
+	--sidebar-ring: oklch(0.78 0.16 68);
+
+	--level-trace: oklch(0.6 0.008 264);
+	--level-debug: oklch(0.66 0.055 258);
+	--level-info: oklch(0.72 0.065 205);
+	--level-warn: oklch(0.83 0.15 80);
+	--level-error: oklch(0.68 0.2 25);
+	--level-fatal: oklch(0.72 0.22 340);
+
+	--chart-1: oklch(0.86 0.14 90);
+	--chart-2: oklch(0.78 0.16 72);
+	--chart-3: oklch(0.7 0.16 58);
+	--chart-4: oklch(0.6 0.15 48);
+	--chart-5: oklch(0.5 0.13 44);
+
+	/* Dark is re-stepped from the same hue families, not an automatic flip. */
+	--series-1: #3987e5;
+	--series-2: #d95926;
+	--series-3: #199e70;
+	--series-4: #c98500;
+	--series-5: #d55181;
+	--series-6: #008300;
+	--series-7: #9085e9;
+	--series-8: #e66767;
+	--series-overflow: oklch(0.68 0.01 264);
+
+	--status-good: #0ca30c;
+	--status-warning: #fab219;
+	--status-critical: #f07a7a;
+
+	--grid-line: oklch(1 0 0 / 6%);
+	--row-stripe: oklch(1 0 0 / 2%);
+	--shadow-overlay: 0 1px 2px oklch(0 0 0 / 40%), 0 12px 32px -8px oklch(0 0 0 / 60%);
 }
 
 @theme inline {
-	--font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
-	--font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Menlo, Consolas, monospace;
+	--font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+	--font-mono:
+		ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, "Liberation Mono",
+		monospace;
+
+	/* One type scale. `2xs` is the floor — anything smaller stops being
+	   readable at a glance, which is the only reason to put text on screen. */
+	--text-2xs: 0.6875rem; /* 11px — meta, counts, keycaps */
+	--text-2xs--line-height: 1rem;
+	--text-xs: 0.75rem; /* 12px — default UI text */
+	--text-xs--line-height: 1.125rem;
+	--text-sm: 0.8125rem; /* 13px — log lines, primary values */
+	--text-sm--line-height: 1.25rem;
+	--text-base: 0.875rem; /* 14px — headings inside dialogs */
+	--text-base--line-height: 1.375rem;
+
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -89,9 +201,20 @@
 	--color-chart-3: var(--chart-3);
 	--color-chart-2: var(--chart-2);
 	--color-chart-1: var(--chart-1);
+	--color-status-good: var(--status-good);
+	--color-status-warning: var(--status-warning);
+	--color-status-critical: var(--status-critical);
+	--color-level-trace: var(--level-trace);
+	--color-level-debug: var(--level-debug);
+	--color-level-info: var(--level-info);
+	--color-level-warn: var(--level-warn);
+	--color-level-error: var(--level-error);
+	--color-level-fatal: var(--level-fatal);
+	--color-grid-line: var(--grid-line);
 	--color-ring: var(--ring);
 	--color-input: var(--input);
 	--color-border: var(--border);
+	--color-border-strong: var(--border-strong);
 	--color-destructive: var(--destructive);
 	--color-accent-foreground: var(--accent-foreground);
 	--color-accent: var(--accent);
@@ -107,25 +230,89 @@
 	--color-card: var(--card);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
-	--radius-sm: calc(var(--radius) - 4px);
+	--radius-sm: calc(var(--radius) - 3px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
 	--radius-xl: calc(var(--radius) + 4px);
 	--radius-2xl: calc(var(--radius) + 8px);
 	--radius-3xl: calc(var(--radius) + 12px);
 	--radius-4xl: calc(var(--radius) + 16px);
+	--shadow-overlay: var(--shadow-overlay);
 }
 
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
 	}
-	body {
-		@apply font-sans bg-background text-foreground;
-	}
 	html {
 		@apply font-sans;
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		text-rendering: optimizeLegibility;
 	}
+	body {
+		@apply bg-background text-foreground text-xs;
+		/* cv05 gives lowercase `l` a tail so it stops colliding with `1` and `I`
+		   in service names and ids. */
+		font-feature-settings: "cv05" 1;
+	}
+	/* Numbers that sit in a column — timestamps, counts, durations — must not
+	   dance as they update. */
+	.tabular-nums,
+	input[type="number"],
+	kbd {
+		font-variant-numeric: tabular-nums;
+		font-feature-settings:
+			"cv05" 1,
+			"tnum" 1;
+	}
+	:focus-visible {
+		@apply outline-none ring-2 ring-ring/60 ring-offset-0;
+	}
+	::selection {
+		background: color-mix(in oklch, var(--primary) 30%, transparent);
+	}
+}
+
+/* --- Scrollbars ----------------------------------------------------------
+   Thin and self-effacing: the content is the point, and a log view is mostly
+   scrollbar-adjacent by nature. */
+@layer base {
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent;
+	}
+	::-webkit-scrollbar {
+		width: 10px;
+		height: 10px;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		background-color: color-mix(in oklch, var(--foreground) 16%, transparent);
+		border-radius: 999px;
+		border: 3px solid transparent;
+		background-clip: content-box;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background-color: color-mix(in oklch, var(--foreground) 30%, transparent);
+		background-clip: content-box;
+	}
+	::-webkit-scrollbar-corner {
+		background: transparent;
+	}
+}
+
+/* --- Modal scrim -----------------------------------------------------------
+   A plain `bg-black/50` is nearly invisible over a near-black app, which left
+   dialogs floating on fully legible log rows. The blur is what actually
+   separates them; the tint alone can't. */
+.scrim {
+	position: fixed;
+	inset: 0;
+	background: oklch(0 0 0 / 40%);
+	backdrop-filter: blur(2px);
 }
 
 .recharts-wrapper,
@@ -134,88 +321,77 @@
 	border-color: transparent;
 }
 
+/* --- Panel resize handle -------------------------------------------------
+   1px at rest so it reads as a divider, with a wide invisible hit area so it
+   is still grabbable. */
 .resize-handle {
+	position: relative;
 	width: 1px;
-	background: var(--color-border);
-	transition:
-		background 150ms,
-		width 150ms;
+	background: var(--border);
+	transition: background 120ms ease;
+}
+.resize-handle::after {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	inset-inline: -3px;
 }
 .resize-handle:hover,
 .resize-handle[data-resize-handle-active] {
-	width: 3px;
-	background: var(--color-primary);
+	background: var(--primary);
 }
 
-/* Subtle zebra striping for log rows */
+/* --- Log rows ------------------------------------------------------------
+   Striping is a hairline tint, not a band: at 13px/28px rows a heavier stripe
+   competes with the selected row for attention. */
 .log-rows > *:nth-child(even) {
-	background-color: oklch(0 0 0 / 2%);
-}
-.dark .log-rows > *:nth-child(even) {
-	background-color: oklch(1 0 0 / 2%);
+	background-color: var(--row-stripe);
 }
 
-/* Custom scrollbar for inline detail panels */
-.scrollbar-thin::-webkit-scrollbar {
-	width: 6px;
-}
-.scrollbar-thin::-webkit-scrollbar-track {
-	background: transparent;
-}
-.scrollbar-thin::-webkit-scrollbar-thumb {
-	background-color: var(--color-border);
-	border-radius: 3px;
-	border: 2px solid transparent;
-	background-clip: content-box;
-}
-.scrollbar-thin:hover::-webkit-scrollbar-thumb {
-	background-color: var(--color-border);
-	background-clip: content-box;
-}
-
-/* Refined transitions and animations */
-button {
-	transition: all 150ms cubic-bezier(0.2, 0, 0.38, 0.9);
+/* --- Motion --------------------------------------------------------------
+   Transition only what actually changes. The previous `button { transition:
+   all }` animated layout properties too, so any width or padding change
+   during a re-render turned into a visible reflow. */
+@media (prefers-reduced-motion: no-preference) {
+	button,
+	a,
+	[role="button"] {
+		transition:
+			background-color 120ms ease,
+			border-color 120ms ease,
+			color 120ms ease,
+			opacity 120ms ease,
+			box-shadow 120ms ease;
+	}
 }
 
-/* Inline detail panel animations */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		/* `transition: none`, not a near-zero duration. The initial value of
+		   `transition-property` is `all`, so forcing a non-zero duration onto
+		   every element switches transitions ON for every property — including
+		   `color`. Theme changes then animated instead of applying, and text
+		   could be left stranded at the previous theme's colour. */
+		transition: none !important;
+		scroll-behavior: auto !important;
+	}
+}
+
 .log-detail-inline {
-	animation: slideUpFade 280ms cubic-bezier(0.16, 1, 0.3, 1);
+	animation: slide-up-fade 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes slideUpFade {
+@keyframes slide-up-fade {
 	from {
 		opacity: 0;
-		transform: translateY(12px);
+		transform: translateY(6px);
 	}
 	to {
 		opacity: 1;
 		transform: translateY(0);
 	}
-}
-
-/* Section header underline animation */
-.section-header-inline::before {
-	content: "";
-	position: absolute;
-	bottom: 0;
-	left: 0;
-	width: 0;
-	height: 1px;
-	background: var(--color-primary);
-	transition: width 300ms cubic-bezier(0.2, 0, 0.38, 0.9);
-}
-
-.section-header-inline:hover::before {
-	width: 100%;
-}
-
-/* Enhanced field interactions */
-.detail-field-value {
-	position: relative;
-	transition: color 150ms ease;
-}
-
-.detail-field-value:hover {
-	color: var(--color-primary);
 }

@@ -1,6 +1,7 @@
 import type { LineOptions } from "@/types";
 import {
 	CartesianGrid,
+	Legend,
 	Line,
 	LineChart,
 	ResponsiveContainer,
@@ -10,8 +11,7 @@ import {
 } from "recharts";
 import { WidgetError } from "../widget-renderer";
 import { formatValue } from "./format";
-
-const LINE_COLORS = ["#60a5fa", "#f87171", "#34d399", "#fbbf24", "#a78bfa", "#f472b6"];
+import { seriesColor } from "./series-colors";
 
 export function LineWidget({
 	rows,
@@ -89,15 +89,36 @@ export function LineWidget({
 							border: "1px solid var(--color-border)",
 							borderRadius: 6,
 						}}
+						itemStyle={{ color: "var(--color-foreground)" }}
+						labelStyle={{ color: "var(--color-muted-foreground)" }}
 						labelFormatter={(v) => formatValue(v, "timestamp")}
 						formatter={(v: unknown) => formatValue(v, options.yFormat ?? "number")}
 					/>
+					{/* Identity is never colour-alone, and on the light surface three
+					    of the slots sit under 3:1 — the legend is what makes those
+					    series readable, so it ships whenever there's more than one. */}
+					{seriesKeys.length > 1 && (
+						<Legend
+							verticalAlign="bottom"
+							height={20}
+							iconType="plainline"
+							iconSize={10}
+							wrapperStyle={{ fontSize: 11 }}
+							// Recharts tints legend labels with the series colour by
+							// default. Text wears text tokens — the swatch beside it is
+							// what carries identity, and coloured labels read as
+							// low-contrast noise on the light surface.
+							formatter={(value) => (
+								<span style={{ color: "var(--color-muted-foreground)" }}>{value}</span>
+							)}
+						/>
+					)}
 					{seriesKeys.map((f, i) => (
 						<Line
 							key={f}
 							type="monotone"
 							dataKey={f}
-							stroke={LINE_COLORS[i % LINE_COLORS.length]}
+							stroke={seriesColor(i)}
 							strokeWidth={2}
 							dot={false}
 							isAnimationActive={false}

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, EyeOff, Loader2, Pencil, Trash2 } from "lucide-react";
 import { useHashParam } from "@/hooks/use-hash-param";
-import { useHealth } from "@/hooks/use-health";
 import { useWidgetData } from "@/hooks/use-widget-data";
 import { useCanEditWidgets, useWidgets } from "@/hooks/use-widgets";
 import { DEFAULT_DASHBOARD_ID, useDashboards, useVariableOptions } from "@/hooks/use-dashboards";
@@ -31,7 +30,10 @@ function writeHidden(set: Set<string>): void {
 
 const NO_VARIABLES: DashboardVariable[] = [];
 
-export function DashboardView({ enabled }: { enabled: boolean }) {
+// No `enabled` gate: the widget and dashboard hooks don't poll, and the only
+// thing that did — a /health poll feeding a status readout the status bar
+// already renders — is gone.
+export function DashboardView() {
 	const { widgets, loading: widgetsLoading, create, update, remove, refetch } = useWidgets();
 	const {
 		dashboards,
@@ -94,7 +96,6 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 
 	const refreshMs = parseInt(refreshMsStr ?? "0", 10);
 	const canEdit = useCanEditWidgets();
-	const { data: health } = useHealth(enabled, 15_000);
 
 	useEffect(() => {
 		if (!refreshMs) return;
@@ -227,16 +228,6 @@ export function DashboardView({ enabled }: { enabled: boolean }) {
 				onEditMode={setEditMode}
 				onAddWidget={() => openEditor()}
 				canEdit={canEdit}
-				status={
-					health
-						? {
-								ok: health.ok,
-								uptime: health.uptime,
-								dbSizeBytes: health.db_size_bytes,
-								logCount: health.log_count,
-							}
-						: null
-				}
 			/>
 
 			{hiddenHere > 0 && (
@@ -372,7 +363,7 @@ function WidgetTile({
 				<div className="flex min-w-0 flex-col">
 					<span className="truncate text-xs font-medium">{widget.name}</span>
 					{widget.description && (
-						<span className="truncate text-[10px] text-muted-foreground">{widget.description}</span>
+						<span className="truncate text-2xs text-muted-foreground">{widget.description}</span>
 					)}
 				</div>
 				{editMode && (

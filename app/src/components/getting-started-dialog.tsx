@@ -74,7 +74,7 @@ function CodeBlock({ code, lang = "bash" }: { code: string; lang?: BundledLangua
 		<div className="group relative rounded-md border border-border overflow-hidden">
 			{lines ? (
 				<pre
-					className="overflow-x-auto p-3 pr-9 text-[11px] leading-relaxed font-mono"
+					className="overflow-x-auto p-3 pr-9 text-2xs leading-relaxed font-mono"
 					style={{ backgroundColor: bg }}
 				>
 					{lines.map((line, i) => (
@@ -91,7 +91,7 @@ function CodeBlock({ code, lang = "bash" }: { code: string; lang?: BundledLangua
 					))}
 				</pre>
 			) : (
-				<pre className="overflow-x-auto p-3 pr-9 text-[11px] leading-relaxed font-mono text-foreground bg-muted/60">
+				<pre className="overflow-x-auto p-3 pr-9 text-2xs leading-relaxed font-mono text-foreground bg-muted/60">
 					<code>{code}</code>
 				</pre>
 			)}
@@ -101,7 +101,7 @@ function CodeBlock({ code, lang = "bash" }: { code: string; lang?: BundledLangua
 				aria-label="Copy code"
 				className="absolute right-2 top-2 rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-muted hover:text-foreground cursor-pointer"
 			>
-				{copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+				{copied ? <Check className="h-3 w-3 text-status-good" /> : <Copy className="h-3 w-3" />}
 			</button>
 		</div>
 	);
@@ -111,7 +111,7 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 	return (
 		<div className="space-y-2">
 			<div className="flex items-center gap-2">
-				<span className="flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground shrink-0">
+				<span className="flex h-4 w-4 items-center justify-center rounded-full bg-muted text-2xs font-semibold text-muted-foreground shrink-0">
 					{n}
 				</span>
 				<span className="text-xs font-medium">{title}</span>
@@ -136,7 +136,7 @@ export function GettingStartedDialog({ onClose }: { onClose: () => void }) {
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div className="scrim z-50 flex items-center justify-center">
 			<div className="w-full max-w-lg rounded-lg border border-border bg-card shadow-lg max-h-[85vh] flex flex-col">
 				{/* Header */}
 				<div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
@@ -146,7 +146,7 @@ export function GettingStartedDialog({ onClose }: { onClose: () => void }) {
 					</div>
 					<div className="flex items-center gap-2">
 						{isLocal && (
-							<span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/20">
+							<span className="rounded-full bg-status-good/10 px-2 py-0.5 text-2xs font-medium text-status-good border border-status-good/25">
 								local
 							</span>
 						)}
@@ -237,14 +237,14 @@ log.error("Something went wrong", { code: 500 });`}
 						href="https://github.com/TimMikeladze/relog"
 						target="_blank"
 						rel="noopener noreferrer"
-						className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+						className="text-2xs text-muted-foreground hover:text-foreground transition-colors"
 					>
 						full docs on github →
 					</a>
 					<button
 						type="button"
 						onClick={handleDismiss}
-						className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+						className="text-2xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
 					>
 						don't show again
 					</button>

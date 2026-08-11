@@ -35,24 +35,6 @@ export interface FilterBarProps {
 	onEditMode: (v: boolean) => void;
 	onAddWidget: () => void;
 	canEdit: boolean;
-	status: { ok: boolean; uptime: number; dbSizeBytes: number; logCount: number } | null;
-}
-
-function formatUptime(ms: number): string {
-	const s = Math.floor(ms / 1000);
-	const d = Math.floor(s / 86400);
-	const h = Math.floor((s % 86400) / 3600);
-	const m = Math.floor((s % 3600) / 60);
-	if (d > 0) return `${d}d ${h}h`;
-	if (h > 0) return `${h}h ${m}m`;
-	return `${m}m`;
-}
-
-function formatBytes(n: number): string {
-	if (n < 1024) return `${n} B`;
-	if (n < 1024 ** 2) return `${(n / 1024).toFixed(1)} KB`;
-	if (n < 1024 ** 3) return `${(n / 1024 ** 2).toFixed(1)} MB`;
-	return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
 
 export function FilterBar(props: FilterBarProps) {
@@ -60,15 +42,19 @@ export function FilterBar(props: FilterBarProps) {
 		<div className="flex flex-wrap items-center gap-2">
 			{props.leading}
 
-			<div className="flex items-center gap-0.5 rounded-md bg-muted p-0.5">
+			{/* Coarse fixed ranges suit a dashboard, so this stays a segmented
+			    control rather than Explore's range picker — but it wears the same
+			    inset-track treatment as every other segmented group in the app. */}
+			<div className="flex h-7 items-center gap-0.5 rounded-md bg-muted p-0.5">
 				{TIME_RANGES.map((tr) => (
 					<button
 						key={tr.label}
 						type="button"
+						aria-pressed={props.timeRange === tr.label}
 						onClick={() => props.onTimeRange(tr.label)}
-						className={`rounded-sm px-2.5 py-1 text-xs font-medium transition-colors ${
+						className={`h-6 rounded-[5px] px-2.5 text-xs font-medium tabular-nums ${
 							props.timeRange === tr.label
-								? "bg-background text-foreground shadow-sm"
+								? "bg-background text-foreground shadow-xs"
 								: "text-muted-foreground hover:text-foreground"
 						}`}
 					>
@@ -81,55 +67,56 @@ export function FilterBar(props: FilterBarProps) {
 
 			<div className="flex-1" />
 
-			{props.status && (
-				<span className="text-xs text-muted-foreground">
-					{props.status.ok ? "online" : "degraded"} · {formatUptime(props.status.uptime)} ·{" "}
-					{props.status.logCount.toLocaleString()} logs · {formatBytes(props.status.dbSizeBytes)}
-				</span>
-			)}
+			{props.loading && <Loader2 className="size-3 animate-spin text-muted-foreground" />}
 
-			{props.loading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-
-			<button
-				type="button"
-				onClick={props.onManualRefresh}
-				className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-				aria-label="Refresh"
-			>
-				<RefreshCw className="h-3.5 w-3.5" />
-			</button>
-
-			<select
-				className="rounded-md border border-border bg-background px-2 py-1 text-xs"
-				value={props.refreshMs}
-				onChange={(e) => props.onRefreshMs(Number(e.target.value))}
-			>
-				{REFRESH_OPTIONS.map((o) => (
-					<option key={o.label} value={o.ms}>
-						Auto: {o.label}
-					</option>
-				))}
-			</select>
+			{/* Refresh is one concern: the manual trigger and its interval sit in
+			    one group rather than reading as two unrelated controls. */}
+			<div className="flex h-7 items-center rounded-md border border-border">
+				<button
+					type="button"
+					onClick={props.onManualRefresh}
+					className="flex h-full items-center rounded-l-md px-2 text-muted-foreground hover:bg-accent hover:text-foreground"
+					aria-label="Refresh now"
+					title="Refresh now"
+				>
+					<RefreshCw className="size-3.5" />
+				</button>
+				<div className="h-4 w-px bg-border" />
+				<select
+					className="h-full rounded-r-md bg-transparent px-1.5 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60"
+					value={props.refreshMs}
+					onChange={(e) => props.onRefreshMs(Number(e.target.value))}
+					aria-label="Auto-refresh interval"
+				>
+					{REFRESH_OPTIONS.map((o) => (
+						<option key={o.label} value={o.ms}>
+							Auto: {o.label}
+						</option>
+					))}
+				</select>
+			</div>
 
 			{props.canEdit && (
 				<>
 					<button
 						type="button"
 						onClick={() => props.onEditMode(!props.editMode)}
-						className={`flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs ${
-							props.editMode ? "bg-primary/10 text-primary" : "text-muted-foreground"
+						className={`flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs ${
+							props.editMode
+								? "border-primary/40 bg-primary/10 text-foreground"
+								: "border-border text-muted-foreground hover:border-border-strong hover:text-foreground"
 						}`}
 					>
-						{props.editMode ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+						{props.editMode ? <Pencil className="size-3" /> : <Lock className="size-3" />}
 						{props.editMode ? "Editing" : "Locked"}
 					</button>
 					{props.editMode && (
 						<button
 							type="button"
 							onClick={props.onAddWidget}
-							className="flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground"
+							className="flex h-7 items-center gap-1 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
 						>
-							<Plus className="h-3 w-3" /> Add widget
+							<Plus className="size-3" /> Add widget
 						</button>
 					)}
 				</>

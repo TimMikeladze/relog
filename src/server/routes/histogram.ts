@@ -15,6 +15,7 @@ interface HistogramBody {
 		deployment_id?: string;
 		trace_id?: string;
 		span_id?: string;
+		grep?: string;
 	};
 }
 

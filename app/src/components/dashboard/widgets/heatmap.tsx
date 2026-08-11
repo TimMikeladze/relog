@@ -32,13 +32,13 @@ export function HeatmapWidget({
 			>
 				<div />
 				{xs.map((x) => (
-					<div key={x} className="truncate text-[10px] text-muted-foreground">
+					<div key={x} className="truncate text-2xs text-muted-foreground">
 						{x}
 					</div>
 				))}
 				{ys.map((y) => (
 					<Fragment key={y}>
-						<div className="truncate pr-1 text-[10px] text-muted-foreground">{y}</div>
+						<div className="truncate pr-1 text-2xs text-muted-foreground">{y}</div>
 						{xs.map((x) => {
 							const v = cellMap.get(`${x}::${y}`) ?? 0;
 							const intensity = v / max;

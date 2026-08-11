@@ -1,11 +1,25 @@
+import { AlertTriangle, CheckCircle2, HelpCircle, XCircle } from "lucide-react";
 import type { StatusGridOptions } from "@/types";
 import { WidgetError } from "../widget-renderer";
+import { STATUS_COLORS } from "./series-colors";
 
-function statusColor(v: number, thresholds: { healthy: number; degraded: number }): string {
-	if (!Number.isFinite(v)) return "bg-muted";
-	if (v <= thresholds.healthy) return "bg-emerald-500";
-	if (v <= thresholds.degraded) return "bg-amber-500";
-	return "bg-red-500";
+/**
+ * Each state carries an icon as well as a colour. A bare coloured dot encodes
+ * health in hue alone, which is exactly the encoding a red/green colourblind
+ * reader can't see — and this grid is usually the "is anything on fire" widget.
+ */
+const STATES = {
+	unknown: { color: "var(--color-muted-foreground)", label: "No data", Icon: HelpCircle },
+	healthy: { color: STATUS_COLORS.good, label: "Healthy", Icon: CheckCircle2 },
+	degraded: { color: STATUS_COLORS.warning, label: "Degraded", Icon: AlertTriangle },
+	down: { color: STATUS_COLORS.critical, label: "Critical", Icon: XCircle },
+} as const;
+
+function statusFor(v: number, thresholds: { healthy: number; degraded: number }) {
+	if (!Number.isFinite(v)) return STATES.unknown;
+	if (v <= thresholds.healthy) return STATES.healthy;
+	if (v <= thresholds.degraded) return STATES.degraded;
+	return STATES.down;
 }
 
 export function StatusGridWidget({
@@ -24,16 +38,20 @@ export function StatusGridWidget({
 		<div className="grid h-full grid-cols-4 gap-2 p-3 sm:grid-cols-6 md:grid-cols-8">
 			{rows.map((r, i) => {
 				const value = Number(r[options.statusField]);
-				const color = statusColor(value, options.thresholds);
+				const state = statusFor(value, options.thresholds);
+				const { Icon } = state;
+				const label = String(r[options.labelField]);
+				const readout = Number.isFinite(value) ? `${value.toFixed(2)}%` : "—";
 				return (
 					<div
 						key={i}
 						className="flex flex-col items-center gap-1 rounded-md border border-border p-2 text-xs"
-						title={`${r[options.labelField]}: ${value.toFixed(2)}%`}
+						title={`${label}: ${readout} — ${state.label}`}
 					>
-						<span className={`h-3 w-3 rounded-full ${color}`} />
-						<span className="truncate font-medium">{String(r[options.labelField])}</span>
-						<span className="text-muted-foreground tabular-nums">{value.toFixed(2)}%</span>
+						<Icon className="size-3.5" style={{ color: state.color }} aria-hidden="true" />
+						<span className="sr-only">{state.label}</span>
+						<span className="w-full truncate text-center font-medium">{label}</span>
+						<span className="tabular-nums text-muted-foreground">{readout}</span>
 					</div>
 				);
 			})}

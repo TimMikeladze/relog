@@ -1,5 +1,21 @@
-import type { TableOptions } from "@/types";
+import { LevelBadge } from "@/components/level-badge";
+import { LOG_LEVELS } from "@/lib/log-filters";
+import type { LogLevel, TableOptions } from "@/types";
 import { formatValue } from "./format";
+
+const LEVEL_SET = new Set<string>(LOG_LEVELS);
+
+/**
+ * A `level` column gets the same badge it has everywhere else. Rendering it as
+ * bare lowercase text made the dashboard the one place in the app where
+ * severity carried no colour at all.
+ */
+function Cell({ field, value, format }: { field: string; value: unknown; format?: string }) {
+	if (field === "level" && typeof value === "string" && LEVEL_SET.has(value)) {
+		return <LevelBadge level={value as LogLevel} />;
+	}
+	return <>{formatValue(value, format as never)}</>;
+}
 
 export function TableWidget({
 	rows,
@@ -25,7 +41,7 @@ export function TableWidget({
 						<tr key={i} className="border-b border-border/40">
 							{options.columns.map((c) => (
 								<td key={c.field} className="truncate px-2 py-1 tabular-nums">
-									{formatValue(row[c.field], c.format)}
+									<Cell field={c.field} value={row[c.field]} format={c.format} />
 								</td>
 							))}
 						</tr>

@@ -11,7 +11,7 @@ export function AuthDialog({ onClose }: { onClose?: () => void }) {
 	const isModal = status === "needs-auth" || !onClose;
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div className="scrim z-50 flex items-center justify-center">
 			<div className="w-full max-w-lg rounded-lg border border-border bg-card shadow-lg max-h-[85vh] flex flex-col">
 				{/* Header */}
 				<div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
@@ -44,7 +44,7 @@ export function AuthDialog({ onClose }: { onClose?: () => void }) {
 						<button
 							type="button"
 							onClick={onClose}
-							className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+							className="text-2xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
 						>
 							close
 						</button>

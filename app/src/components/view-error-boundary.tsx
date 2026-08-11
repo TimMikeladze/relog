@@ -47,7 +47,7 @@ export class ViewErrorBoundary extends Component<Props, State> {
 					<div className="text-muted-foreground">
 						The other views still work. Try retrying, or switch tabs and come back.
 					</div>
-					<pre className="max-h-40 overflow-auto rounded bg-background/60 p-2 text-[11px] text-foreground">
+					<pre className="max-h-40 overflow-auto rounded bg-background/60 p-2 text-2xs text-foreground">
 						{this.state.error.message}
 					</pre>
 					<div className="flex items-center gap-2">

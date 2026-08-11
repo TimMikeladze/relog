@@ -49,7 +49,7 @@ export function ConnectForm() {
 			)}
 			{connected && (
 				<div className="flex items-center gap-2">
-					<span className="flex-1 truncate text-xs text-emerald-400">Connected to {serverUrl}</span>
+					<span className="flex-1 truncate text-xs text-status-good">Connected to {serverUrl}</span>
 					{key && (
 						<button
 							type="button"

@@ -1,11 +1,4 @@
-const levelColors: Record<string, string> = {
-	trace: "bg-zinc-400/75",
-	debug: "bg-indigo-400/75",
-	info: "bg-cyan-400/75",
-	warn: "bg-amber-300/75",
-	error: "bg-rose-400/75",
-	fatal: "bg-pink-400/75",
-};
+import { levelColor } from "@/lib/log-filters";
 
 interface LevelCount {
 	level: string;
@@ -26,13 +19,16 @@ export function LevelChart({ data }: { data: LevelCount[] }) {
 				const pct = (d.count / total) * 100;
 				return (
 					<div key={d.level} className="flex items-center gap-3">
-						<span className="w-12 shrink-0 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+						<span className="w-12 shrink-0 text-right text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
 							{d.level}
 						</span>
-						<div className="flex-1 h-4 rounded-sm bg-muted/50 overflow-hidden">
+						<div className="h-4 flex-1 overflow-hidden rounded-sm bg-muted/50">
 							<div
-								className={`h-full rounded-sm transition-all ${levelColors[d.level] ?? "bg-muted-foreground"}`}
-								style={{ width: `${Math.max(pct, 0.5)}%` }}
+								className="h-full rounded-sm"
+								style={{
+									width: `${Math.max(pct, 0.5)}%`,
+									background: levelColor(d.level),
+								}}
 							/>
 						</div>
 						<span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">

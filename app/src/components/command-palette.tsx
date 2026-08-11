@@ -99,25 +99,39 @@ export function CommandPalette({
 	}, [filtered]);
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]" onClick={onClose}>
-			<div className="fixed inset-0 bg-black/50" />
+		<div className="fixed inset-0 z-50 flex items-start justify-center pt-[18vh]" onClick={onClose}>
+			{/* A plain black scrim is invisible over a near-black app. The blur is
+			    what actually separates the palette from the log rows behind it. */}
+			<div className="scrim" />
 			<div
-				className="relative w-full max-w-lg rounded-lg border border-border bg-popover shadow-2xl"
+				role="dialog"
+				aria-modal="true"
+				aria-label="Command palette"
+				className="relative w-full max-w-lg overflow-hidden rounded-xl border border-border-strong bg-popover shadow-overlay"
 				onClick={(e) => e.stopPropagation()}
 				onKeyDown={handleKeyDown}
 			>
-				<div className="flex items-center gap-2 border-b border-border px-4 py-3">
-					<Search className="h-4 w-4 text-muted-foreground" />
+				<div className="flex items-center gap-2.5 border-b border-border px-3.5 py-3">
+					<Search className="size-4 shrink-0 text-muted-foreground" />
 					<input
 						ref={inputRef}
 						type="text"
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
-						placeholder="Type a command..."
-						className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+						placeholder="Type a command…"
+						aria-label="Search commands"
+						// The global focus ring would trace this full-width input and
+						// light up the entire header. In a modal whose only focusable
+						// field is auto-focused, the caret is indication enough.
+						className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0"
 					/>
 				</div>
-				<div ref={listRef} className="max-h-72 overflow-y-auto p-1">
+				{/* `mask-image` fades the final row so a clipped list reads as
+				    "more below" rather than as a rendering glitch. */}
+				<div
+					ref={listRef}
+					className="max-h-80 overflow-y-auto p-1.5 [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)]"
+				>
 					{grouped.length === 0 ? (
 						<div className="px-4 py-6 text-center text-xs text-muted-foreground">
 							No matching commands
@@ -125,31 +139,35 @@ export function CommandPalette({
 					) : (
 						grouped.map((group) => (
 							<div key={group.category}>
-								<div className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+								<div className="px-2.5 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
 									{group.category}
 								</div>
-								{group.commands.map((cmd) => (
-									<button
-										key={cmd.name}
-										type="button"
-										onClick={() => execute(cmd)}
-										className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs transition-colors ${
-											cmd.globalIndex === selectedIndex
-												? "bg-muted text-foreground"
-												: "text-popover-foreground hover:bg-muted/50"
-										}`}
-									>
-										<span>{cmd.name}</span>
-										{cmd.shortcut && (
-											<span className="text-[10px] text-muted-foreground">{cmd.shortcut}</span>
-										)}
-									</button>
-								))}
+								{group.commands.map((cmd) => {
+									const active = cmd.globalIndex === selectedIndex;
+									return (
+										<button
+											key={cmd.name}
+											type="button"
+											onClick={() => execute(cmd)}
+											aria-selected={active}
+											className={`flex w-full items-center justify-between gap-3 rounded-md px-2.5 py-2 text-left text-xs ${
+												active ? "bg-accent text-accent-foreground" : "text-popover-foreground"
+											}`}
+										>
+											<span className="truncate">{cmd.name}</span>
+											{cmd.shortcut && (
+												<kbd className="shrink-0 rounded border border-border px-1 text-2xs text-muted-foreground">
+													{cmd.shortcut}
+												</kbd>
+											)}
+										</button>
+									);
+								})}
 							</div>
 						))
 					)}
 				</div>
-				<div className="flex items-center gap-3 border-t border-border px-4 py-2 text-[10px] text-muted-foreground">
+				<div className="flex items-center gap-3 border-t border-border bg-card px-3.5 py-2 text-2xs text-muted-foreground">
 					<span>
 						<kbd className="rounded border border-border px-1">&uarr;&darr;</kbd> navigate
 					</span>

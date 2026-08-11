@@ -1,7 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Filters, View } from "@/types";
 
 const VIEWS: View[] = ["explore", "traces", "query", "dashboard"];
+
+/**
+ * What a cold open lands on. Unbounded is the wrong default for a log store:
+ * the timeline already renders the last hour, so leaving the table unfiltered
+ * made the two disagree on screen and made the first query scan everything.
+ * Only applied when the URL carries no state at all, so "All time" stays
+ * reachable and shareable.
+ */
+const DEFAULT_RANGE = "1h";
 
 function parseHash(): { view: View; filters: Filters; page: number } {
 	const hash = window.location.hash.slice(1);
@@ -71,12 +80,23 @@ function buildHash(view: View, filters: Filters, page: number): string {
 
 export function useHashState() {
 	const [state, setState] = useState(parseHash);
+	const seeded = useRef(false);
 
 	useEffect(() => {
 		const handler = () => setState(parseHash());
 		window.addEventListener("hashchange", handler);
 		return () => window.removeEventListener("hashchange", handler);
 	}, []);
+
+	// Mount-only: a later hash with no params means the user cleared their
+	// filters on purpose, and re-seeding then would make the range unclearable.
+	useEffect(() => {
+		if (seeded.current) return;
+		seeded.current = true;
+		const [, search] = window.location.hash.slice(1).split("?");
+		if (search) return;
+		window.location.replace(`#${state.view}?from=${DEFAULT_RANGE}`);
+	}, [state.view]);
 
 	const setView = useCallback(
 		(view: View) => {

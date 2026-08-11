@@ -3,7 +3,8 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { sql, SQLite } from "@codemirror/lang-sql";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { syntaxHighlighting } from "@codemirror/language";
+import { sqlEditorTheme, sqlHighlightStyle } from "@/components/sql-editor-theme";
 import { X } from "lucide-react";
 import { apiPost } from "@/api/client";
 import type { DashboardVariable, QueryResult, Widget, WidgetKind, WidgetOptions } from "@/types";
@@ -116,7 +117,10 @@ export function WidgetEditor(props: WidgetEditorProps) {
 				history(),
 				keymap.of([...defaultKeymap, ...historyKeymap]),
 				sql({ dialect: SQLite }),
-				oneDark,
+				// Same token-driven theme as the Query editor, so the two SQL
+				// surfaces match each other and follow the app's theme.
+				sqlEditorTheme,
+				syntaxHighlighting(sqlHighlightStyle),
 				EditorView.updateListener.of((u) => {
 					if (u.docChanged) setSqlText(u.state.doc.toString());
 				}),
@@ -285,14 +289,14 @@ export function WidgetEditor(props: WidgetEditorProps) {
 								ref={editorHost}
 								className="min-h-[220px] overflow-hidden rounded-md border border-border"
 							/>
-							<span className="text-[10px] text-muted-foreground">
+							<span className="text-2xs text-muted-foreground">
 								Vars:{" "}
 								{["from", "to", ...props.variables.map((v) => v.name)]
 									.map((n) => `\${${n}}`)
 									.join(" ")}
 							</span>
 							{undeclared.length > 0 && (
-								<span className="text-[10px] text-amber-600 dark:text-amber-500">
+								<span className="text-2xs text-status-warning">
 									Not declared on this dashboard: {undeclared.map((n) => `\${${n}}`).join(" ")} —
 									these resolve to NULL. Add them as dashboard variables to filter by them.
 								</span>
@@ -315,8 +319,8 @@ export function WidgetEditor(props: WidgetEditorProps) {
 								rows={6}
 								className="rounded-md border border-border bg-background px-2 py-1 font-mono text-xs"
 							/>
-							{optionsError && <span className="text-[10px] text-destructive">{optionsError}</span>}
-							<span className="text-[10px] text-muted-foreground">
+							{optionsError && <span className="text-2xs text-destructive">{optionsError}</span>}
+							<span className="text-2xs text-muted-foreground">
 								Available columns: {previewCols.join(", ") || "—"}
 							</span>
 						</label>

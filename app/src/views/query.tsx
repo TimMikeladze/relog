@@ -4,6 +4,7 @@ import { useQueryExecute } from "@/hooks/use-query-execute";
 import { useKeyboard } from "@/hooks/use-keyboard";
 import { TimelineChart } from "@/components/timeline-chart";
 import { LevelBadge } from "@/components/level-badge";
+import { formatClockTime as formatCellTimestamp } from "@/lib/format-time";
 import type { LogLevel } from "@/types";
 import {
 	Play,
@@ -24,10 +25,10 @@ import {
 import { EditorView, keymap, placeholder as cmPlaceholder } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { sql, SQLite } from "@codemirror/lang-sql";
-import { oneDark } from "@codemirror/theme-one-dark";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { autocompletion } from "@codemirror/autocomplete";
-import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { syntaxHighlighting } from "@codemirror/language";
+import { sqlEditorTheme, sqlHighlightStyle } from "@/components/sql-editor-theme";
 
 const STORAGE_SAVED = "relog:saved-queries";
 const STORAGE_HISTORY = "relog:query-history";
@@ -126,16 +127,6 @@ function addToHistory(entry: string) {
 	localStorage.setItem(STORAGE_HISTORY, JSON.stringify(hist));
 }
 
-function formatCellTimestamp(val: string): string {
-	try {
-		const d = new Date(val);
-		if (isNaN(d.getTime())) return val;
-		return d.toLocaleTimeString("en-US", { hour12: false, fractionalSecondDigits: 3 });
-	} catch {
-		return val;
-	}
-}
-
 function formatMeta(val: unknown): { short: string; isJson: boolean } {
 	if (val === null || val === undefined) return { short: "", isJson: false };
 	const str = typeof val === "object" ? JSON.stringify(val) : String(val);
@@ -227,7 +218,7 @@ function CellValue({ col, value, rowIndex }: { col: string; value: unknown; rowI
 	// Service / project / branch → subtle tag
 	if (col === "service" || col === "project" || col === "branch") {
 		return (
-			<span className="inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground/80">
+			<span className="inline-flex rounded bg-muted px-1.5 py-0.5 text-2xs font-medium text-foreground/80">
 				{str}
 			</span>
 		);
@@ -287,40 +278,26 @@ export function QueryView({
 		})(),
 	);
 
+	// Both the theme and the highlight style are plain CSS variables, so the
+	// editor re-paints with the rest of the app on a theme switch. It used to
+	// read `classList.contains("dark")` once at mount with `[]` deps and push
+	// `oneDark`, which meant switching to light left a dark slab on a white page
+	// until you reloaded.
 	useEffect(() => {
 		if (!editorRef.current || viewRef.current) return;
 
-		const isDark = document.documentElement.classList.contains("dark");
-
-		const extensions = [
-			history(),
-			keymap.of([...defaultKeymap, ...historyKeymap]),
-			sql({ dialect: SQLite, upperCaseKeywords: true, schema: { logs: LOG_COLUMNS } }),
-			autocompletion(),
-			EditorView.lineWrapping,
-			cmPlaceholder("SELECT * FROM logs LIMIT 10"),
-			EditorView.theme({
-				"&": { fontSize: "12px", maxHeight: "200px" },
-				".cm-scroller": { overflow: "auto" },
-				".cm-content": { fontFamily: "var(--font-mono)", padding: "8px 0" },
-				".cm-gutters": {
-					backgroundColor: "transparent",
-					border: "none",
-					color: "var(--color-muted-foreground)",
-				},
-				"&.cm-focused": { outline: "none" },
-			}),
-		];
-
-		if (isDark) {
-			extensions.push(oneDark);
-		} else {
-			extensions.push(syntaxHighlighting(defaultHighlightStyle));
-		}
-
 		const state = EditorState.create({
 			doc: initialQueryRef.current || "SELECT * FROM logs ORDER BY created_at DESC LIMIT 100",
-			extensions,
+			extensions: [
+				history(),
+				keymap.of([...defaultKeymap, ...historyKeymap]),
+				sql({ dialect: SQLite, upperCaseKeywords: true, schema: { logs: LOG_COLUMNS } }),
+				autocompletion(),
+				EditorView.lineWrapping,
+				cmPlaceholder("SELECT * FROM logs LIMIT 10"),
+				sqlEditorTheme,
+				syntaxHighlighting(sqlHighlightStyle),
+			],
 		});
 
 		viewRef.current = new EditorView({ state, parent: editorRef.current });
@@ -471,7 +448,7 @@ export function QueryView({
 				>
 					{loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
 					Run
-					<kbd className="ml-1 text-[9px] opacity-60">{"\u2318\u21B5"}</kbd>
+					<kbd className="ml-1 text-2xs opacity-60">{"\u2318\u21B5"}</kbd>
 				</button>
 				<button
 					type="button"
@@ -581,7 +558,7 @@ export function QueryView({
 											setEditorContent(h.sql);
 											setActiveDropdown(null);
 										}}
-										className="block w-full rounded px-3 py-1.5 text-left text-[10px] text-popover-foreground hover:bg-muted truncate"
+										className="block w-full rounded px-3 py-1.5 text-left text-2xs text-popover-foreground hover:bg-muted truncate"
 									>
 										<span className="text-muted-foreground mr-2">
 											{new Date(h.time).toLocaleTimeString("en-US", {
@@ -603,7 +580,7 @@ export function QueryView({
 				{error && <span className="text-xs text-destructive truncate max-w-xs">{error}</span>}
 
 				{data && (
-					<span className="text-[10px] text-muted-foreground tabular-nums">
+					<span className="text-2xs text-muted-foreground tabular-nums">
 						{data.time_ms.toFixed(1)}ms · {data.count.toLocaleString()} rows
 					</span>
 				)}
@@ -652,13 +629,13 @@ export function QueryView({
 					<table className="w-full border-collapse text-xs">
 						<thead className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm">
 							<tr className="border-b-2 border-border">
-								<th className="w-8 px-2 py-2 text-right text-[10px] font-medium text-muted-foreground/50">
+								<th className="w-8 px-2 py-2 text-right text-2xs font-medium text-muted-foreground/50">
 									#
 								</th>
 								{columns.map((col) => (
 									<th
 										key={col}
-										className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer select-none transition-colors hover:text-foreground"
+										className="px-3 py-2 text-left text-2xs font-semibold uppercase tracking-wider text-muted-foreground cursor-pointer select-none transition-colors hover:text-foreground"
 										onClick={() => {
 											if (sortCol === col) {
 												setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -687,7 +664,7 @@ export function QueryView({
 									key={i}
 									className="border-b border-border/30 transition-colors hover:bg-muted/40 even:bg-muted/10"
 								>
-									<td className="w-8 px-2 py-1.5 text-right text-[10px] text-muted-foreground/40 tabular-nums">
+									<td className="w-8 px-2 py-1.5 text-right text-2xs text-muted-foreground/40 tabular-nums">
 										{i + 1}
 									</td>
 									{columns.map((col) => (
@@ -705,7 +682,7 @@ export function QueryView({
 						<div className="flex flex-col items-center justify-center gap-2 p-12 text-muted-foreground">
 							<Play className="h-6 w-6 opacity-20" />
 							<span className="text-sm">Run a query to see results</span>
-							<kbd className="rounded border border-border bg-muted px-2 py-0.5 text-[10px]">
+							<kbd className="rounded border border-border bg-muted px-2 py-0.5 text-2xs">
 								{"\u2318\u21B5"}
 							</kbd>
 						</div>

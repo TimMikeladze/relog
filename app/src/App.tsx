@@ -1,12 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { BookmarksProvider } from "@/hooks/use-bookmarks";
 import { useHashState } from "@/hooks/use-hash-state";
 import { useKeyboard } from "@/hooks/use-keyboard";
-import { Header } from "@/components/layout/header";
+import { CommandBar } from "@/components/layout/command-bar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
-import { FilterSidebar } from "@/components/layout/filter-sidebar";
 import { StatusBar } from "@/components/layout/status-bar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -185,7 +183,7 @@ function AppContent() {
 						{auth.error ?? "No response from server"}
 					</div>
 					{retryIn !== null && retryIn > 0 && (
-						<div className="text-[11px] text-muted-foreground">Retrying in {retryIn}s…</div>
+						<div className="text-2xs text-muted-foreground">Retrying in {retryIn}s…</div>
 					)}
 					<button
 						type="button"
@@ -199,7 +197,7 @@ function AppContent() {
 		);
 	}
 
-	const showSidebar = view === "explore" || view === "traces";
+	const isLogView = view === "explore" || view === "traces";
 
 	const viewContent = (
 		<>
@@ -210,6 +208,7 @@ function AppContent() {
 						enabled={view === "explore"}
 						onNavigateTrace={navigateTrace}
 						onUpdateFilters={updateFilters}
+						onClearFilters={() => setFilters({})}
 					/>
 				</ViewErrorBoundary>
 			)}
@@ -232,7 +231,7 @@ function AppContent() {
 			)}
 			{view === "dashboard" && (
 				<ViewErrorBoundary key="dashboard" view="Dashboard">
-					<DashboardView enabled={view === "dashboard"} />
+					<DashboardView />
 				</ViewErrorBoundary>
 			)}
 		</>
@@ -265,41 +264,19 @@ function AppContent() {
 					onBookmarkClick={handleBookmarkClick}
 				/>
 				<SidebarInset className="flex min-w-0 flex-col overflow-hidden">
-					<Header
-						currentView={view}
+					{/* Filters used to live in a second resizable rail. Folding them
+					    into this bar gives the log lines back ~290px of width — the
+					    scarcest resource in a log viewer, since a message that gets
+					    truncated may as well not be rendered. */}
+					<CommandBar
+						view={view}
 						filters={filters}
+						enabled={isLogView}
 						onUpdateFilter={updateFilter}
+						onUpdateFilters={updateFilters}
 						onClearFilters={() => setFilters({})}
 					/>
-					{/* Views without a filter panel render outside the panel group:
-					    react-resizable-panels keeps the main panel's stale flex
-					    size when the filter panel unmounts, which left dashboard
-					    widgets measuring themselves against explore's width. */}
-					{showSidebar ? (
-						<PanelGroup className="flex-1 overflow-hidden" id="relog-main">
-							<Panel
-								id="sidebar"
-								defaultSize="15%"
-								minSize="180px"
-								maxSize="30%"
-								className="overflow-hidden"
-							>
-								<FilterSidebar
-									filters={filters}
-									view={view}
-									onUpdateFilter={updateFilter}
-									onUpdateFilters={updateFilters}
-									onClearFilters={() => setFilters({})}
-								/>
-							</Panel>
-							<PanelResizeHandle className="resize-handle" />
-							<Panel id="main" minSize="30%" className="flex overflow-hidden">
-								{viewContent}
-							</Panel>
-						</PanelGroup>
-					) : (
-						<div className="flex flex-1 overflow-hidden">{viewContent}</div>
-					)}
+					<div className="flex flex-1 overflow-hidden">{viewContent}</div>
 					<StatusBar />
 				</SidebarInset>
 				{showSettings && <AuthDialog onClose={() => setShowSettings(false)} />}

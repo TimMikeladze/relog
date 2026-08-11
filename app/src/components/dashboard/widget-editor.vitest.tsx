@@ -18,9 +18,16 @@ vi.mock("@codemirror/view", async () => {
 		}
 		destroy() {}
 	}
+	// Only the constructor is stubbed. The static extension builders stay real:
+	// `sql-editor-theme` calls `EditorView.theme(...)` at module scope, so
+	// dropping them makes the module fail to import at all.
 	return {
 		...actual,
-		EditorView: Object.assign(NoopView, { updateListener: actual.EditorView.updateListener }),
+		EditorView: Object.assign(NoopView, {
+			updateListener: actual.EditorView.updateListener,
+			theme: actual.EditorView.theme.bind(actual.EditorView),
+			lineWrapping: actual.EditorView.lineWrapping,
+		}),
 	};
 });
 

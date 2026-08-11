@@ -564,6 +564,7 @@ export class DuckDBReader {
 			deployment_id?: string;
 			trace_id?: string;
 			span_id?: string;
+			grep?: string;
 		};
 	}): Promise<{
 		buckets: {
@@ -605,6 +606,14 @@ export class DuckDBReader {
 				conditions.push(`${col} IN (${values.map(() => "?").join(", ")})`);
 				params.push(...values);
 			}
+		}
+
+		// Same predicate as `search`, so the timeline and the result list agree.
+		// Without it a text search left the chart showing unfiltered volume next
+		// to a table reporting zero results.
+		if (opts.filters?.grep) {
+			conditions.push("message LIKE ? ESCAPE '\\'");
+			params.push(`%${escapeLike(opts.filters.grep)}%`);
 		}
 
 		const where = `WHERE ${conditions.join(" AND ")}`;

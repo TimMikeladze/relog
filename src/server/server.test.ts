@@ -524,6 +524,27 @@ describe("POST /histogram filter coverage", () => {
 		});
 		expect(res.status).toBe(400);
 	});
+
+	// The timeline and the result list read the same filters. Before `grep`
+	// was wired through, a text search left the chart showing unfiltered
+	// volume above a table reporting zero results.
+	test("filters by grep the same way /logs does", async () => {
+		const matching = await postHistogram({ grep: "histo-seed-a" });
+		expect(total(matching)).toBe(1);
+
+		const missing = await postHistogram({ grep: "histo-seed-nonexistent" });
+		expect(total(missing)).toBe(0);
+	});
+
+	test("treats LIKE wildcards in grep as literals", async () => {
+		const body = await postHistogram({ grep: "histo%seed" });
+		expect(total(body)).toBe(0);
+	});
+
+	test("combines grep with the other filters", async () => {
+		const body = await postHistogram({ grep: "histo-seed", level: "error" });
+		expect(total(body)).toBe(1);
+	});
 });
 
 describe("GET /logs trace_id + span_id filters", () => {

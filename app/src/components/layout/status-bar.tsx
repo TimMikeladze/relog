@@ -37,10 +37,10 @@ export function StatusBar() {
 	const { data: health } = useHealth(true, 15_000);
 
 	return (
-		<div className="flex h-6 shrink-0 items-center gap-3 border-t border-border px-3 text-[10px] text-muted-foreground">
+		<div className="flex h-6 shrink-0 items-center gap-3 border-t border-border px-3 text-2xs text-muted-foreground">
 			<div className="flex items-center gap-1.5">
 				<Circle
-					className={`h-1.5 w-1.5 ${health?.ok ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
+					className={`h-1.5 w-1.5 ${health?.ok ? "fill-status-good text-status-good" : "fill-muted-foreground text-muted-foreground"}`}
 				/>
 				<span>{health?.ok ? "Connected" : "Disconnected"}</span>
 			</div>

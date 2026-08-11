@@ -53,6 +53,8 @@ export function BarWidget({
 							border: "1px solid var(--color-border)",
 							borderRadius: 6,
 						}}
+						itemStyle={{ color: "var(--color-foreground)" }}
+						labelStyle={{ color: "var(--color-muted-foreground)" }}
 					/>
 					<Bar
 						dataKey={options.valueField}

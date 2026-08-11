@@ -48,7 +48,7 @@ export function WidgetRenderer(props: WidgetRenderProps) {
 			<div className="relative h-full">
 				{body}
 				<div
-					className="absolute right-2 top-2 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+					className="absolute right-2 top-2 rounded-sm bg-destructive/10 px-1.5 py-0.5 text-2xs font-medium text-destructive"
 					title={error ?? undefined}
 				>
 					{error ? "Stale · refresh failed" : "Stale"}

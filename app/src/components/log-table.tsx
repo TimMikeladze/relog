@@ -10,20 +10,23 @@ export function LogTable({
 	logs,
 	autoScroll = false,
 	showDate = false,
-	emptyMessage = "No logs",
+	empty,
 	onNavigateTrace,
 	onLoadMore,
 	loadingMore = false,
+	loadMoreError,
 	hasMore = false,
 	detailMode = "panel",
 }: {
 	logs: LogRecord[];
 	autoScroll?: boolean;
 	showDate?: boolean;
-	emptyMessage?: string;
+	/** Rendered in place of the rows when there are none. */
+	empty?: React.ReactNode;
 	onNavigateTrace?: (traceId: string) => void;
 	onLoadMore?: () => void;
 	loadingMore?: boolean;
+	loadMoreError?: string | null;
 	hasMore?: boolean;
 	detailMode?: "inline" | "panel";
 }) {
@@ -100,20 +103,46 @@ export function LogTable({
 	}, [logs, autoScroll]);
 
 	if (logs.length === 0) {
-		return (
-			<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-				{emptyMessage}
-			</div>
-		);
+		return <div className="flex flex-1 flex-col overflow-hidden">{empty}</div>;
 	}
 
 	const columnHeaders = (
-		<div className="flex shrink-0 items-center border-b border-border bg-muted/30 text-[10px] font-medium uppercase tracking-wider text-muted-foreground border-l-2 border-l-transparent">
-			<span className={`shrink-0 px-3 py-1.5 ${showDate ? "w-[200px]" : "w-[110px]"}`}>Time</span>
-			<span className="shrink-0 w-[52px] py-1.5">Level</span>
-			<span className="shrink-0 w-[120px] py-1.5">Service</span>
+		<div className="flex shrink-0 items-center border-b border-border border-l-2 border-l-transparent bg-card text-2xs font-medium text-muted-foreground">
+			<span className={`shrink-0 px-3 py-1.5 ${showDate ? "w-[168px]" : "w-[104px]"}`}>Time</span>
+			<span className="w-[56px] shrink-0 py-1.5">Level</span>
+			<span className="w-[124px] shrink-0 py-1.5">Service</span>
 			<span className="min-w-0 flex-1 py-1.5 pr-3">Message</span>
 		</div>
+	);
+
+	const footer = (
+		<>
+			{loadingMore && (
+				<div className="flex items-center justify-center gap-2 py-3 text-2xs text-muted-foreground">
+					<Loader2 className="size-3.5 animate-spin" />
+					Loading more…
+				</div>
+			)}
+			{/* `useLogs` has always reported pagination failures; nothing rendered
+			    them, so a failed page just looked like the end of the results. */}
+			{loadMoreError && !loadingMore && (
+				<div className="flex items-center justify-center gap-2 py-3 text-2xs text-destructive">
+					{loadMoreError}
+					{onLoadMore && (
+						<button
+							type="button"
+							onClick={onLoadMore}
+							className="rounded border border-border px-1.5 py-0.5 text-foreground hover:bg-accent"
+						>
+							Retry
+						</button>
+					)}
+				</div>
+			)}
+			{!hasMore && !loadingMore && logs.length > 20 && (
+				<div className="py-3 text-center text-2xs text-muted-foreground">End of results</div>
+			)}
+		</>
 	);
 
 	if (detailMode === "inline") {
@@ -146,11 +175,7 @@ export function LogTable({
 							</div>
 						);
 					})}
-					{loadingMore && (
-						<div className="flex items-center justify-center py-3">
-							<Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-						</div>
-					)}
+					{footer}
 				</div>
 			</div>
 		);
@@ -173,12 +198,7 @@ export function LogTable({
 								onClick={handleSelectPanel}
 							/>
 						))}
-
-						{loadingMore && (
-							<div className="flex items-center justify-center py-3">
-								<Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-							</div>
-						)}
+						{footer}
 					</div>
 				</div>
 			</Panel>

@@ -12,7 +12,6 @@ import {
 	Rocket,
 	Route,
 	ScrollText,
-	Search,
 	Sun,
 	Terminal,
 	Waypoints,
@@ -49,7 +48,7 @@ const NAV: { id: View; label: string; icon: typeof ScrollText; shortcut: string 
 
 function Kbd({ children }: { children: React.ReactNode }) {
 	return (
-		<kbd className="pointer-events-none hidden shrink-0 select-none rounded border border-sidebar-border bg-sidebar-accent/60 px-1 font-mono text-[9px] leading-4 tracking-wider text-muted-foreground group-hover/menu-item:text-foreground md:inline-block">
+		<kbd className="pointer-events-none hidden shrink-0 select-none rounded border border-sidebar-border bg-sidebar-accent/60 px-1 font-mono text-2xs leading-4 tracking-wider text-muted-foreground group-hover/menu-item:text-foreground md:inline-block">
 			{children}
 		</kbd>
 	);
@@ -137,7 +136,7 @@ export function AppSidebar({
 			icon: XCircle,
 			active: levels.has("error"),
 			onClick: () => toggleLevel("error"),
-			dot: "text-red-400",
+			dot: "text-level-error",
 		},
 		{
 			key: "warn",
@@ -145,7 +144,7 @@ export function AppSidebar({
 			icon: AlertTriangle,
 			active: levels.has("warn"),
 			onClick: () => toggleLevel("warn"),
-			dot: "text-amber-400",
+			dot: "text-level-warn",
 		},
 		{
 			key: "bookmarked",
@@ -167,25 +166,30 @@ export function AppSidebar({
 						collapsed && "justify-center px-0",
 					)}
 				>
-					<span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-[11px] font-bold text-primary-foreground">
+					<span className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-2xs font-bold text-primary-foreground">
 						r
 						<Circle
 							className={cn(
 								"absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-sidebar",
-								health?.ok ? "fill-emerald-400 text-emerald-400" : "fill-zinc-500 text-zinc-500",
+								health?.ok
+									? "fill-status-good text-status-good"
+									: "fill-muted-foreground text-muted-foreground",
 							)}
 						/>
 					</span>
 					{!collapsed && (
 						<div className="flex min-w-0 flex-1 flex-col leading-tight">
 							<span className="truncate text-xs font-semibold tracking-tight">relog.dev</span>
-							<span className="truncate text-[10px] text-muted-foreground">
+							<span className="truncate text-2xs text-muted-foreground">
 								{health ? `${health.log_count.toLocaleString()} logs` : "connecting…"}
 							</span>
 						</div>
 					)}
 				</div>
 
+				{/* Labelled "Commands", not "Search": the log search lives in the
+				    command bar, and two boxes both saying "Search" left it ambiguous
+				    which one queried the logs. */}
 				<button
 					type="button"
 					onClick={onCommandPalette}
@@ -195,10 +199,10 @@ export function AppSidebar({
 						collapsed && "w-8 justify-center px-0",
 					)}
 				>
-					<Search className="h-3.5 w-3.5 shrink-0" />
+					<Command className="h-3.5 w-3.5 shrink-0" />
 					{!collapsed && (
 						<>
-							<span className="flex-1 text-left">Search…</span>
+							<span className="flex-1 text-left">Commands</span>
 							<Kbd>
 								<Command className="mb-px inline-block h-2.5 w-2.5" />K
 							</Kbd>
@@ -303,16 +307,16 @@ export function AppSidebar({
 					)}
 				>
 					{authed ? (
-						<Lock className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+						<Lock className="h-3.5 w-3.5 shrink-0 text-status-good" />
 					) : (
 						<LockOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 					)}
 					{!collapsed && (
 						<span className="flex min-w-0 flex-1 flex-col leading-tight">
-							<span className="truncate font-mono text-[10px]">
+							<span className="truncate font-mono text-2xs">
 								{auth.serverUrl?.replace(/^https?:\/\//, "")}
 							</span>
-							<span className="truncate text-[9px] text-muted-foreground">
+							<span className="truncate text-2xs text-muted-foreground">
 								{auth.isLocal ? "local" : "remote"} ·{" "}
 								{authed ? (auth.key ? "authenticated" : "open") : "no auth"}
 							</span>
@@ -337,8 +341,10 @@ export function AppSidebar({
 							<path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
 						</svg>
 					</IconAction>
+					{/* Inherits the muted icon colour like its neighbours — a pink
+					    heart was the highest-contrast thing in the whole nav. */}
 					<IconAction label="Support relog.dev" onClick={onSupportClick}>
-						<Heart className="h-3.5 w-3.5 text-pink-400" />
+						<Heart className="h-3.5 w-3.5" />
 					</IconAction>
 				</div>
 			</SidebarFooter>

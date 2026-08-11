@@ -2,8 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useHashParam } from "@/hooks/use-hash-param";
 import { apiGet } from "@/api/client";
 import { useStream } from "@/hooks/use-stream";
-import { TimelineChart, HoverStats } from "@/components/timeline-chart";
+import { TimelineChart } from "@/components/timeline-chart";
+import {
+	LIVE_ACTIVE_CLASS,
+	ToolbarButton,
+	ToolbarSegment,
+	ToolbarSegments,
+} from "@/components/layout/toolbar";
 import { LevelBadge } from "@/components/level-badge";
+import { formatClockTime as formatTimestamp } from "@/lib/format-time";
 import { TraceWaterfall } from "@/components/trace-waterfall";
 import { SpanDetail } from "@/components/span-detail";
 import { getServiceColor } from "@/components/service-colors";
@@ -12,7 +19,6 @@ import type { Filters, LogRecord, SpanBar } from "@/types";
 import {
 	ChevronRight,
 	ChevronDown,
-	Circle,
 	Pause,
 	Play,
 	Radio,
@@ -189,17 +195,6 @@ function logsToTraceRows(logs: LogRecord[]): TraceRow[] {
 	return rows;
 }
 
-function formatTimestamp(ts: string): string {
-	try {
-		return new Date(ts).toLocaleTimeString("en-US", {
-			hour12: false,
-			fractionalSecondDigits: 3,
-		});
-	} catch {
-		return ts;
-	}
-}
-
 function truncateId(id: string): string {
 	return id.length > 12 ? `${id.slice(0, 8)}...${id.slice(-4)}` : id;
 }
@@ -356,124 +351,77 @@ export function TracesView({
 				onResetTimeRange={
 					live !== "1" ? () => onUpdateFilters({ from: undefined, to: undefined }) : undefined
 				}
-			>
-				{(hoverBucket) => (
+				leading={
 					<>
-						<button
-							type="button"
+						<ToolbarButton
 							onClick={() => setLive(live === "1" ? undefined : "1")}
-							className={`flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors ${
-								live === "1"
-									? "bg-emerald-500/15 text-emerald-500"
-									: "text-muted-foreground hover:bg-muted hover:text-foreground"
-							}`}
+							active={live === "1"}
+							activeClassName={LIVE_ACTIVE_CLASS}
+							icon={Radio}
 						>
-							<Radio className="h-3 w-3" />
 							Live
-						</button>
+						</ToolbarButton>
 
-						{live === "1" && (
-							<>
-								<div className="h-3 w-px bg-border" />
-								<div className="flex items-center gap-1.5">
-									<Circle
-										className={`h-2 w-2 ${stream.connected ? "fill-emerald-400 text-emerald-400" : "fill-zinc-400 text-zinc-400"}`}
-									/>
-									<span className="text-[10px] text-muted-foreground">
-										{stream.connected ? "Connected" : stream.paused ? "Paused" : "Disconnected"}
-									</span>
-								</div>
-								<span className="text-[10px] text-muted-foreground tabular-nums">
-									{liveTraces.length} traces / {stream.logs.length.toLocaleString()} events
-								</span>
-							</>
-						)}
-
-						{live !== "1" && loading && (
-							<span className="text-[10px] text-muted-foreground">Loading...</span>
-						)}
-						{live !== "1" && !loading && (
-							<span className="text-[10px] text-muted-foreground">{traces.length} traces</span>
-						)}
-
-						<HoverStats bucket={hoverBucket} />
-
-						<div className="flex-1" />
-
-						<div className="flex items-center rounded-md border border-border overflow-hidden">
-							<button
-								type="button"
-								onClick={() => setDetailMode("inline")}
-								title="Inline detail"
-								className={`flex items-center px-1.5 py-0.5 transition-colors ${
-									detailMode === "inline"
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								<AlignLeft className="h-3 w-3" />
-							</button>
-							<button
-								type="button"
-								onClick={() => setDetailMode("panel")}
-								title="Side panel"
-								className={`flex items-center px-1.5 py-0.5 transition-colors ${
-									detailMode === "panel"
-										? "bg-muted text-foreground"
-										: "text-muted-foreground hover:text-foreground"
-								}`}
-							>
-								<PanelRight className="h-3 w-3" />
-							</button>
-						</div>
-
-						{/* Sort toggle */}
-						<button
-							type="button"
+						<span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+							{live === "1"
+								? stream.paused
+									? "Paused"
+									: stream.connected
+										? `${liveTraces.length} traces · ${stream.logs.length.toLocaleString()} events`
+										: "Disconnected"
+								: loading
+									? "Loading…"
+									: `${traces.length} ${traces.length === 1 ? "trace" : "traces"}`}
+						</span>
+					</>
+				}
+				trailing={
+					<>
+						<ToolbarButton
 							onClick={cycleSortField}
-							className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-							title={`Sort by: ${sortField}`}
+							icon={ArrowUpDown}
+							title={`Sorting by ${sortField} — click to cycle`}
 						>
-							<ArrowUpDown className="h-3 w-3" />
 							{sortField === "time"
 								? "Newest"
 								: sortField === "duration"
 									? "Slowest"
 									: "Most spans"}
-						</button>
+						</ToolbarButton>
 
 						{live === "1" && (
 							<>
-								<button
-									type="button"
-									onClick={stream.clear}
-									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-								>
-									<Trash2 className="h-3 w-3" />
+								<ToolbarButton onClick={stream.clear} icon={Trash2}>
 									Clear
-								</button>
-								<button
-									type="button"
+								</ToolbarButton>
+								<ToolbarButton
 									onClick={stream.paused ? stream.resume : stream.pause}
-									className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+									icon={stream.paused ? Play : Pause}
 								>
-									{stream.paused ? (
-										<>
-											<Play className="h-3 w-3" />
-											Resume
-										</>
-									) : (
-										<>
-											<Pause className="h-3 w-3" />
-											Pause
-										</>
-									)}
-								</button>
+									{stream.paused ? "Resume" : "Pause"}
+								</ToolbarButton>
 							</>
 						)}
+
+						<div className="mx-0.5 h-3 w-px shrink-0 bg-border" />
+
+						<ToolbarSegments>
+							<ToolbarSegment
+								active={detailMode === "inline"}
+								onClick={() => setDetailMode("inline")}
+								title="Expand details inline"
+								icon={AlignLeft}
+							/>
+							<ToolbarSegment
+								active={detailMode === "panel"}
+								onClick={() => setDetailMode("panel")}
+								title="Show details in a side panel"
+								icon={PanelRight}
+							/>
+						</ToolbarSegments>
 					</>
-				)}
-			</TimelineChart>
+				}
+			/>
 			<div className="flex-1 overflow-y-auto">
 				{live !== "1" && loading && (
 					<div className="flex items-center justify-center p-8 text-sm text-muted-foreground">
@@ -489,6 +437,18 @@ export function TracesView({
 							: "No traces found. Logs need a trace_id to appear here."}
 					</div>
 				)}
+				{/* Column headers, matching Explore. Without them the right-hand
+				    columns were three unlabeled numbers per row. */}
+				<div className="sticky top-0 z-10 flex shrink-0 items-center gap-3 border-b border-border bg-card px-4 py-1.5 text-2xs font-medium text-muted-foreground">
+					<span className="w-3 shrink-0" />
+					<span className="w-12 shrink-0">Level</span>
+					<span className="min-w-0 flex-1">Trace</span>
+					<span className="shrink-0">Services</span>
+					<span className="w-16 shrink-0 text-right">Spans</span>
+					<span className="w-20 shrink-0 text-right">Duration</span>
+					<span className="w-24 shrink-0 text-right">Started</span>
+					<span className="mr-2 w-3 shrink-0" />
+				</div>
 				<div className="divide-y divide-border/50">
 					{displayTraces.map((t) => {
 						const serviceList = t.services.split(",").filter(Boolean);
@@ -518,7 +478,7 @@ export function TracesView({
 											<span className="truncate font-medium text-foreground">
 												{t.root_message || truncateId(t.trace_id)}
 											</span>
-											<span className="truncate font-mono text-[10px] text-muted-foreground/60">
+											<span className="truncate font-mono text-2xs text-muted-foreground/60">
 												{truncateId(t.trace_id)}
 											</span>
 										</div>
@@ -528,14 +488,14 @@ export function TracesView({
 											{serviceList.slice(0, 4).map((svc) => (
 												<span
 													key={svc}
-													className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] ${getServiceColor(svc).bar} text-white`}
+													className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs ring-1 ring-inset ${getServiceColor(svc).chip}`}
 													title={svc}
 												>
 													{svc}
 												</span>
 											))}
 											{serviceList.length > 4 && (
-												<span className="text-[9px] text-muted-foreground">
+												<span className="text-2xs text-muted-foreground">
 													+{serviceList.length - 4}
 												</span>
 											)}
@@ -552,7 +512,7 @@ export function TracesView({
 										</span>
 
 										{/* Timestamp with sub-second precision */}
-										<span className="w-24 shrink-0 text-right font-mono text-[10px] text-muted-foreground tabular-nums">
+										<span className="w-24 shrink-0 text-right font-mono text-2xs text-muted-foreground tabular-nums">
 											{formatTimestamp(t.first_ts)}
 										</span>
 									</button>
@@ -567,7 +527,7 @@ export function TracesView({
 												traceId: t.trace_id,
 											})
 										}
-										className={`mr-2 shrink-0 rounded p-0.5 transition-colors ${isBookmarked(`trace:${t.trace_id}`) ? "text-amber-400" : "text-transparent group-hover:text-muted-foreground hover:!text-amber-400"}`}
+										className={`mr-2 shrink-0 rounded p-0.5 transition-colors ${isBookmarked(`trace:${t.trace_id}`) ? "text-primary" : "text-transparent group-hover:text-muted-foreground hover:!text-primary"}`}
 									>
 										{isBookmarked(`trace:${t.trace_id}`) ? (
 											<BookmarkCheck className="h-3 w-3" />
@@ -584,7 +544,7 @@ export function TracesView({
 											<div className="min-w-0 flex-1">
 												{displayTraceSpans.length > 0 && (
 													<div>
-														<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+														<div className="mb-2 text-2xs font-medium text-muted-foreground uppercase tracking-wider">
 															Waterfall
 														</div>
 														<TraceWaterfall
@@ -609,7 +569,7 @@ export function TracesView({
 
 												{/* Trace logs */}
 												<div className={displayTraceSpans.length > 0 ? "mt-4" : ""}>
-													<div className="mb-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+													<div className="mb-2 text-2xs font-medium text-muted-foreground uppercase tracking-wider">
 														Logs ({displayTraceLogs.length})
 													</div>
 													<div className="rounded-md border border-border overflow-hidden divide-y divide-border/50">
@@ -634,20 +594,20 @@ export function TracesView({
 																	if (match) setSelectedSpan(match);
 																}}
 															>
-																<span className="shrink-0 text-muted-foreground tabular-nums font-mono text-[10px]">
+																<span className="shrink-0 text-muted-foreground tabular-nums font-mono text-2xs">
 																	{formatTimestamp(l.timestamp)}
 																</span>
 																<LevelBadge level={l.level} />
 																{l.service && (
 																	<span
-																		className={`shrink-0 text-[10px] ${getServiceColor(l.service).label}`}
+																		className={`shrink-0 text-2xs ${getServiceColor(l.service).label}`}
 																	>
 																		{l.service}
 																	</span>
 																)}
 																<span className="min-w-0 flex-1 truncate">{l.message}</span>
 																{l.span_id && (
-																	<span className="shrink-0 font-mono text-[9px] text-muted-foreground/40">
+																	<span className="shrink-0 font-mono text-2xs text-muted-foreground/40">
 																		{l.span_id.slice(0, 8)}
 																	</span>
 																)}

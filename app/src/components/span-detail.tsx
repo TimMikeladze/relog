@@ -2,6 +2,7 @@ import type { LogLevel, LogRecord, SpanBar } from "@/types";
 import { LevelBadge } from "@/components/level-badge";
 import { JsonViewer } from "@/components/json-viewer";
 import { getServiceColor } from "@/components/service-colors";
+import { formatClockTime as formatTime } from "@/lib/format-time";
 import { X } from "lucide-react";
 import { useMemo } from "react";
 
@@ -43,39 +44,14 @@ function parseMeta(meta: LogRecord["meta"]): Record<string, unknown> | null {
 	return meta;
 }
 
-function formatTime(ts: string): string {
-	try {
-		const d = new Date(ts);
-		return d.toLocaleTimeString("en-US", {
-			hour12: false,
-			fractionalSecondDigits: 3,
-		});
-	} catch {
-		return ts;
-	}
-}
-
 function formatDuration(ms: number): string {
 	return `${ms.toLocaleString()}ms`;
 }
 
-const DOT_COLOR_MAP: Record<string, string> = {
-	"bg-blue-400": "#60a5fa",
-	"bg-emerald-400": "#34d399",
-	"bg-violet-400": "#a78bfa",
-	"bg-amber-400": "#fbbf24",
-	"bg-cyan-400": "#22d3ee",
-	"bg-pink-400": "#f472b6",
-	"bg-lime-400": "#a3e635",
-	"bg-orange-400": "#fb923c",
-	"bg-teal-400": "#2dd4bf",
-	"bg-indigo-400": "#818cf8",
-};
-
 function SectionHeader({ children }: { children: React.ReactNode }) {
 	return (
 		<div className="pt-3 pb-1.5">
-			<span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+			<span className="text-2xs font-semibold text-muted-foreground uppercase tracking-wider">
 				{children}
 			</span>
 		</div>
@@ -93,7 +69,7 @@ function AttributeRow({
 }) {
 	return (
 		<div className="flex items-baseline justify-between gap-2 py-1">
-			<span className="shrink-0 text-[10px] text-muted-foreground/80 font-medium">{label}</span>
+			<span className="shrink-0 text-2xs text-muted-foreground/80 font-medium">{label}</span>
 			<span
 				className={`text-right text-xs truncate max-w-[200px] text-foreground/70 ${mono ? "font-mono" : ""}`}
 			>
@@ -153,7 +129,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 		};
 	}, [representativeMeta]);
 
-	const borderColor = DOT_COLOR_MAP[serviceColor.dot] ?? "#60a5fa";
+	const borderColor = serviceColor.hex;
 
 	const containerClass =
 		variant === "inline"
@@ -171,7 +147,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 					<span className={`h-2.5 w-2.5 shrink-0 rounded-full ${serviceColor.dot}`} />
 					<div className="min-w-0">
 						<span className="text-xs font-semibold truncate block">{span.service}</span>
-						<span className="text-[10px] text-muted-foreground truncate block">{span.name}</span>
+						<span className="text-2xs text-muted-foreground truncate block">{span.name}</span>
 					</div>
 				</div>
 				<button
@@ -206,9 +182,9 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 								<span
 									className={
 										otelFields.statusCode === 2
-											? "text-rose-500"
+											? "text-status-critical"
 											: otelFields.statusCode === 1
-												? "text-emerald-500"
+												? "text-status-good"
 												: "text-muted-foreground"
 									}
 								>
@@ -230,7 +206,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 							Span Attributes ({Object.keys(otelFields.spanAttrs).length})
 						</SectionHeader>
 						<div className="rounded-md border border-border/50 overflow-hidden">
-							<JsonViewer data={otelFields.spanAttrs} className="!p-2 !text-[10px]" />
+							<JsonViewer data={otelFields.spanAttrs} className="!p-2 !text-2xs" />
 						</div>
 					</>
 				)}
@@ -240,7 +216,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 					<>
 						<SectionHeader>Resource ({Object.keys(otelFields.resource).length})</SectionHeader>
 						<div className="rounded-md border border-border/50 overflow-hidden">
-							<JsonViewer data={otelFields.resource} className="!p-2 !text-[10px]" />
+							<JsonViewer data={otelFields.resource} className="!p-2 !text-2xs" />
 						</div>
 					</>
 				)}
@@ -259,7 +235,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 							return (
 								<div key={log.id} className="px-2.5 py-1.5 space-y-1">
 									<div className="flex items-center gap-2">
-										<span className="shrink-0 text-[10px] text-muted-foreground tabular-nums font-mono">
+										<span className="shrink-0 text-2xs text-muted-foreground tabular-nums font-mono">
 											{formatTime(log.timestamp)}
 										</span>
 										<LevelBadge level={log.level} />
@@ -267,7 +243,7 @@ export function SpanDetail({ span, logs, onClose, variant = "panel" }: SpanDetai
 									</div>
 									{meta && Object.keys(meta).length > 0 && (
 										<div className="pl-1">
-											<JsonViewer data={meta} className="!p-2 !text-[10px]" />
+											<JsonViewer data={meta} className="!p-2 !text-2xs" />
 										</div>
 									)}
 								</div>

@@ -137,7 +137,7 @@ export function DashboardEditor(props: DashboardEditorProps) {
 								onChange={(e) => setIcon(e.target.value)}
 								className="rounded-md border border-border bg-background px-2 py-1"
 							/>
-							<span className="text-[10px] text-muted-foreground">
+							<span className="text-2xs text-muted-foreground">
 								Any lucide.dev icon name. Unknown names fall back to a default.
 							</span>
 						</label>
@@ -160,7 +160,7 @@ export function DashboardEditor(props: DashboardEditorProps) {
 					<div className="mt-2 flex items-center justify-between">
 						<div>
 							<span className="font-medium">Variables</span>
-							<p className="text-[10px] text-muted-foreground">
+							<p className="text-2xs text-muted-foreground">
 								Each becomes a control in the toolbar and a <code>{"${name}"}</code> placeholder in
 								this dashboard's widget SQL.
 								<code>{"${from}"}</code> and <code>{"${to}"}</code> always exist.
@@ -178,7 +178,7 @@ export function DashboardEditor(props: DashboardEditorProps) {
 					</div>
 
 					{variables.length === 0 && (
-						<p className="rounded-md border border-dashed border-border p-3 text-center text-[11px] text-muted-foreground">
+						<p className="rounded-md border border-dashed border-border p-3 text-center text-2xs text-muted-foreground">
 							No variables. Widgets on this dashboard can still use <code>{"${from}"}</code> and{" "}
 							<code>{"${to}"}</code>.
 						</p>
@@ -270,7 +270,7 @@ function VariableRow({
 				</button>
 			</div>
 
-			{type && <span className="text-[10px] text-muted-foreground">{type.hint}</span>}
+			{type && <span className="text-2xs text-muted-foreground">{type.hint}</span>}
 
 			{variable.type === "select" && (
 				<>
@@ -281,9 +281,9 @@ function VariableRow({
 							placeholder="SELECT DISTINCT service AS value FROM logs ORDER BY value"
 							onChange={(e) => onChange({ optionsSql: e.target.value || undefined })}
 							rows={2}
-							className="rounded-md border border-border bg-background px-2 py-1 font-mono text-[11px]"
+							className="rounded-md border border-border bg-background px-2 py-1 font-mono text-2xs"
 						/>
-						<span className="text-[10px] text-muted-foreground">
+						<span className="text-2xs text-muted-foreground">
 							Returns a <code>value</code> column, optionally a <code>label</code> column. Leave
 							empty to use the fixed list below.
 						</span>

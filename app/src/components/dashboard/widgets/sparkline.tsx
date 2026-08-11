@@ -1,6 +1,7 @@
 import type { SparklineOptions } from "@/types";
 import { Line, LineChart, ResponsiveContainer } from "recharts";
 import { WidgetError } from "../widget-renderer";
+import { seriesColor } from "./series-colors";
 
 export function SparklineWidget({
 	rows,
@@ -19,7 +20,7 @@ export function SparklineWidget({
 					<Line
 						type="monotone"
 						dataKey={options.yField}
-						stroke="#60a5fa"
+						stroke={seriesColor(0)}
 						strokeWidth={2}
 						dot={false}
 						isAnimationActive={false}

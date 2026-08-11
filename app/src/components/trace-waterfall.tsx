@@ -1,6 +1,7 @@
 import { Fragment, useState, useCallback } from "react";
 import { getServiceColor } from "@/components/service-colors";
-import type { SpanBar } from "@/types";
+import { LevelBadge } from "@/components/level-badge";
+import type { LogLevel, SpanBar } from "@/types";
 
 interface TraceWaterfallProps {
 	spans: SpanBar[];
@@ -45,22 +46,24 @@ const KIND_ABBREV: Record<string, string> = {
 	unspecified: "",
 };
 
-const KIND_COLOR: Record<string, string> = {
-	server: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-	client: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
-	producer: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
-	consumer: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-	internal: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400",
+/**
+ * Span kind is a categorical dimension, so it draws from the categorical slots
+ * rather than inventing hues. It notably must not reuse the status green:
+ * `server` is not "healthy", and a reserved status colour standing in for a
+ * category is how a badge starts implying something it doesn't mean.
+ */
+const KIND_SLOT: Record<string, string> = {
+	server: "var(--series-1)",
+	client: "var(--series-3)",
+	producer: "var(--series-7)",
+	consumer: "var(--series-2)",
+	internal: "var(--series-overflow)",
 };
 
-const LEVEL_BADGE_COLORS: Record<string, string> = {
-	trace: "bg-zinc-500/15 text-zinc-500 dark:bg-zinc-400/15 dark:text-zinc-400",
-	debug: "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-400",
-	info: "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-400",
-	warn: "bg-amber-500/15 text-amber-600 dark:bg-amber-300/15 dark:text-amber-300",
-	error: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-400",
-	fatal: "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-400",
-};
+function kindStyle(kind: string): React.CSSProperties {
+	const color = KIND_SLOT[kind] ?? "var(--series-overflow)";
+	return { color, background: `color-mix(in oklch, ${color} 15%, transparent)` };
+}
 
 interface TooltipState {
 	span: SpanBar;
@@ -69,7 +72,6 @@ interface TooltipState {
 }
 
 function SpanTooltip({ span, x, y }: TooltipState) {
-	const badgeColor = LEVEL_BADGE_COLORS[span.level] ?? LEVEL_BADGE_COLORS.info;
 	// Clamp to stay within viewport
 	const left = Math.min(x + 12, window.innerWidth - 260);
 	const top = Math.min(Math.max(y - 8, 8), window.innerHeight - 100);
@@ -80,25 +82,26 @@ function SpanTooltip({ span, x, y }: TooltipState) {
 		>
 			<div className="mb-1 font-medium text-foreground">{span.service}</div>
 			<div className="mb-1.5 text-muted-foreground">{span.name}</div>
-			<div className="flex items-center gap-3 text-[10px]">
+			<div className="flex items-center gap-3 text-2xs">
 				<span className="tabular-nums text-foreground">{formatDuration(span.duration)}</span>
 				<span className="tabular-nums text-muted-foreground">+{formatDuration(span.start)}</span>
-				<span
-					className={`inline-flex rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${badgeColor}`}
-				>
-					{span.level}
-				</span>
+				<LevelBadge level={span.level as LogLevel} />
 				{span.kind && span.kind !== "unspecified" && (
 					<span
-						className={`inline-flex rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
-							KIND_COLOR[span.kind] ?? "bg-muted text-muted-foreground"
-						}`}
+						className="inline-flex rounded px-1 py-0.5 text-2xs font-semibold uppercase tracking-wider"
+						style={kindStyle(span.kind)}
 					>
 						{KIND_ABBREV[span.kind] ?? span.kind}
 					</span>
 				)}
 				{span.statusCode === 2 && (
-					<span className="inline-flex rounded bg-rose-500/15 px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+					<span
+						className="inline-flex rounded px-1 py-0.5 text-2xs font-semibold uppercase tracking-wider"
+						style={{
+							color: "var(--status-critical)",
+							background: "color-mix(in oklch, var(--status-critical) 15%, transparent)",
+						}}
+					>
 						Err
 					</span>
 				)}
@@ -271,7 +274,7 @@ export function TraceWaterfall({
 							return (
 								<span
 									key={ms}
-									className="absolute bottom-0 text-[9px] tabular-nums text-muted-foreground"
+									className="absolute bottom-0 text-2xs tabular-nums text-muted-foreground"
 									style={{ left: `${leftPct}%`, transform: "translateX(-50%)" }}
 								>
 									{formatDuration(ms)}
@@ -336,9 +339,7 @@ export function TraceWaterfall({
 											isLastChild={isLastChild}
 											parentIndex={parentIndex}
 										/>
-										<span
-											className={`min-w-0 truncate text-[10px] font-medium pr-2 ${color.label}`}
-										>
+										<span className={`min-w-0 truncate text-2xs font-medium pr-2 ${color.label}`}>
 											{span.service}
 										</span>
 									</div>
@@ -357,7 +358,7 @@ export function TraceWaterfall({
 											onMouseLeave={handleMouseLeave}
 										>
 											{showTextInside && (
-												<span className="truncate text-[9px] font-medium text-white">
+												<span className="truncate text-2xs font-medium text-white">
 													{span.name}
 												</span>
 											)}
@@ -366,7 +367,7 @@ export function TraceWaterfall({
 										{/* Span name outside bar when bar is too narrow */}
 										{!showTextInside && (
 											<span
-												className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground"
+												className="pointer-events-none absolute top-1/2 -translate-y-1/2 text-2xs text-muted-foreground"
 												style={{
 													left: `calc(${leftPct + widthPct}% + 4px)`,
 													maxWidth: `calc(${100 - leftPct - widthPct}% - 8px)`,
@@ -379,7 +380,7 @@ export function TraceWaterfall({
 
 									{/* Duration label */}
 									<div className="shrink-0 text-right" style={{ width: 60 }}>
-										<span className="text-[10px] tabular-nums text-muted-foreground">
+										<span className="text-2xs tabular-nums text-muted-foreground">
 											{formatDuration(span.duration)}
 										</span>
 									</div>

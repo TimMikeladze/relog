@@ -84,7 +84,7 @@ export function DashboardPicker({
 									<span className="min-w-0 flex-1">
 										<span className="block truncate text-xs font-medium">{d.name}</span>
 										{d.description && (
-											<span className="block truncate text-[10px] text-muted-foreground">
+											<span className="block truncate text-2xs text-muted-foreground">
 												{d.description}
 											</span>
 										)}

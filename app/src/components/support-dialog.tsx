@@ -121,7 +121,7 @@ export function SupportDialog({ onClose }: { onClose: () => void }) {
 	};
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+		<div className="scrim z-50 flex items-center justify-center">
 			<div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg max-h-[85vh] overflow-y-auto">
 				<div className="flex items-center justify-between mb-2">
 					<h2 className="text-sm font-semibold">support</h2>
@@ -181,7 +181,7 @@ export function SupportDialog({ onClose }: { onClose: () => void }) {
 								className="shrink-0 rounded p-1 cursor-pointer text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 							>
 								{copied ? (
-									<Check className="h-3.5 w-3.5 text-emerald-400" />
+									<Check className="h-3.5 w-3.5 text-status-good" />
 								) : (
 									<Copy className="h-3.5 w-3.5" />
 								)}

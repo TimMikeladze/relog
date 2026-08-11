@@ -7,8 +7,8 @@ import { X, Copy, Route, Rows3, Check, Circle, Bookmark, BookmarkCheck } from "l
 import { apiGet } from "@/api/client";
 import type { LogsResponse } from "@/types";
 import { useBookmarks } from "@/hooks/use-bookmarks";
-
-const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+import { formatFullTimestamp } from "@/lib/format-time";
+import { cn } from "@/lib/utils";
 
 function parseMeta(meta: LogRecord["meta"]): Record<string, unknown> | null {
 	if (!meta) return null;
@@ -20,17 +20,6 @@ function parseMeta(meta: LogRecord["meta"]): Record<string, unknown> | null {
 		}
 	}
 	return meta;
-}
-
-function formatFullTimestamp(ts: string): string {
-	try {
-		const d = new Date(ts);
-		const time = d.toLocaleTimeString("en-US", { hour12: false, fractionalSecondDigits: 2 });
-		const tz = d.toLocaleTimeString("en-US", { timeZoneName: "shortOffset" }).split(" ").pop();
-		return `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, "0")} ${time} ${tz}`;
-	} catch {
-		return ts;
-	}
 }
 
 function DetailField({
@@ -45,7 +34,7 @@ function DetailField({
 	if (value === null || value === undefined || value === "") return null;
 	return (
 		<div className="flex items-baseline justify-between gap-3 py-1.5">
-			<span className="shrink-0 text-[11px] text-muted-foreground/80 font-medium">{label}</span>
+			<span className="shrink-0 text-2xs text-muted-foreground/80 font-medium">{label}</span>
 			{onClick ? (
 				<button
 					type="button"
@@ -76,18 +65,55 @@ function SectionHeader({
 	if (inline) {
 		return (
 			<div className="pt-4 pb-2.5 flex items-center gap-2.5 first:pt-2">
-				<div className="h-px flex-1 bg-gradient-to-r from-border/50 via-border/30 to-transparent" />
-				<span className="text-[9px] font-semibold text-muted-foreground/80 uppercase tracking-widest">
+				<div className="h-px flex-1 bg-border" />
+				<span className="text-2xs font-semibold text-muted-foreground/80 uppercase tracking-widest">
 					{children}
 				</span>
-				<div className="h-px flex-1 bg-gradient-to-l from-border/50 via-border/30 to-transparent" />
+				<div className="h-px flex-1 bg-border" />
 			</div>
 		);
 	}
 	return (
 		<div className="pt-4 pb-1.5">
-			<span className="text-[11px] font-semibold text-foreground">{children}</span>
+			<span className="text-2xs font-semibold text-foreground">{children}</span>
 		</div>
+	);
+}
+
+/**
+ * One definition for the four footer actions. The class string was copy-pasted
+ * per button, and none of them set `whitespace-nowrap`, so "Copy JSON" wrapped
+ * onto a second line as soon as the panel got narrow.
+ */
+function FooterButton({
+	onClick,
+	icon: Icon,
+	disabled,
+	active,
+	activeClassName = "bg-primary/20 text-primary hover:bg-primary/25",
+	children,
+}: {
+	onClick: () => void;
+	icon: React.ComponentType<{ className?: string }>;
+	disabled?: boolean;
+	active?: boolean;
+	activeClassName?: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			disabled={disabled}
+			className={cn(
+				"flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-2xs font-medium",
+				"disabled:cursor-not-allowed disabled:opacity-40",
+				active ? activeClassName : "text-muted-foreground hover:bg-accent hover:text-foreground",
+			)}
+		>
+			<Icon className="size-3" />
+			{children}
+		</button>
 	);
 }
 
@@ -153,15 +179,13 @@ export function LogDetailPanel({
 
 	const inlineClass =
 		variant === "inline"
-			? "flex w-full flex-col border border-border/50 bg-gradient-to-br from-card via-card/98 to-card/95 rounded-xl shadow-md backdrop-blur-md log-detail-inline"
+			? "flex w-full flex-col rounded-xl border border-border bg-card shadow-overlay log-detail-inline"
 			: "flex h-full w-full flex-col border-l border-border bg-card";
 
 	return (
 		<div className={inlineClass}>
 			{/* Header */}
-			<div
-				className={`flex items-center justify-between px-4 py-3.5 ${variant === "inline" ? "bg-gradient-to-r from-muted/30 via-muted/10 to-transparent border-b border-border/30" : "border-b border-border"}`}
-			>
+			<div className={`flex items-center justify-between px-4 py-3.5 ${"border-b border-border"}`}>
 				<div className="flex items-center gap-2 min-w-0">
 					{hasHttp ? (
 						<span
@@ -188,13 +212,12 @@ export function LogDetailPanel({
 				)}
 			</div>
 
-			<div
-				className={`flex-1 overflow-y-auto px-4 pb-4 pt-1 ${variant === "inline" ? "scrollbar-thin scrollbar-thumb-border/40 scrollbar-track-transparent hover:scrollbar-thumb-border/60" : ""}`}
-			>
+			{/* Scrollbars are styled globally now. The `scrollbar-*` utilities
+			    that used to be here come from a Tailwind plugin this app doesn't
+			    install, so they never rendered anything. */}
+			<div className="flex-1 overflow-y-auto px-4 pb-4 pt-1">
 				{/* Event timeline */}
-				<div
-					className={`py-3 space-y-2 ${variant === "inline" ? "bg-gradient-to-r from-muted/20 to-transparent rounded-lg px-3 py-3" : ""}`}
-				>
+				<div className={"space-y-2 py-3"}>
 					<div className="flex items-center gap-2">
 						<Circle
 							className={`h-2.5 w-2.5 shrink-0 ${variant === "inline" ? "fill-primary text-primary" : "text-muted-foreground"}`}
@@ -205,7 +228,7 @@ export function LogDetailPanel({
 							Log recorded
 						</span>
 						<span
-							className={`ml-auto text-[10px] ${variant === "inline" ? "text-muted-foreground/80" : "text-muted-foreground"} tabular-nums font-mono`}
+							className={`ml-auto text-2xs ${variant === "inline" ? "text-muted-foreground/80" : "text-muted-foreground"} tabular-nums font-mono`}
 						>
 							{formatFullTimestamp(log.timestamp)}
 						</span>
@@ -225,12 +248,8 @@ export function LogDetailPanel({
 
 					{httpMeta?.duration != null && (
 						<div className="flex items-center gap-2">
-							<Circle
-								className={`h-2.5 w-2.5 shrink-0 ${variant === "inline" ? "fill-emerald-500 text-emerald-500" : "fill-emerald-400 text-emerald-400"}`}
-							/>
-							<span
-								className={`text-xs font-medium ${variant === "inline" ? "text-emerald-600 dark:text-emerald-400" : ""}`}
-							>
+							<Circle className={`h-2.5 w-2.5 shrink-0 ${"fill-status-good text-status-good"}`} />
+							<span className={"text-xs font-medium"}>
 								Completed in {Math.round(httpMeta.duration)}ms
 							</span>
 						</div>
@@ -243,10 +262,10 @@ export function LogDetailPanel({
 				>
 					<div className="flex items-center gap-2">
 						<LevelBadge level={log.level} />
-						<span className="text-[10px] text-muted-foreground">#{log.id}</span>
+						<span className="text-2xs text-muted-foreground">#{log.id}</span>
 					</div>
 					<p
-						className={`rounded-lg text-xs whitespace-pre-wrap break-all leading-relaxed font-mono ${variant === "inline" ? "bg-gradient-to-b from-muted/40 to-muted/25 border border-border/25 p-3 hover:from-muted/45 hover:to-muted/30 transition-all" : "bg-muted/50 p-2.5"}`}
+						className={`rounded-lg text-xs whitespace-pre-wrap break-all leading-relaxed font-mono ${"bg-muted p-2.5"}`}
 					>
 						{log.message}
 					</p>
@@ -256,9 +275,7 @@ export function LogDetailPanel({
 				{(log.service || log.host || log.pid) && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Identification</SectionHeader>
-						<div
-							className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 divide-y divide-border/15 px-3 py-2" : "border border-border/50 divide-y divide-border/30 px-3"}`}
-						>
+						<div className={`rounded-lg ${"divide-y divide-border/50 border border-border px-3"}`}>
 							<DetailField label="Service" value={log.service} />
 							<DetailField label="Host" value={log.host} />
 							<DetailField label="PID" value={log.pid} />
@@ -270,9 +287,7 @@ export function LogDetailPanel({
 				{(log.trace_id || log.span_id) && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Trace</SectionHeader>
-						<div
-							className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 px-3 py-2" : "border border-border/50 px-3"}`}
-						>
+						<div className={`rounded-lg ${"border border-border px-3"}`}>
 							<DetailField
 								label="Trace ID"
 								value={log.trace_id}
@@ -289,9 +304,7 @@ export function LogDetailPanel({
 				{(log.project || log.branch || log.version || log.deployment_id) && (
 					<>
 						<SectionHeader inline={variant === "inline"}>Deployment Information</SectionHeader>
-						<div
-							className={`rounded-lg ${variant === "inline" ? "bg-gradient-to-br from-muted/20 to-muted/10 border border-border/25 px-3 py-2" : "border border-border/50 px-3"}`}
-						>
+						<div className={`rounded-lg ${"border border-border px-3"}`}>
 							<DetailField label="Project" value={log.project} />
 							<DetailField label="Branch" value={log.branch} />
 							<DetailField label="Version" value={log.version} />
@@ -324,31 +337,17 @@ export function LogDetailPanel({
 			</div>
 
 			{/* Footer actions */}
-			<div
-				className={`flex items-center gap-1.5 px-3 py-3 ${variant === "inline" ? "border-t border-border/30 bg-gradient-to-t from-muted/15 via-muted/5 to-transparent" : "border-t border-border"}`}
-			>
-				<button
-					type="button"
-					onClick={loadContext}
-					disabled={loadingContext}
-					className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-medium transition-all active:scale-95 ${variant === "inline" ? "text-muted-foreground/80 hover:bg-muted/50 hover:text-foreground disabled:opacity-30" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground disabled:opacity-40"} disabled:cursor-not-allowed`}
-				>
-					<Rows3 className="h-3 w-3" />
+			<div className="flex items-center gap-1 overflow-x-auto border-t border-border px-2 py-2.5">
+				<FooterButton onClick={loadContext} disabled={loadingContext} icon={Rows3}>
 					Context
-				</button>
+				</FooterButton>
 				{log.trace_id && onNavigateTrace && (
-					<button
-						type="button"
-						onClick={() => onNavigateTrace(log.trace_id!)}
-						className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-medium transition-all active:scale-95 ${variant === "inline" ? "text-muted-foreground/80 hover:bg-muted/50 hover:text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"}`}
-					>
-						<Route className="h-3 w-3" />
+					<FooterButton onClick={() => onNavigateTrace(log.trace_id!)} icon={Route}>
 						Trace
-					</button>
+					</FooterButton>
 				)}
 				<div className="flex-1" />
-				<button
-					type="button"
+				<FooterButton
 					onClick={() =>
 						toggle({
 							type: "log",
@@ -359,31 +358,19 @@ export function LogDetailPanel({
 							logRecord: log,
 						})
 					}
-					className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition-all active:scale-95 ${
-						isBookmarked(bmId)
-							? "bg-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500/25"
-							: `${variant === "inline" ? "text-muted-foreground/80 hover:bg-muted/50 hover:text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"}`
-					}`}
+					icon={isBookmarked(bmId) ? BookmarkCheck : Bookmark}
+					active={isBookmarked(bmId)}
 				>
-					{isBookmarked(bmId) ? (
-						<BookmarkCheck className="h-3 w-3" />
-					) : (
-						<Bookmark className="h-3 w-3" />
-					)}
-					{isBookmarked(bmId) ? "Bookmarked" : "Bookmark"}
-				</button>
-				<button
-					type="button"
+					{isBookmarked(bmId) ? "Saved" : "Bookmark"}
+				</FooterButton>
+				<FooterButton
 					onClick={copyAsJson}
-					className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition-all active:scale-95 ${
-						copied
-							? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
-							: `${variant === "inline" ? "text-muted-foreground/80 hover:bg-muted/50 hover:text-foreground" : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"}`
-					}`}
+					icon={copied ? Check : Copy}
+					active={copied}
+					activeClassName="bg-status-good/20 text-status-good"
 				>
-					{copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-					{copied ? "Copied" : "Copy JSON"}
-				</button>
+					{copied ? "Copied" : "Copy"}
+				</FooterButton>
 			</div>
 		</div>
 	);
