@@ -953,6 +953,8 @@ export default relogMiddleware(myMiddleware);
 
 relog.dev provides a browser-safe logger that sends logs through a proxy endpoint on your own server. This keeps the relog server URL and API keys hidden from the client and avoids CORS issues.
 
+This is the crash-reporting half of client instrumentation — uncaught errors, promise rejections, and optionally `console` output. For pageviews and conversions, use [web analytics](#web-analytics) instead; the two are independent and share only the database.
+
 ### Zero-Config Usage
 
 ```typescript
@@ -1209,6 +1211,15 @@ Dashboards, widgets, and aggregates persist as JSON under `~/.relog`. Point a se
 
 relog can double as a self-hosted, cookieless web-analytics service — the Umami/Plausible shape — reusing the same SQLite file, auth, retention, SQL endpoint, and MCP server as the logs.
 
+Instrumenting a website uses two separate pieces, and which one you want depends on what you are measuring:
+
+| You want                                                | Use                                            | Integration                                       |
+| ------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
+| Pageviews, referrers, UTMs, funnels, conversions         | Web analytics (this section)                   | One `<script>` tag, no build step, no server code |
+| Uncaught errors, promise rejections, `console` output    | [Browser logging](#browser-logging)            | `relog.dev/browser` plus a proxy route on your app |
+
+They are independent — run either alone — but they write to the same database, so [one SQL query can span both](#joining-traffic-against-errors).
+
 Enable it explicitly:
 
 ```bash
@@ -1326,6 +1337,51 @@ ORDER BY r.bucket DESC
 ```
 
 An agent with the MCP server attached can ask "why did signups drop Tuesday" and get both the funnel numbers and the errors behind them.
+
+### Correlating a session with its crashes
+
+The query above joins on time, which is enough for "did errors spike when traffic did". Joining a specific crash to a specific visit needs a shared id, and by default there isn't one: the tracker's `session_id` is a random per-tab value in `sessionStorage.__relog_sid`, the browser logger's `meta.session_id` is a different random value in `sessionStorage.__relog_session_id`, and the analytics `visitor_id` is derived server-side and never reaches the client at all.
+
+To bridge them, seed the tracker's key yourself before the tracker loads, and pass the same id to the logger. `sessionId()` reads the existing key and only generates one when it is absent, so the seeded value wins:
+
+```html
+<script>
+	window.__sid =
+		sessionStorage.getItem("__relog_sid") || crypto.randomUUID().replace(/-/g, "").slice(0, 24);
+	sessionStorage.setItem("__relog_sid", window.__sid);
+</script>
+<script defer src="https://relog.example.com/script.js" data-site="my-site"></script>
+```
+
+```typescript
+const log = createLogger({
+	project: "my-app",
+	service: "web",
+	meta: { analytics_session: window.__sid },
+});
+```
+
+Bound `meta` is merged into every entry, including the ones `captureErrors` emits from `window.onerror`, so uncaught crashes carry the id without any per-call work. `/collect` accepts the client's `session_id` as given (capped at 64 chars) — unlike `visitor_id`, which is always ignored. Then:
+
+```sql
+SELECT
+  s.session_id,
+  s.entry_path,
+  s.country,
+  s.browser,
+  COUNT(l.id) AS errors
+FROM sessions s
+JOIN logs l
+  ON json_extract_string(l.meta, '$.analytics_session') = s.session_id
+ AND l.level = 'error'
+WHERE s.site = 'my-site' AND s.started_at >= ?
+GROUP BY s.session_id, s.entry_path, s.country, s.browser
+ORDER BY errors DESC
+```
+
+`/query` runs on DuckDB, so pulling a value out of the `logs.meta` JSON column uses `json_extract_string` (plain `json_extract` returns JSON, which won't compare equal to a `TEXT` column) and every non-aggregated column has to appear in the `GROUP BY`.
+
+Because the id is a per-tab random value with no cross-session persistence, this correlates a crash with the visit it happened in — not a person across visits. That is deliberate: a durable client id would undo the cookieless property the rest of the analytics pipeline is built around.
 
 ### Bots and Do Not Track
 

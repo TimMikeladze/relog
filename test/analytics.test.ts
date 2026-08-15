@@ -700,6 +700,21 @@ describe("analytics HTTP endpoints", () => {
 		});
 	});
 
+	// The documented bridge between analytics and browser logs seeds
+	// sessionStorage.__relog_sid and joins on it, which only works because the
+	// client's session id — unlike its visitor id — is taken at face value.
+	test("persist the client-supplied session id verbatim", async () => {
+		await withServer({ enabled: true }, async (base, db) => {
+			await collect(base, pageview({ session_id: "seeded-abc123" }));
+			const events = db.analytics.select<{ session_id: string }>("SELECT session_id FROM events");
+			expect(events[0]!.session_id).toBe("seeded-abc123");
+			const sessions = db.analytics.select<{ session_id: string }>(
+				"SELECT session_id FROM sessions",
+			);
+			expect(sessions[0]!.session_id).toBe("seeded-abc123");
+		});
+	});
+
 	test("drop bots by default and count them when asked", async () => {
 		await withServer({ enabled: true }, async (base, db) => {
 			const res = await collect(base, pageview(), { "User-Agent": "Googlebot/2.1" });
