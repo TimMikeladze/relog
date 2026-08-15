@@ -96,7 +96,7 @@
 		"oxfmt": "^0.63.0",
 		"oxlint": "^1.78.0",
 		"simple-git-hooks": "^2.13.1",
-		"typescript": "^7.0.2"
+		"typescript": "^6.0.3"
 	},
 	"simple-git-hooks": {
 		"pre-commit": "bun run lint && bun run format && bun run type-check"
