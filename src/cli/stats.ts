@@ -1,6 +1,6 @@
 import { type Command, command, string } from "@drizzle-team/brocli";
 import pc from "picocolors";
-import { authHeaders, resolveAuthHeader } from "./shared.ts";
+import { apiFetch, authHeaders, resolveAuthHeader } from "./shared.ts";
 
 export const statsCommand: Command = command({
 	name: "stats",
@@ -10,7 +10,7 @@ export const statsCommand: Command = command({
 		auth: string().desc("Bearer token (API key). Also reads RELOG_AUTH env"),
 	},
 	handler: async (opts) => {
-		const healthRes = await fetch(`${opts.url}/health`, {
+		const healthRes = await apiFetch(`${opts.url}/health`, {
 			headers: resolveAuthHeader(opts.auth),
 		});
 		if (!healthRes.ok) {
@@ -25,7 +25,7 @@ export const statsCommand: Command = command({
 			log_count: number;
 		};
 
-		const statsRes = await fetch(`${opts.url}/query`, {
+		const statsRes = await apiFetch(`${opts.url}/query`, {
 			method: "POST",
 			headers: authHeaders(opts.auth),
 			body: JSON.stringify({

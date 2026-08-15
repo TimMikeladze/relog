@@ -1,5 +1,5 @@
 import { type Command, boolean, command, number, string } from "@drizzle-team/brocli";
-import { authHeaders } from "./shared.ts";
+import { apiFetch, authHeaders } from "./shared.ts";
 
 export const pruneCommand: Command = command({
 	name: "prune",
@@ -48,7 +48,7 @@ export const pruneCommand: Command = command({
 			}
 		}
 
-		const response = await fetch(`${opts.url}/prune`, {
+		const response = await apiFetch(`${opts.url}/prune`, {
 			method: "POST",
 			headers: authHeaders(opts.auth),
 			body: JSON.stringify({ before: beforeMs }),

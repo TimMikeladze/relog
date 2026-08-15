@@ -318,7 +318,31 @@ await import(${src("cli.ts")});
 		fail(`build failed for ${name}`);
 	}
 
+	await adhocSign(name, outfile);
+
 	console.log(`  -> ${relative(ROOT, outfile)} (${human(statSync(outfile).size)})`);
+}
+
+/**
+ * Re-sign macOS output, which `codesign -v` otherwise reports as "code or
+ * signature have been modified": compiling appends the standalone payload
+ * after Bun has already signed the executable.
+ *
+ * An arm64 binary in that state is at the kernel's mercy — it usually runs,
+ * but it can also be SIGKILLed before `main` (exit 137, no diagnostic), which
+ * reads as a corrupt download rather than a signing problem. An ad-hoc
+ * signature costs nothing here and makes the outcome deterministic.
+ *
+ * codesign only exists on macOS, so a Mac binary cross-built elsewhere keeps
+ * the invalid signature and has to be signed on arrival.
+ */
+async function adhocSign(name: string, outfile: string): Promise<void> {
+	if (!name.startsWith("darwin")) return;
+	if (process.platform !== "darwin") {
+		console.log("  ! unsigned (needs macOS) — run `codesign -s - --force` before distributing");
+		return;
+	}
+	await sh(["codesign", "--sign", "-", "--force", outfile], ROOT);
 }
 
 // --- main ---

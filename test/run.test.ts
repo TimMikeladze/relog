@@ -769,3 +769,114 @@ describe("executeWrap integration", () => {
 		expect(exitCode).toBe(0);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Integration: server-less CLI behaviour
+// ---------------------------------------------------------------------------
+
+// Port 1 is privileged and never listening, so the connection is refused
+// immediately rather than hanging until a timeout.
+const DEAD_URL = "http://127.0.0.1:1";
+
+describe("unreachable server diagnostics", () => {
+	// Bun raises the same opaque "Unable to connect" for every transport
+	// failure. On its own it reads like a network fault, so each one-shot
+	// command has to name the address it tried and how to bring a server up.
+	for (const args of [
+		["stats"],
+		["query", "--sql", "select 1"],
+		["search"],
+		["send", "--message", "hi"],
+	]) {
+		test(`${args[0]} names the address and how to recover`, async () => {
+			const proc = Bun.spawn(["bun", "src/cli.ts", ...args, "--url", DEAD_URL], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+
+			const stderr = await new Response(proc.stderr).text();
+			const exitCode = await proc.exited;
+
+			expect(stderr).toContain(DEAD_URL);
+			expect(stderr).toContain("relog start");
+			expect(exitCode).toBe(1);
+		});
+	}
+});
+
+describe("query --db", () => {
+	async function seedDb(path: string): Promise<void> {
+		const { RelogDatabase } = await import("../src/db/database.ts");
+		const db = new RelogDatabase(path);
+		db.insert([{ level: "info", message: "from a file" }]);
+		db.close();
+	}
+
+	test("reads a database file with no server running", async () => {
+		const path = `test-query-db-${Date.now()}.db`;
+		await seedDb(path);
+
+		try {
+			const proc = Bun.spawn(
+				[
+					"bun",
+					"src/cli.ts",
+					"query",
+					"--db",
+					path,
+					"--sql",
+					"select message from logs",
+					"--format",
+					"json",
+				],
+				{ stdout: "pipe", stderr: "pipe" },
+			);
+
+			const stdout = await new Response(proc.stdout).text();
+			const exitCode = await proc.exited;
+
+			expect(exitCode).toBe(0);
+			expect(JSON.parse(stdout)).toEqual([{ message: "from a file" }]);
+		} finally {
+			await Bun.file(path)
+				.delete()
+				.catch(() => {});
+		}
+	});
+
+	test("still refuses writes", async () => {
+		const path = `test-query-db-ro-${Date.now()}.db`;
+		await seedDb(path);
+
+		try {
+			const proc = Bun.spawn(
+				["bun", "src/cli.ts", "query", "--db", path, "--sql", "delete from logs"],
+				{ stdout: "pipe", stderr: "pipe" },
+			);
+
+			const stderr = await new Response(proc.stderr).text();
+			const exitCode = await proc.exited;
+
+			expect(stderr).toContain("rejected");
+			expect(exitCode).toBe(1);
+		} finally {
+			await Bun.file(path)
+				.delete()
+				.catch(() => {});
+		}
+	});
+
+	test("reports an unopenable path rather than a stack trace", async () => {
+		const proc = Bun.spawn(
+			["bun", "src/cli.ts", "query", "--db", "does-not-exist.db", "--sql", "select 1"],
+			{ stdout: "pipe", stderr: "pipe" },
+		);
+
+		const stderr = await new Response(proc.stderr).text();
+		const exitCode = await proc.exited;
+
+		expect(stderr).toContain("Cannot open");
+		expect(stderr).toContain("does-not-exist.db");
+		expect(exitCode).toBe(1);
+	});
+});

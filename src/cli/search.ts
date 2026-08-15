@@ -1,7 +1,7 @@
 import { type Command, command, number, string } from "@drizzle-team/brocli";
 import { printLogRecord } from "../console.ts";
 import type { LogRecord } from "../types.ts";
-import { buildParams, resolveAuthHeader } from "./shared.ts";
+import { apiFetch, buildParams, resolveAuthHeader } from "./shared.ts";
 
 export const searchCommand: Command = command({
 	name: "search",
@@ -34,7 +34,7 @@ export const searchCommand: Command = command({
 			limit: opts.limit,
 		});
 
-		const response = await fetch(`${opts.url}/logs?${params}`, {
+		const response = await apiFetch(`${opts.url}/logs?${params}`, {
 			headers: resolveAuthHeader(opts.auth),
 		});
 

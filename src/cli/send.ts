@@ -1,5 +1,5 @@
 import { type Command, command, number, string } from "@drizzle-team/brocli";
-import { authHeaders } from "./shared.ts";
+import { apiFetch, authHeaders } from "./shared.ts";
 
 export const sendCommand: Command = command({
 	name: "send",
@@ -41,7 +41,7 @@ export const sendCommand: Command = command({
 			}
 		}
 
-		const response = await fetch(`${opts.url}/ingest`, {
+		const response = await apiFetch(`${opts.url}/ingest`, {
 			method: "POST",
 			headers: authHeaders(opts.auth),
 			body: JSON.stringify(entry),

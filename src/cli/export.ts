@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { type Command, command, number, string } from "@drizzle-team/brocli";
-import { buildParams, escapeCsv, resolveAuthHeader } from "./shared.ts";
+import { apiFetch, buildParams, escapeCsv, resolveAuthHeader } from "./shared.ts";
 
 export const exportCommand: Command = command({
 	name: "export",
@@ -29,7 +29,7 @@ export const exportCommand: Command = command({
 			limit: opts.limit,
 		});
 
-		const response = await fetch(`${opts.url}/logs?${params}`, {
+		const response = await apiFetch(`${opts.url}/logs?${params}`, {
 			headers: resolveAuthHeader(opts.auth),
 		});
 

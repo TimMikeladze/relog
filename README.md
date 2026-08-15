@@ -730,17 +730,27 @@ relog.dev search --grep "timeout" --level error --from 1h --project my-app --bra
 
 ### `relog.dev query`
 
-Run read-only SQL directly against the log database. Only `SELECT`, `EXPLAIN`, and safe `PRAGMA` statements are allowed.
+Run read-only SQL against the log database. Only `SELECT`, `EXPLAIN`, and safe `PRAGMA` statements are allowed.
+
+Queries go to a running server by default. Pass `--db` to read a database file
+in place instead, which needs no server:
 
 ```bash
 relog.dev query --sql "SELECT level, COUNT(*) as count FROM logs GROUP BY level"
 relog.dev query --sql "SELECT * FROM logs WHERE service = 'api' ORDER BY id DESC LIMIT 10" --format json
+relog.dev query --db ~/.relog/relog.db --sql "SELECT COUNT(*) FROM logs"
 ```
 
-| Option     | Default    | Description                              |
-| ---------- | ---------- | ---------------------------------------- |
-| `--sql`    | (required) | SQL query to execute                     |
-| `--format` | `table`    | Output format: `table`, `json`, or `csv` |
+| Option     | Default                 | Description                                        |
+| ---------- | ----------------------- | -------------------------------------------------- |
+| `--sql`    | (required)              | SQL query to execute                               |
+| `--url`    | `http://localhost:3485` | Server to query                                    |
+| `--db`     | —                       | Read this database file directly, ignoring `--url` |
+| `--format` | `table`                 | Output format: `table`, `json`, or `csv`           |
+| `--auth`   | `$RELOG_AUTH`           | Bearer token, for `--url` only                     |
+
+The same read-only validation applies either way, so `--db` cannot modify the
+file it opens.
 
 ### `relog.dev stats`
 
