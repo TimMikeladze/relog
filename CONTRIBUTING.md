@@ -26,7 +26,7 @@ This project uses a monorepo structure with Bun workspaces. All packages are loc
 2. Make your changes
 3. Check code style and formatting: `bun run lint` and `bun run format`
 4. Run tests: `bun run test` (backend). For the full suite including app UI tests, use `bun run test:all`
-5. Build the project: `bun run build`
+5. Build the project: `bun run build` (or `bun run build:bin` for a standalone binary)
 6. Commit your changes using the conventions below
 7. Push your branch to your fork
 8. Open a pull request

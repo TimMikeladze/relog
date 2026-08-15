@@ -26,6 +26,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 - **S3 archival** — archive old logs to S3/MinIO as Parquet files, then query both hot (SQLite) and cold (S3) data seamlessly via DuckDB
 - **Auto-prune** — automatic database maintenance with configurable size and age limits; archives to S3 before deleting when configured
 - **Aggregates** — saved log filters with CRUD API for dashboards and quick views
+- **Standalone binary** — `bun run build:bin` produces one self-contained executable with the server, CLI, DuckDB engine and web UI embedded; cross-compiles to macOS, Linux and Windows
 - **Docker & Fly.io** — production-ready Dockerfile and fly.toml for single-instance deployment with persistent SQLite volumes
 
 ## Architecture
@@ -105,6 +106,81 @@ import { createMcpServer } from "relog.dev/mcp"; // MCP server
 import { createLogger } from "relog.dev/next"; // Next.js integration
 import { log } from "relog.dev/browser"; // Browser client
 ```
+
+## Standalone Binary
+
+One command produces a single self-contained executable — no Bun, no Node, no
+`node_modules` on the target machine:
+
+```bash
+bun run build:bin     # -> bin/relog
+./bin/relog start
+```
+
+The binary carries everything: HTTP server, CLI, DuckDB query engine, and the
+web UI. Copy it to a box and run it.
+
+```bash
+./bin/relog start                      # server + web UI on :3485
+./bin/relog start --no-ui              # ingest/query API only
+./bin/relog start --port 8080 --db /data/relog.db --no-open
+./bin/relog tail --url http://logs.internal:3485
+./bin/relog -- bun run server.ts       # wrap a process, ship its output
+```
+
+Every subcommand documented under [CLI](#cli) works from the binary.
+
+### Build Options
+
+```bash
+bun run build:bin --target linux-x64   # cross-compile
+bun run build:bin --all                # every supported target
+bun run build:bin --skip-app           # reuse an existing app/dist
+bun run build:bin --no-compress        # skip zstd (faster build, ~4x larger)
+bun run build:bin --help
+```
+
+| Target         | Output                      |
+| -------------- | --------------------------- |
+| `darwin-arm64` | `bin/relog-darwin-arm64`    |
+| `darwin-x64`   | `bin/relog-darwin-x64`      |
+| `linux-x64`    | `bin/relog-linux-x64`       |
+| `linux-arm64`  | `bin/relog-linux-arm64`     |
+| `windows-x64`  | `bin/relog-windows-x64.exe` |
+
+Building for the host platform also writes a `bin/relog` copy. Cross-compiling
+downloads the target's DuckDB addon from npm (its `os`/`cpu` fields mean
+`bun install` never fetches it) and caches it under `.build/`, so a Linux binary
+can be built from macOS. Bun downloads the target runtime on the first
+cross-build, which takes a minute.
+
+### How It Works
+
+Two things Bun's `--compile` will not embed on its own:
+
+1. **DuckDB's native addon.** `@duckdb/node-bindings` requires one of six
+   platform packages behind a `switch`, and the bundler tries to resolve every
+   branch. The addon also dlopens a sibling `libduckdb` through `@loader_path`,
+   which Bun's own `.node` extraction leaves behind. `scripts/build-binary.ts`
+   aliases the package to a generated shim that unpacks addon and library into
+   the same directory, then requires the result.
+2. **The web UI.** `app/dist` is a directory tree, so it is concatenated into a
+   single zstd-compressed blob and unpacked on first use.
+
+On first launch the binary unpacks its payload into `~/.relog/native/` and
+`~/.relog/ui/`; later launches reuse them. Both directories are content-addressed
+by build hash, so upgrading a binary never serves stale assets, and a partially
+written file can never be loaded — every file lands via a temp name and a rename.
+
+`start --no-ui` never asks for the UI path, so it never unpacks it.
+
+### Size and Limits
+
+Binaries are 90–120MB: roughly 60MB Bun runtime, 27MB compressed DuckDB library,
+2MB compressed UI. `--no-compress` trades ~4x the size for a faster build.
+
+Linux binaries link against glibc — Debian, Ubuntu, and Amazon Linux work;
+Alpine/musl does not. The Windows target builds but is untested.
 
 ## Quick Start
 
@@ -1636,7 +1712,6 @@ The included `fly.toml` is configured for a single-instance deployment with a pe
 ```bash
 # First time setup
 fly launch --no-deploy
-fly volumes create relog_data --region iad --size 3
 
 # Set API keys as secrets
 fly secrets set RELOG_ADMIN_KEY=your-secret-key
@@ -1647,13 +1722,17 @@ fly deploy
 
 The default configuration:
 
-| Setting      | Value               | Description                             |
-| ------------ | ------------------- | --------------------------------------- |
-| VM           | `shared-cpu-1x`     | Shared CPU with 1GB memory              |
-| Volume       | `3gb`               | Persistent storage at `/data`           |
-| Health check | `/health` every 30s | Excluded from auth                      |
-| Auto-stop    | `off`               | Always-on (logging servers can't sleep) |
-| Auto-prune   | `500mb` / `30d`     | Default size and age limits             |
+| Setting      | Value               | Description                                  |
+| ------------ | ------------------- | -------------------------------------------- |
+| VM           | `shared-cpu-1x`     | Shared CPU with 1GB memory                   |
+| Volume       | `1gb`               | Auto-created at `/data` on first deploy      |
+| Health check | `/health` every 30s | Excluded from auth                           |
+| Auto-stop    | `stop`              | Scales to zero when idle; a request wakes it |
+| Auto-prune   | `500mb` / `30d`     | Default size and age limits                  |
+
+Scale-to-zero is safe because the SQLite file lives on the volume — a stop/start
+cycle keeps all data. Raise `min_machines_running` to 1 if you want to avoid
+cold-start latency on the first request after an idle period.
 
 To archive to S3 before pruning (Tigris is Fly.io's native S3-compatible storage):
 
@@ -1667,6 +1746,88 @@ fly deploy -- \
   --s3-access-key $TIGRIS_ACCESS_KEY \
   --s3-secret-key $TIGRIS_SECRET_KEY
 ```
+
+## Distributed Deployment
+
+relog has no shared write path — a server owns its SQLite file and is the only
+process allowed to touch it. Running more than one node therefore means choosing
+a topology, not setting a flag.
+
+### What Is Shared, What Is Node-Local
+
+The **S3 archive is safe for many writers**. Object keys are
+`prefix/project=…/branch=…/year=…/month=…/day=…/<timestamp>-<uuid>.parquet`, so
+concurrent archivers never collide, and every node that holds the bucket
+credentials reads the whole history through the DuckDB union view.
+
+Everything else belongs to one node:
+
+| State                                | Scope                                               |
+| ------------------------------------ | --------------------------------------------------- |
+| Hot logs (SQLite)                    | Node-local. Never share the file between processes. |
+| `/stream` SSE subscribers            | Node-local — polls that node's database.            |
+| Dashboards, widgets, aggregates JSON | Node-local, under `--data-dir`.                     |
+| Auto-prune and archive loop          | Node-local.                                         |
+| Archived Parquet in S3               | **Shared.** Multi-writer safe, read by all.         |
+
+### Topology 1 — Central Server, Distributed Collection
+
+The default. One server; a binary on every host ships to it. Scales until a
+single machine can no longer absorb the ingest rate, which is a long way off.
+
+```bash
+# central
+relog start --db /data/relog.db --ingest-key "$KEY"
+
+# every app host — no local storage, logs stream to the central server
+RELOG_URL=https://logs.internal:3485 RELOG_AUTH=$KEY relog -- bun run server.ts
+```
+
+### Topology 2 — Writer Plus Stateless Read Replicas
+
+The writer holds a short hot window and pushes everything else to S3. Replicas
+serve the UI and queries from the Parquet lake, need no volume, and can run in
+any region.
+
+```bash
+# writer: keep ~1h hot, archive the rest
+relog start --db /data/relog.db --max-age-days 0.04 --max-db-size 200mb \
+  --s3-endpoint https://fly.storage.tigris.dev --s3-bucket relog-archive \
+  --s3-access-key $K --s3-secret-key $S --s3-url-style path
+
+# replica: throwaway local db, same bucket, no volume
+relog start --db /tmp/replica.db --no-prune \
+  --s3-endpoint https://fly.storage.tigris.dev --s3-bucket relog-archive \
+  --s3-access-key $K --s3-secret-key $S --s3-url-style path
+```
+
+Two caveats before you rely on this:
+
+- **Replicas do not see new Parquet files.** `refreshView()` is wired to the
+  prune loop and only fires after that node deletes rows. A replica deletes
+  nothing, so its view of the bucket is frozen at boot until the process
+  restarts. Refreshing on a timer independent of pruning is not implemented yet.
+- **Replicas lag by the hot window** — the writer's unarchived logs are
+  invisible to them — and they still accept ingest. There is no read-only mode;
+  role-based keys are the only lever.
+
+### Topology 3 — Shard by Project
+
+Each shard is its own binary, volume, and SQLite file, and all shards archive
+into one bucket. Every shard can therefore query all _history_; only the recent
+hot window is shard-local. Requires a router in front that maps project to
+shard — relog does not ship one.
+
+### On Fly.io
+
+`fly.toml` describes one machine with one volume. `fly scale count 3` gives you
+three machines with three separate volumes and no control over which one serves
+a request — that is topology 3 without the router, and logs for one project will
+scatter across shards. To scale properly, split into two apps (a writer with a
+volume, and a volume-less replica group) or put the router in front.
+
+`fly storage create` provisions Tigris and sets the S3 credentials, which is the
+archive bucket topologies 2 and 3 are built on.
 
 ## Environment Variables
 
@@ -1789,16 +1950,17 @@ cd relog
 bun install
 ```
 
-| Command              | Description                         |
-| -------------------- | ----------------------------------- |
-| `bun run build`      | Build with bunup                    |
-| `bun run dev`        | Build in watch mode                 |
-| `bun test`           | Run tests                           |
-| `bun test --watch`   | Run tests in watch mode             |
-| `bun run lint`       | Run oxlint                          |
-| `bun run format`     | Run oxfmt                           |
-| `bun run type-check` | TypeScript type checking            |
-| `bun run release`    | Bump version, commit, push, and tag |
+| Command              | Description                                     |
+| -------------------- | ----------------------------------------------- |
+| `bun run build`      | Build with bunup                                |
+| `bun run build:bin`  | Build a [standalone binary](#standalone-binary) |
+| `bun run dev`        | Build in watch mode                             |
+| `bun test`           | Run tests                                       |
+| `bun test --watch`   | Run tests in watch mode                         |
+| `bun run lint`       | Run oxlint                                      |
+| `bun run format`     | Run oxfmt                                       |
+| `bun run type-check` | TypeScript type checking                        |
+| `bun run release`    | Bump version, commit, push, and tag             |
 
 ## License
 
