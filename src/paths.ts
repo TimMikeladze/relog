@@ -51,20 +51,42 @@ export function setAppDistResolver(resolver: (() => string) | null): void {
 	appDistResolver = resolver;
 }
 
-export function getAppDistPath(): string | null {
-	if (appDistResolver) return appDistResolver();
+const VITE_CONFIGS = ["vite.config.ts", "vite.config.js", "vite.config.mts", "vite.config.mjs"];
 
+/**
+ * A Vite project root ships an `index.html` too, but that one points at
+ * `/src/main.tsx` — a path only the dev server can resolve, so serving it hands
+ * the browser a module it cannot parse and a blank page. In a source checkout
+ * `../app` is exactly that directory, sitting one level above the real build
+ * output in `../app/dist`, so an `index.html` alone is not enough to identify
+ * a servable UI: the Vite config next to it disqualifies the directory.
+ */
+function isBuiltUi(dir: string): boolean {
+	if (!existsSync(join(dir, "index.html"))) return false;
+	return !VITE_CONFIGS.some((config) => existsSync(join(dir, config)));
+}
+
+/**
+ * Disk lookup behind `getAppDistPath`, taking the directory to resolve from so
+ * the layouts below can be tested without moving the module.
+ */
+export function resolveAppDist(baseDir: string): string | null {
 	// Production: app files are copied to dist/app/ alongside the compiled cli.js
-	const prod = join(import.meta.dir, "app");
-	if (existsSync(join(prod, "index.html"))) return prod;
+	const prod = join(baseDir, "app");
+	if (isBuiltUi(prod)) return prod;
 
 	// Bundled: when bunup places shared modules in dist/shared/, resolve up one level
-	const bundled = join(import.meta.dir, "../app");
-	if (existsSync(join(bundled, "index.html"))) return bundled;
+	const bundled = join(baseDir, "../app");
+	if (isBuiltUi(bundled)) return bundled;
 
 	// Development: running from src/ -> ../app/dist
-	const dev = join(import.meta.dir, "../app/dist");
-	if (existsSync(join(dev, "index.html"))) return dev;
+	const dev = join(baseDir, "../app/dist");
+	if (isBuiltUi(dev)) return dev;
 
 	return null;
+}
+
+export function getAppDistPath(): string | null {
+	if (appDistResolver) return appDistResolver();
+	return resolveAppDist(import.meta.dir);
 }

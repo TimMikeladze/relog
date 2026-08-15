@@ -167,6 +167,9 @@ export const startCommand: Command = command({
 		const url = `http://localhost:${server.port}`;
 		console.log(`relog.dev server listening on ${url}`);
 		if (uiDistPath) console.log(`  ui: ${url}`);
+		// Silence here reads as a broken server, when the usual cause is a source
+		// checkout whose web app has not been built yet.
+		else if (!opts.noUi) console.log("  ui: not found (run `bun run build` to serve it)");
 		console.log(`  database: ${opts.db}`);
 		const hasAuth = ingestKeys || readKeys || adminKeys;
 		if (hasAuth) console.log("  auth: enabled (role-based API keys)");
