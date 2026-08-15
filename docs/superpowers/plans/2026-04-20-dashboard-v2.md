@@ -88,14 +88,7 @@ Append at end of file:
 
 ```ts
 export type WidgetKind =
-	| "stat"
-	| "line"
-	| "bar"
-	| "table"
-	| "status-grid"
-	| "heatmap"
-	| "gauge"
-	| "sparkline";
+	"stat" | "line" | "bar" | "table" | "status-grid" | "heatmap" | "gauge" | "sparkline";
 
 export interface StatOptions {
 	valueField: string;

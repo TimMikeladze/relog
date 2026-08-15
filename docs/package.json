@@ -9,22 +9,19 @@
 		"preview": "vite preview"
 	},
 	"dependencies": {
-		"motion": "^12.35.1",
-		"react": "^19.2.0",
-		"react-dom": "^19.2.0",
-		"shiki": "^4.0.1"
+		"motion": "^13.0.0",
+		"react": "^19.2.8",
+		"react-dom": "^19.2.8",
+		"shiki": "^4.4.2"
 	},
 	"devDependencies": {
-		"@tailwindcss/vite": "^4.2.1",
-		"@types/node": "^24.10.1",
-		"@types/react": "^19.2.7",
-		"@types/react-dom": "^19.2.3",
-		"@vitejs/plugin-react": "^5.1.1",
-		"tailwindcss": "^4.2.1",
-		"typescript": "~5.9.3",
-		"vite": "^8.0.0-beta.13"
-	},
-	"overrides": {
-		"vite": "^8.0.0-beta.13"
+		"@tailwindcss/vite": "^4.3.3",
+		"@types/node": "^26.2.0",
+		"@types/react": "^19.2.18",
+		"@types/react-dom": "^19.2.4",
+		"@vitejs/plugin-react": "^6.0.5",
+		"tailwindcss": "^4.3.3",
+		"typescript": "~7.0.2",
+		"vite": "^8.2.1"
 	}
 }

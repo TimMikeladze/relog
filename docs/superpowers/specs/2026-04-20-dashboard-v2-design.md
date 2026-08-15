@@ -30,14 +30,7 @@ Replace the current hardcoded dashboard (`app/src/views/dashboard.tsx`) with a w
 
 ```ts
 type WidgetKind =
-	| "stat"
-	| "line"
-	| "bar"
-	| "table"
-	| "status-grid"
-	| "heatmap"
-	| "gauge"
-	| "sparkline";
+	"stat" | "line" | "bar" | "table" | "status-grid" | "heatmap" | "gauge" | "sparkline";
 
 type Widget = {
 	id: string; // slug, regex /^[a-zA-Z0-9_-]{1,128}$/
