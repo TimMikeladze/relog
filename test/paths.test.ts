@@ -1,8 +1,14 @@
 import { homedir } from "node:os";
 import { join, isAbsolute, dirname } from "node:path";
 import { existsSync, statSync } from "node:fs";
-import { describe, expect, test } from "bun:test";
-import { getDataDir, getDefaultDbPath, getWidgetsPath } from "../src/paths.ts";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+	getAppDistPath,
+	getDataDir,
+	getDefaultDbPath,
+	getWidgetsPath,
+	setAppDistResolver,
+} from "../src/paths.ts";
 
 describe("getDataDir", () => {
 	test("returns path inside home directory", () => {
@@ -50,6 +56,32 @@ describe("getDefaultDbPath", () => {
 	test("filename is relog.db", () => {
 		const dbPath = getDefaultDbPath();
 		expect(dbPath.endsWith("relog.db")).toBe(true);
+	});
+});
+
+describe("getAppDistPath", () => {
+	afterEach(() => setAppDistResolver(null));
+
+	test("prefers a registered resolver over disk lookup", () => {
+		setAppDistResolver(() => "/unpacked/ui");
+		expect(getAppDistPath()).toBe("/unpacked/ui");
+	});
+
+	test("only calls the resolver when the path is requested", () => {
+		let calls = 0;
+		setAppDistResolver(() => {
+			calls++;
+			return "/unpacked/ui";
+		});
+		expect(calls).toBe(0);
+		getAppDistPath();
+		expect(calls).toBe(1);
+	});
+
+	test("falls back to disk lookup once the resolver is cleared", () => {
+		setAppDistResolver(() => "/unpacked/ui");
+		setAppDistResolver(null);
+		expect(getAppDistPath()).not.toBe("/unpacked/ui");
 	});
 });
 

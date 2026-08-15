@@ -20,3 +20,7 @@ yarn-error.log*
 .turbo
 *.db*
 .gstack/
+
+# standalone binaries
+bin/
+.build/

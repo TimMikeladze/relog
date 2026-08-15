@@ -56,6 +56,7 @@
 	},
 	"scripts": {
 		"build": "cd app && bun run build && cd .. && bunup && cp -r app/dist dist/app",
+		"build:bin": "bun run scripts/build-binary.ts",
 		"setup": "bun install && bun install --cwd app && bun install --cwd docs",
 		"predev": "[ -d node_modules ] && [ -d app/node_modules ] && [ -d docs/node_modules ] || bun run setup",
 		"dev": "bun --watch src/cli.ts start --no-ui --no-open & sleep 2 && bun run src/cli.ts seed --count 0 --rate 0.0083 --batch-size 1 & (cd app && bun run dev) & (cd docs && bun run dev) & wait",

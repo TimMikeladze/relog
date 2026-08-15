@@ -39,7 +39,9 @@ if (isWrapMode(args)) {
 		{
 			name: "relog.dev",
 			description: "Universal logging system",
-			version: "0.1.0",
+			// Replaced at build time by scripts/build-binary.ts so a standalone
+			// binary reports the version it was cut from, not a stale literal.
+			version: process.env.RELOG_VERSION ?? "0.1.0",
 		},
 	);
 }

@@ -37,7 +37,23 @@ export function getDashboardsPath(dataDir?: string): string {
 	return resolveStorePath(dataDir, "dashboards.json");
 }
 
+let appDistResolver: (() => string) | null = null;
+
+/**
+ * Standalone binaries carry the web UI as an embedded bundle, not a directory
+ * on disk, so `import.meta.dir` (which is inside the binary's virtual
+ * filesystem) can never find it. The compiled entrypoint registers a resolver
+ * that unpacks the bundle instead. It stays lazy so `start --no-ui` — which
+ * never asks for the path — pays nothing. Pass null to fall back to disk
+ * lookup.
+ */
+export function setAppDistResolver(resolver: (() => string) | null): void {
+	appDistResolver = resolver;
+}
+
 export function getAppDistPath(): string | null {
+	if (appDistResolver) return appDistResolver();
+
 	// Production: app files are copied to dist/app/ alongside the compiled cli.js
 	const prod = join(import.meta.dir, "app");
 	if (existsSync(join(prod, "index.html"))) return prod;
