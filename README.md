@@ -2,6 +2,28 @@
 
 A lightweight, self-hosted logging system for Bun. Ship structured logs from any application to a SQLite-backed server, then tail, search, query, and export them from the CLI or HTTP API. Includes an MCP server for AI agent integration.
 
+## The Web UI
+
+`relog.dev start` serves a web UI on `http://localhost:3485` — no separate frontend to deploy, no extra process. Everything below reads the same SQLite file the server writes to.
+
+**Explore** — live-tailing log stream with a level-coded timeline, full-text search, and filters for service, project, branch, version and deployment.
+
+![Explore view: a searchable log stream with a stacked timeline chart above it and rows colored by level](screenshots/explore.png)
+
+| Traces                                                                                                                                                | Log detail                                                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ![Traces view: a list of traces expanded into a span waterfall across services](screenshots/traces.png)                                               | ![Explore view with the detail panel open on a single request](screenshots/log-detail.png)                                |
+| Distributed traces rebuilt from `trace_id` / `span_id`, with a per-service waterfall and the logs emitted inside each span. OTLP spans land here too. | Any record expanded: HTTP context, duration, identification, deployment info, and links to its trace or surrounding logs. |
+
+| Query                                                                                                                                      | Dashboards                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Query view: a SQL editor over the logs table with a results grid](screenshots/query.png)                                                 | ![Dashboard view: stat tiles and time-series charts for log volume, error rate and throughput](screenshots/dashboard.png)                                      |
+| Read-only SQL — `SELECT`, `EXPLAIN` and safe `PRAGMA` — straight against the log database, with results exportable as JSON, CSV or NDJSON. | [Dashboards](#dashboards) are SQL-backed widgets with per-dashboard variables. The built-in **Logs** dashboard is an ordinary dashboard you can copy and edit. |
+
+**Web analytics** — the optional [analytics mode](#web-analytics) reuses the same database and dashboard system for cookieless pageview and event tracking, so traffic and errors are queryable side by side.
+
+![Web Analytics dashboard: unique visitors, pageviews, bounce rate, traffic over time, top pages and top referrers](screenshots/analytics.png)
+
 ## Key Features
 
 - **Process wrapping** — prefix any command with `relog` to capture all its logs automatically, zero SDK integration needed
