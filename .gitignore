@@ -24,3 +24,9 @@ yarn-error.log*
 # standalone binaries
 bin/
 .build/
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
