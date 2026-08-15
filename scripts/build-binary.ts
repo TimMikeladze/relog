@@ -9,7 +9,7 @@
  * A relog binary has to carry two things Bun's `--compile` will not embed on
  * its own:
  *
- *  1. DuckDB's native addon. `@duckdb/node-bindings` requires one of six
+ *  1. DuckDB's native addon. `@duckdb/node-bindings` requires one of eight
  *     platform packages behind a `switch`, which the bundler tries to resolve
  *     for *every* branch, and the addon dlopens a sibling `libduckdb` via
  *     `@loader_path` that Bun's own .node extraction leaves behind. Both are

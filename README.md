@@ -158,7 +158,7 @@ cross-build, which takes a minute.
 
 Two things Bun's `--compile` will not embed on its own:
 
-1. **DuckDB's native addon.** `@duckdb/node-bindings` requires one of six
+1. **DuckDB's native addon.** `@duckdb/node-bindings` requires one of eight
    platform packages behind a `switch`, and the bundler tries to resolve every
    branch. The addon also dlopens a sibling `libduckdb` through `@loader_path`,
    which Bun's own `.node` extraction leaves behind. `scripts/build-binary.ts`

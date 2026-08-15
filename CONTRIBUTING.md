@@ -13,12 +13,20 @@ Thank you for your interest in contributing to our project! This guide will help
 1. Fork the repository
 2. Clone your fork: `git clone https://github.com/TimMikeladze/relog.git`
 3. Navigate to the project directory: `cd relog`
-4. Install dependencies: `bun install`
+4. Install dependencies: `bun run setup`
 5. Start development: `bun run dev`
 
-## Working with the Monorepo
+## Repository Layout
 
-This project uses a monorepo structure with Bun workspaces. All packages are located in the `packages/` directory.
+This is not a Bun workspace. The root package holds the server, CLI and SDK, while `app/` (the UI) and `docs/` (the marketing site) are independent packages with their own `package.json`, `bun.lock` and `node_modules`.
+
+Because of that, a bare `bun install` only covers the root. Use `bun run setup` to install all three, and run dependency updates in each directory separately:
+
+```bash
+bun update --latest              # root
+bun update --latest --cwd app    # UI
+bun update --latest --cwd docs   # docs site
+```
 
 ## Development Workflow
 
