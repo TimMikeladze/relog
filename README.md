@@ -1213,10 +1213,10 @@ relog can double as a self-hosted, cookieless web-analytics service — the Umam
 
 Instrumenting a website uses two separate pieces, and which one you want depends on what you are measuring:
 
-| You want                                                | Use                                            | Integration                                       |
-| ------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------- |
-| Pageviews, referrers, UTMs, funnels, conversions         | Web analytics (this section)                   | One `<script>` tag, no build step, no server code |
-| Uncaught errors, promise rejections, `console` output    | [Browser logging](#browser-logging)            | `relog.dev/browser` plus a proxy route on your app |
+| You want                                              | Use                                 | Integration                                        |
+| ----------------------------------------------------- | ----------------------------------- | -------------------------------------------------- |
+| Pageviews, referrers, UTMs, funnels, conversions      | Web analytics (this section)        | One `<script>` tag, no build step, no server code  |
+| Uncaught errors, promise rejections, `console` output | [Browser logging](#browser-logging) | `relog.dev/browser` plus a proxy route on your app |
 
 They are independent — run either alone — but they write to the same database, so [one SQL query can span both](#joining-traffic-against-errors).
 
