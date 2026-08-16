@@ -66,6 +66,21 @@ function num(v: unknown): number | null {
 }
 
 /**
+ * Revenue has its own column, but the tracker has no way to put anything at the
+ * top level of the payload: `relog('purchase', { revenue: 49 })` sends the whole
+ * second argument as props. Reading it from either place keeps the documented
+ * call working while still accepting a top-level value from server-side
+ * collectors — and from trackers already cached in the wild.
+ */
+function extractRevenue(item: CollectPayload): number | null {
+	const top = num(item.revenue);
+	if (top !== null) return top;
+	const props = item.props;
+	if (typeof props !== "object" || props === null || Array.isArray(props)) return null;
+	return num((props as Record<string, unknown>).revenue);
+}
+
+/**
  * Custom props are the one place arbitrary client data is persisted, so they
  * are capped on key count and serialized size, flattened to scalars, and run
  * through the same redaction the log ingest path uses — a tracker call like
@@ -209,7 +224,7 @@ export async function handleCollect(
 			screen: str(item.screen, 32),
 			language: str(item.language, 32)?.slice(0, 5) ?? null,
 			props: sanitizeProps(item.props),
-			revenue: num(item.revenue),
+			revenue: extractRevenue(item),
 			duration_ms: clampDuration(num(item.duration_ms)),
 			created_at: resolveTimestamp(item.ts, now),
 		});

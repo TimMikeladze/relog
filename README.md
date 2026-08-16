@@ -1263,6 +1263,9 @@ relog("signup", { plan: "pro" });
 relog("purchase", { plan: "pro", revenue: 49 });
 ```
 
+Props are stored as-is, with one exception: `revenue` is also lifted into its own
+column, so it can be summed in rollups and breakdowns rather than dug out of JSON.
+
 Or declaratively, with no JavaScript of your own:
 
 ```html
@@ -1290,6 +1293,14 @@ To capture calls that fire before the script has loaded, add the standard stub b
 | `data-auto`           | `true`              | Track pageviews automatically; `false` for manual only   |
 | `data-exclude-search` | `false`             | Drop query strings from stored paths (UTMs still parsed) |
 | `data-domains`        | —                   | Comma-separated hostnames allowed to report              |
+
+With `data-auto="false"`, nothing is sent until you ask for it. Call `relog.pageview()`
+from your router; it reads the current URL, records time-on-page for the view it
+replaces, and collapses repeat calls for the same path within 300ms:
+
+```js
+router.afterEach(() => relog.pageview());
+```
 
 ### How visitors are counted
 

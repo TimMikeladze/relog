@@ -793,6 +793,26 @@ describe("analytics HTTP endpoints", () => {
 		});
 	});
 
+	test("record revenue whether it arrives in props or at the top level", async () => {
+		await withServer({ enabled: true }, async (base, db) => {
+			// What the documented tracker call actually sends: the whole second
+			// argument of relog('purchase', {...}) becomes props.
+			await collect(base, pageview({ name: "purchase", props: { plan: "pro", revenue: 49 } }));
+			// What a server-side collector can send.
+			await collect(base, pageview({ name: "purchase", revenue: 10, session_id: "sess-2" }));
+
+			const rows = db.analytics.select<{ revenue: number | null }>(
+				"SELECT revenue FROM events WHERE name = 'purchase' ORDER BY revenue DESC",
+			);
+			expect(rows.map((r) => r.revenue)).toEqual([49, 10]);
+
+			const rolled = db.analytics.select<{ revenue: number }>(
+				"SELECT SUM(revenue) AS revenue FROM event_rollups",
+			);
+			expect(rolled[0]!.revenue).toBe(59);
+		});
+	});
+
 	test("ignore geo headers when the proxy is untrusted", async () => {
 		await withServer({ enabled: true }, async (base, db) => {
 			await collect(base, pageview(), { "CF-IPCountry": "DE" });
