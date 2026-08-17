@@ -644,7 +644,7 @@ relog.dev start --port 3485 --admin-key mykey --cors true
 | `--ingest-key`               | —                   | API key(s) for ingest role, comma-separated. Also reads `RELOG_INGEST_KEY*` env vars                          |
 | `--read-key`                 | —                   | API key(s) for read role, comma-separated. Also reads `RELOG_READ_KEY*` env vars                              |
 | `--admin-key`                | —                   | API key(s) for admin role, comma-separated. Also reads `RELOG_ADMIN_KEY*` env vars                            |
-| `--key-prefix-length`        | `6`                 | Number of API key characters stored per log for auditing (0 to disable)                                       |
+| `--key-prefix-length`        | `6`                 | Number of API key characters stored per log for auditing. Clamped to 1…(key length − 1)                       |
 | `--cors`                     | `false`             | Enable CORS headers                                                                                           |
 | `--max-db-size`              | `500mb`             | Auto-prune when DB exceeds this size. Accepts `b`, `kb`, `mb`, `gb` suffixes or raw bytes                     |
 | `--max-age-days`             | `30`                | Auto-prune logs older than N days                                                                             |
@@ -1462,8 +1462,15 @@ db.analytics.realtime("my-site");
 | `POST`   | `/dashboards`     | admin  | Create a dashboard                                     |
 | `PUT`    | `/dashboards/:id` | admin  | Update a dashboard                                     |
 | `DELETE` | `/dashboards/:id` | admin  | Delete a dashboard and its widgets                     |
+| `GET`    | `/widgets`        | read   | List widgets (see [Dashboards](#dashboards))           |
+| `GET`    | `/widgets/:id`    | read   | Get a single widget                                    |
+| `POST`   | `/widgets`        | admin  | Create a widget                                        |
+| `PUT`    | `/widgets/:id`    | admin  | Update a widget                                        |
+| `DELETE` | `/widgets/:id`    | admin  | Delete a widget                                        |
 
-All endpoints (except `/health`) require a Bearer token via `Authorization: Bearer <key>` when API keys are configured. Routes are protected by role: `ingest` for `/ingest`, `read` for `/logs`, `/query`, `/query/stream`, `/stream`, `/histogram`, and `admin` for `/prune` and write operations on `/aggregates`.
+When API keys are configured, endpoints require a Bearer token via `Authorization: Bearer <key>`. Routes are protected by role: `ingest` for `/ingest`, `/v1/traces` and `/v1/logs`; `read` for `/logs`, `/traces`, `/query`, `/query/stream`, `/stream`, `/histogram`, `/analytics/*` and GETs on `/aggregates`, `/widgets` and `/dashboards`; `admin` for `/prune` and write operations on `/aggregates`, `/widgets` and `/dashboards`.
+
+Three endpoints stay unauthenticated: `/health` (so load balancers can probe it), and the two analytics endpoints `/script.js` and `/collect`, which have to be reachable by anonymous browsers. `/collect` can be moved behind the `ingest` role with `--analytics-key`, but only for server-side collection — a key embedded in a public tracker script is not a secret.
 
 ### `POST /ingest`
 
@@ -1484,7 +1491,7 @@ curl -X POST http://localhost:3485/ingest \
 
 **Idempotency:** pass an `Idempotency-Key` (or `X-Idempotency-Key`) header to dedupe automatic client retries. The cached response is replayed for the configured TTL with an `Idempotent-Replay: true` response header. The cache is per-route and per-key-prefix, LRU-evicted under load so a still-active key isn't dropped under burst traffic.
 
-**Rate limit:** ingest is rate-limited per API key prefix (default 600 req/min/key, configurable via `--ingest-rpm`). One noisy key cannot starve other keys.
+**Rate limit:** ingest is rate-limited per API key prefix (default 600 req/min/key, configurable via `ingestRpm` in [`ServerConfig`](#serverconfig) — there is no CLI flag for it). One noisy key cannot starve other keys.
 
 | Field           | Required | Description                                        |
 | --------------- | -------- | -------------------------------------------------- |
@@ -1631,7 +1638,7 @@ curl -X POST http://localhost:3485/aggregates \
 
 Returns `{ ok, uptime, db_size_bytes, log_count }`. When auto-prune is configured, also includes `auto_prune: { max_db_size, max_age_days, interval_seconds, db_usage_pct }`.
 
-Unauthenticated. Per-IP rate-limited at 60 req/min — single misbehaving probe can't starve real load-balancer probes. The remote IP comes from the first `X-Forwarded-For` entry when present, otherwise the socket peer; front the server with a reverse proxy that sets `X-Forwarded-For` in production.
+Unauthenticated. Per-IP rate-limited at 60 req/min — single misbehaving probe can't starve real load-balancer probes. The remote IP is the socket peer address by default. `X-Forwarded-For` is only consulted when the server runs with `--trust-proxy`, in which case the first entry wins — enable it when you front the server with a reverse proxy that sets the header, and leave it off otherwise so clients can't spoof their way past the rate limit.
 
 ## Database Schema
 
@@ -1678,21 +1685,26 @@ shutdown();
 
 ### `ServerConfig`
 
-| Option             | Type                            | Default   | Description                                         |
-| ------------------ | ------------------------------- | --------- | --------------------------------------------------- |
-| `port`             | `number`                        | —         | Port to listen on                                   |
-| `dbPath`           | `string`                        | —         | SQLite database file path                           |
-| `ingestKeys`       | `string[]`                      | —         | API key(s) for ingest role                          |
-| `readKeys`         | `string[]`                      | —         | API key(s) for read role (includes ingest)          |
-| `adminKeys`        | `string[]`                      | —         | API key(s) for admin role (includes all)            |
-| `keyPrefixLength`  | `number`                        | `6`       | Characters of API key stored per log (0 to disable) |
-| `cors`             | `boolean \| string \| string[]` | —         | CORS origin(s) or `true` for `*`                    |
-| `maxBodySize`      | `number`                        | `5242880` | Max request body size in bytes (5 MB)               |
-| `maxBatchSize`     | `number`                        | `1000`    | Max log entries per ingest request                  |
-| `streamDebounceMs` | `number`                        | `50`      | Debounce interval for SSE stream updates            |
-| `autoPrune`        | `AutoPruneConfig`               | —         | Auto-prune configuration (see below)                |
-| `archive`          | `ArchiveConfig`                 | —         | S3 archive configuration (see below)                |
-| `uiDistPath`       | `string`                        | —         | Path to web UI dist folder                          |
+| Option             | Type                            | Default    | Description                                                         |
+| ------------------ | ------------------------------- | ---------- | ------------------------------------------------------------------- |
+| `port`             | `number`                        | —          | Port to listen on                                                   |
+| `dbPath`           | `string`                        | —          | SQLite database file path                                           |
+| `dataDir`          | `string`                        | `~/.relog` | Directory for saved dashboards, widgets and aggregates              |
+| `ingestKeys`       | `string[]`                      | —          | API key(s) for ingest role                                          |
+| `readKeys`         | `string[]`                      | —          | API key(s) for read role (includes ingest)                          |
+| `adminKeys`        | `string[]`                      | —          | API key(s) for admin role (includes all)                            |
+| `keyPrefixLength`  | `number`                        | `6`        | Characters of API key stored per log. Clamped to 1…(key length − 1) |
+| `cors`             | `boolean \| string \| string[]` | —          | CORS origin(s) or `true` for `*`                                    |
+| `maxBodySize`      | `number`                        | `5242880`  | Max request body size in bytes (5 MB)                               |
+| `maxBatchSize`     | `number`                        | `1000`     | Max log entries per ingest request                                  |
+| `streamDebounceMs` | `number`                        | `50`       | Debounce interval for SSE stream updates                            |
+| `ingestRpm`        | `number`                        | `600`      | Ingest requests per minute, per API key prefix                      |
+| `idleTimeout`      | `number`                        | `60`       | TCP idle timeout in seconds                                         |
+| `trustProxy`       | `boolean`                       | `false`    | Trust `X-Forwarded-For` for client IP and geo                       |
+| `autoPrune`        | `AutoPruneConfig`               | —          | Auto-prune configuration (see below)                                |
+| `archive`          | `ArchiveConfig`                 | —          | S3 archive configuration (see below)                                |
+| `analytics`        | `AnalyticsConfig`               | —          | Web analytics configuration                                         |
+| `uiDistPath`       | `string`                        | —          | Path to web UI dist folder                                          |
 
 ## Auto-Prune & Archival
 
@@ -1930,17 +1942,17 @@ archive bucket topologies 2 and 3 are built on.
 
 ## Environment Variables
 
-| Variable                    | Description                                                                        |
-| --------------------------- | ---------------------------------------------------------------------------------- |
-| `RELOG_URL`                 | Default relog.dev server URL for the Next.js integration                           |
-| `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands                   |
-| `RELOG_INGEST_KEY*`         | API key(s) for ingest role — any env starting with `RELOG_INGEST_KEY` is collected |
-| `RELOG_READ_KEY*`           | API key(s) for read role — any env starting with `RELOG_READ_KEY` is collected     |
-| `RELOG_ADMIN_KEY*`          | API key(s) for admin role — any env starting with `RELOG_ADMIN_KEY` is collected   |
-| `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                                               |
-| `RELOG_PROJECT`             | Override auto-detected project name                                                |
-| `RELOG_BRANCH`              | Override auto-detected git branch                                                  |
-| `NODE_ENV`                  | When set to `production`, console output is disabled by default                    |
+| Variable                    | Description                                                                                                |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `RELOG_URL`                 | Server URL for the Next.js integration and `relog <command>` process wrapping. CLI subcommands use `--url` |
+| `RELOG_AUTH`                | Default API key (Bearer token) for client, CLI, and MCP commands                                           |
+| `RELOG_INGEST_KEY*`         | API key(s) for ingest role — any env starting with `RELOG_INGEST_KEY` is collected                         |
+| `RELOG_READ_KEY*`           | API key(s) for read role — any env starting with `RELOG_READ_KEY` is collected                             |
+| `RELOG_ADMIN_KEY*`          | API key(s) for admin role — any env starting with `RELOG_ADMIN_KEY` is collected                           |
+| `LOG_LEVEL` / `RELOG_LEVEL` | Default log level for the client SDK                                                                       |
+| `RELOG_PROJECT`             | Override auto-detected project name                                                                        |
+| `RELOG_BRANCH`              | Override auto-detected git branch                                                                          |
+| `NODE_ENV`                  | When set to `production`, console output is disabled by default                                            |
 
 ## Testing Locally
 
