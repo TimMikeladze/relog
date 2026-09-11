@@ -398,7 +398,7 @@ export class WidgetsManager {
 			const body: WidgetsFile = { version: 1, widgets: Array.from(this.widgets.values()) };
 			await fs.writeFile(this.filePath, JSON.stringify(body, null, 2));
 		} catch (err) {
-			console.error("[relog.dev] Failed to persist widgets:", err);
+			console.error("[relog.sh] Failed to persist widgets:", err);
 		}
 	}
 }

@@ -69,7 +69,7 @@ export function runMigrations(db: Database, migrations: Migration[]): { applied:
 			throw new Error(`Migration ${m.id} ("${m.name}") failed: ${msg}`);
 		}
 		applied.push(m.id);
-		console.log(`[relog.dev] Applied migration ${m.id}: ${m.name}`);
+		console.log(`[relog.sh] Applied migration ${m.id}: ${m.name}`);
 	}
 
 	return { applied };

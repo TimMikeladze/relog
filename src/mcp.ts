@@ -30,7 +30,7 @@ export function createMcpServer(opts: McpOptions): McpServer {
 	const { url, auth } = opts;
 
 	const server = new McpServer({
-		name: "relog.dev",
+		name: "relog.sh",
 		version: "0.1.0",
 	});
 

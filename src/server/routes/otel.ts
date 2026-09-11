@@ -244,7 +244,7 @@ function truncate(s: string, max: number, fieldName?: string): string {
 	if (fieldName && Date.now() - lastTruncateWarnAt > TRUNCATE_WARN_INTERVAL_MS) {
 		lastTruncateWarnAt = Date.now();
 		console.warn(
-			`[relog.dev] OTLP truncation: '${fieldName}' (${s.length} chars > ${max}); further warnings suppressed for 60s`,
+			`[relog.sh] OTLP truncation: '${fieldName}' (${s.length} chars > ${max}); further warnings suppressed for 60s`,
 		);
 	}
 	return s.slice(0, max);

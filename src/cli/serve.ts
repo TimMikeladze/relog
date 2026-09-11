@@ -9,7 +9,7 @@ const DEFAULT_MAX_AGE_DAYS = 30;
 
 export const startCommand: Command = command({
 	name: "start",
-	desc: "Start the relog.dev server",
+	desc: "Start the relog.sh server",
 	options: {
 		port: number().desc("Port to listen on").default(3485),
 		db: string().desc("SQLite database path").default(getDefaultDbPath()),
@@ -165,7 +165,7 @@ export const startCommand: Command = command({
 		});
 
 		const url = `http://localhost:${server.port}`;
-		console.log(`relog.dev server listening on ${url}`);
+		console.log(`relog.sh server listening on ${url}`);
 		if (uiDistPath) console.log(`  ui: ${url}`);
 		// Silence here reads as a broken server, when the usual cause is a source
 		// checkout whose web app has not been built yet.

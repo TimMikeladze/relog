@@ -37,7 +37,7 @@ function coerceRow(row: Record<string, unknown>): Record<string, unknown> {
 			) {
 				lastBigIntWarnAt = Date.now();
 				console.warn(
-					`[relog.dev] BIGINT truncation: column "${k}" value ${v.toString()} exceeds Number.MAX_SAFE_INTEGER; precision lost`,
+					`[relog.sh] BIGINT truncation: column "${k}" value ${v.toString()} exceeds Number.MAX_SAFE_INTEGER; precision lost`,
 				);
 			}
 			out[k] = Number(v);
@@ -113,7 +113,7 @@ async function createAnalyticsViews(conn: DuckDBConnection): Promise<void> {
 			// A database written by an older relog has no analytics tables yet.
 			// The log read path must not fail because of it.
 			console.warn(
-				`[relog.dev] DuckDB: skipping view for missing table "${table}": ${
+				`[relog.sh] DuckDB: skipping view for missing table "${table}": ${
 					err instanceof Error ? err.message : err
 				}`,
 			);
@@ -199,7 +199,7 @@ export class DuckDBReader {
 						redacted = redacted.split(value).join(label);
 					}
 					const codePart = e.code ? ` [${e.code}]` : "";
-					console.error("[relog.dev] DuckDB S3 secret creation failed:", redacted);
+					console.error("[relog.sh] DuckDB S3 secret creation failed:", redacted);
 					throw new Error(
 						`Failed to configure S3 access in DuckDB — check endpoint, bucket, and credentials${codePart}: ${redacted}`,
 					);

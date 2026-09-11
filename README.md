@@ -1,10 +1,10 @@
-# relog.dev
+# relog.sh
 
 A lightweight, self-hosted logging system for Bun. Ship structured logs from any application to a SQLite-backed server, then tail, search, query, and export them from the CLI or HTTP API. Includes an MCP server for AI agent integration.
 
 ## The Web UI
 
-`relog.dev start` serves a web UI on `http://localhost:3485` — no separate frontend to deploy, no extra process. Everything below reads the same SQLite file the server writes to.
+`relog.sh start` serves a web UI on `http://localhost:3485` — no separate frontend to deploy, no extra process. Everything below reads the same SQLite file the server writes to.
 
 **Explore** — live-tailing log stream with a level-coded timeline, full-text search, and filters for service, project, branch, version and deployment.
 
@@ -55,10 +55,10 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 
 ```
 ┌─────────────────────┐         ┌──────────────────────────────────┐
-│   Your Application  │         │       relog.dev server             │
+│   Your Application  │         │       relog.sh server             │
 │                     │         │                                  │
 │  ┌───────────────┐  │  HTTP   │  ┌────────┐    ┌─────────────┐  │
-│  │ relog.dev client│──┼────────┼─▶│ /ingest │───▶│             │  │
+│  │ relog.sh client│──┼────────┼─▶│ /ingest │───▶│             │  │
 │  │  (Logger)     │  │  POST   │  └────────┘    │   SQLite    │  │
 │  └───────────────┘  │         │  ┌────────┐    │   (WAL)     │  │
 │   - batching        │         │  │ /logs   │◀───│             │  │
@@ -69,7 +69,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 ┌─────────────────────┐         │  └────────┘                      │
 │   Browser           │         │                                  │
 │  ┌───────────────┐  │  fetch  │  Role-based API keys (optional)  │
-│  │ relog.dev/     │  │ beacon  │  CORS (optional)                 │
+│  │ relog.sh/     │  │ beacon  │  CORS (optional)                 │
 │  │  browser      │──┼────┐    └──────────────────────────────────┘
 │  └───────────────┘  │    │
 │   - batching        │    │    ┌──────────────────────────────────┐
@@ -85,12 +85,12 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 │  stderr as logs     │          └──────────────────────────────┘
 │   - auto level      │
 │   - JSON-aware      │  HTTP
-│   - passthrough     │────────▶  relog.dev server
+│   - passthrough     │────────▶  relog.sh server
 └─────────────────────┘
 
 ┌─────────────────────┐
-│   relog.dev CLI      │  HTTP
-│                     │────────▶  relog.dev server
+│   relog.sh CLI      │  HTTP
+│                     │────────▶  relog.sh server
 │  tail | search      │
 │  query | export     │
 │  stats | prune      │
@@ -101,7 +101,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
                                 │     AI Agents (Claude, etc.)     │
                                 │                                  │
 ┌─────────────────────┐  stdio  │  search_logs | query_logs        │
-│ relog.dev mcp server │◀───────│  get_stats | tail_logs           │
+│ relog.sh mcp server │◀───────│  get_stats | tail_logs           │
 │   (stdio transport) │────────▶│  get_log_context                 │
 └─────────────────────┘         └──────────────────────────────────┘
 ```
@@ -109,7 +109,7 @@ A lightweight, self-hosted logging system for Bun. Ship structured logs from any
 ## Install
 
 ```bash
-bun add relog.dev
+bun add relog.sh
 ```
 
 For Python:
@@ -119,14 +119,14 @@ pip install relog
 # or: uv add relog
 ```
 
-The `relog.dev` package includes the server, CLI, and client SDK. Import from the appropriate entrypoint:
+The `relog.sh` package includes the server, CLI, and client SDK. Import from the appropriate entrypoint:
 
 ```typescript
-import { startServer } from "relog.dev"; // server
-import { createLogger } from "relog.dev/client"; // client SDK
-import { createMcpServer } from "relog.dev/mcp"; // MCP server
-import { createLogger } from "relog.dev/next"; // Next.js integration
-import { log } from "relog.dev/browser"; // Browser client
+import { startServer } from "relog.sh"; // server
+import { createLogger } from "relog.sh/client"; // client SDK
+import { createMcpServer } from "relog.sh/mcp"; // MCP server
+import { createLogger } from "relog.sh/next"; // Next.js integration
+import { log } from "relog.sh/browser"; // Browser client
 ```
 
 ## Standalone Binary
@@ -210,30 +210,30 @@ Try it in 60 seconds — copy-paste this entire block into your terminal:
 
 ```bash
 # terminal 1: start the server
-bunx relog.dev start &
+bunx relog.sh start &
 sleep 1
 
 # send some logs
-bunx relog.dev send --level info --message "user signed up" --service auth --project my-app --meta '{"userId":1}'
-bunx relog.dev send --level info --message "order created" --service billing --project my-app --meta '{"orderId":"abc"}'
-bunx relog.dev send --level warn --message "slow query detected" --service db --project my-app --meta '{"duration_ms":1200}'
-bunx relog.dev send --level error --message "payment failed" --service billing --project my-app --meta '{"orderId":"abc","code":"CARD_DECLINED"}'
-bunx relog.dev send --level debug --message "cache miss" --service api --project my-app
+bunx relog.sh send --level info --message "user signed up" --service auth --project my-app --meta '{"userId":1}'
+bunx relog.sh send --level info --message "order created" --service billing --project my-app --meta '{"orderId":"abc"}'
+bunx relog.sh send --level warn --message "slow query detected" --service db --project my-app --meta '{"duration_ms":1200}'
+bunx relog.sh send --level error --message "payment failed" --service billing --project my-app --meta '{"orderId":"abc","code":"CARD_DECLINED"}'
+bunx relog.sh send --level debug --message "cache miss" --service api --project my-app
 
 # search logs
-bunx relog.dev search --level error
-bunx relog.dev search --grep "order" --limit 5
-bunx relog.dev search --service billing
+bunx relog.sh search --level error
+bunx relog.sh search --grep "order" --limit 5
+bunx relog.sh search --service billing
 
 # run SQL queries
-bunx relog.dev query --sql "SELECT level, COUNT(*) as count FROM logs GROUP BY level"
-bunx relog.dev query --sql "SELECT service, COUNT(*) as count FROM logs GROUP BY service" --format json
+bunx relog.sh query --sql "SELECT level, COUNT(*) as count FROM logs GROUP BY level"
+bunx relog.sh query --sql "SELECT service, COUNT(*) as count FROM logs GROUP BY service" --format json
 
 # view stats
-bunx relog.dev stats
+bunx relog.sh stats
 
 # export to file
-bunx relog.dev export --output logs.json
+bunx relog.sh export --output logs.json
 cat logs.json
 
 # clean up
@@ -246,7 +246,7 @@ The fastest way to capture logs — just prefix your existing command with `relo
 
 ```bash
 # start the server in one terminal
-bunx relog.dev start
+bunx relog.sh start
 
 # in another terminal, prefix your command with relog
 relog bun run dev
@@ -294,14 +294,14 @@ The wrapped process's exit code is forwarded — `relog bun test && echo "passed
 Start the server:
 
 ```bash
-bunx relog.dev start
-# relog.dev server listening on http://localhost:3485
+bunx relog.sh start
+# relog.sh server listening on http://localhost:3485
 ```
 
 Send logs from your app:
 
 ```typescript
-import { createLogger } from "relog.dev/client";
+import { createLogger } from "relog.sh/client";
 
 const log = createLogger({
 	url: "http://localhost:3485",
@@ -339,7 +339,7 @@ log.flush()
 Tail logs in real-time:
 
 ```bash
-bunx relog.dev tail
+bunx relog.sh tail
 ```
 
 ## Client SDK
@@ -384,7 +384,7 @@ Set via `level` option or `LOG_LEVEL` / `RELOG_LEVEL` env var.
 
 ### Project & Branch Auto-Detection
 
-When `project` or `branch` aren't explicitly set, relog.dev infers them from git:
+When `project` or `branch` aren't explicitly set, relog.sh infers them from git:
 
 - **project**: Repository directory name via `git rev-parse --show-toplevel`
 - **branch**: Current branch via `git rev-parse --abbrev-ref HEAD`
@@ -511,7 +511,7 @@ log.error(new Error("connection failed"));
 
 ### Console-Only Mode
 
-Omit the `url` option to use relog.dev as a structured console logger with no network transport:
+Omit the `url` option to use relog.sh as a structured console logger with no network transport:
 
 ```typescript
 const log = createLogger({ service: "my-app" });
@@ -629,12 +629,12 @@ Stdout lines default to `info`, stderr lines default to `warn`. Lines containing
 
 Supports JSON structured logs from Pino, Bunyan, Winston, and any logger that outputs `{"level":"...","message":"..."}` or `{"level":30,"msg":"..."}` (numeric Pino levels). Also detects GCP Cloud Logging's `severity` field and logfmt `level=error` style.
 
-### `relog.dev start`
+### `relog.sh start`
 
 Start the log server.
 
 ```bash
-relog.dev start --port 3485 --admin-key mykey --cors true
+relog.sh start --port 3485 --admin-key mykey --cors true
 ```
 
 | Option                       | Default             | Description                                                                                                   |
@@ -677,7 +677,7 @@ relog.dev start --port 3485 --admin-key mykey --cors true
 
 ```bash
 # via CLI flags (comma-separated)
-relog.dev start \
+relog.sh start \
   --ingest-key "app1-key,app2-key,app3-key" \
   --admin-key "ops-key,ci-key"
 
@@ -686,18 +686,18 @@ RELOG_INGEST_KEY_APP1=key1 \
 RELOG_INGEST_KEY_APP2=key2 \
 RELOG_ADMIN_KEY=ops-key \
 RELOG_ADMIN_KEY_CI=ci-key \
-relog.dev start
+relog.sh start
 ```
 
 This lets you issue separate keys per app or team and revoke individual keys without affecting others. Ideal for Docker/k8s where each key can be injected as a separate secret.
 
-### `relog.dev send`
+### `relog.sh send`
 
 Send a log entry to the server.
 
 ```bash
-relog.dev send --message "hello world"
-relog.dev send --level error --message "connection failed" --service api --meta '{"code":500}'
+relog.sh send --message "hello world"
+relog.sh send --level error --message "connection failed" --service api --meta '{"code":500}'
 ```
 
 | Option       | Default    | Description                                               |
@@ -713,12 +713,12 @@ relog.dev send --level error --message "connection failed" --service api --meta 
 | `--trace-id` | —          | Trace ID                                                  |
 | `--span-id`  | —          | Span ID                                                   |
 
-### `relog.dev tail`
+### `relog.sh tail`
 
 Stream logs in real-time via SSE. Automatically reconnects on connection loss with exponential backoff (up to 10 retries).
 
 ```bash
-relog.dev tail --level error --service my-app --project my-project --branch main
+relog.sh tail --level error --service my-app --project my-project --branch main
 ```
 
 | Option       | Description            |
@@ -729,12 +729,12 @@ relog.dev tail --level error --service my-app --project my-project --branch main
 | `--branch`   | Filter by branch       |
 | `--trace-id` | Filter by trace ID     |
 
-### `relog.dev search`
+### `relog.sh search`
 
 Search logs with filters.
 
 ```bash
-relog.dev search --grep "timeout" --level error --from 1h --project my-app --branch main --limit 50
+relog.sh search --grep "timeout" --level error --from 1h --project my-app --branch main --limit 50
 ```
 
 | Option       | Default | Description                                                |
@@ -750,7 +750,7 @@ relog.dev search --grep "timeout" --level error --from 1h --project my-app --bra
 | `--to`       | —       | End time (ISO 8601)                                        |
 | `--limit`    | `100`   | Max results to return                                      |
 
-### `relog.dev query`
+### `relog.sh query`
 
 Run read-only SQL against the log database. Only `SELECT`, `EXPLAIN`, and safe `PRAGMA` statements are allowed.
 
@@ -758,9 +758,9 @@ Queries go to a running server by default. Pass `--db` to read a database file
 in place instead, which needs no server:
 
 ```bash
-relog.dev query --sql "SELECT level, COUNT(*) as count FROM logs GROUP BY level"
-relog.dev query --sql "SELECT * FROM logs WHERE service = 'api' ORDER BY id DESC LIMIT 10" --format json
-relog.dev query --db ~/.relog/relog.db --sql "SELECT COUNT(*) FROM logs"
+relog.sh query --sql "SELECT level, COUNT(*) as count FROM logs GROUP BY level"
+relog.sh query --sql "SELECT * FROM logs WHERE service = 'api' ORDER BY id DESC LIMIT 10" --format json
+relog.sh query --db ~/.relog/relog.db --sql "SELECT COUNT(*) FROM logs"
 ```
 
 | Option     | Default                 | Description                                        |
@@ -774,21 +774,21 @@ relog.dev query --db ~/.relog/relog.db --sql "SELECT COUNT(*) FROM logs"
 The same read-only validation applies either way, so `--db` cannot modify the
 file it opens.
 
-### `relog.dev stats`
+### `relog.sh stats`
 
 Show log counts, database size, and uptime.
 
 ```bash
-relog.dev stats
+relog.sh stats
 ```
 
-### `relog.dev export`
+### `relog.sh export`
 
 Export logs to a file.
 
 ```bash
-relog.dev export --output logs.json
-relog.dev export --output logs.csv --format csv --from 2025-01-01T00:00:00Z --project my-app
+relog.sh export --output logs.json
+relog.sh export --output logs.csv --format csv --from 2025-01-01T00:00:00Z --project my-app
 ```
 
 | Option       | Default    | Description                               |
@@ -803,13 +803,13 @@ relog.dev export --output logs.csv --format csv --from 2025-01-01T00:00:00Z --pr
 | `--span-id`  | —          | Filter by span ID                         |
 | `--limit`    | `10000`    | Max logs to export                        |
 
-### `relog.dev prune`
+### `relog.sh prune`
 
 Delete old logs. Prompts for confirmation unless `--yes` is passed.
 
 ```bash
-relog.dev prune --keep-days 30
-relog.dev prune --before 2025-01-01T00:00:00Z --yes
+relog.sh prune --keep-days 30
+relog.sh prune --before 2025-01-01T00:00:00Z --yes
 ```
 
 | Option        | Description                           |
@@ -818,17 +818,17 @@ relog.dev prune --before 2025-01-01T00:00:00Z --yes
 | `--keep-days` | Keep logs from the last N days        |
 | `--yes`       | Skip confirmation prompt              |
 
-### `relog.dev mcp`
+### `relog.sh mcp`
 
 Start an MCP server for AI agent integration (see [MCP Server](#mcp-server) below).
 
 ```bash
-relog.dev mcp --url http://localhost:3485 --auth my-read-key
+relog.sh mcp --url http://localhost:3485 --auth my-read-key
 ```
 
 ## MCP Server
 
-relog.dev includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI agents query your logs through natural tool use. The MCP server connects to a running relog.dev HTTP server and exposes tools over stdio.
+relog.sh includes a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI agents query your logs through natural tool use. The MCP server connects to a running relog.sh HTTP server and exposes tools over stdio.
 
 ### Setup with Claude Code
 
@@ -837,9 +837,9 @@ Add to `~/.claude/settings.json`:
 ```json
 {
 	"mcpServers": {
-		"relog.dev": {
+		"relog.sh": {
 			"command": "npx",
-			"args": ["relog.dev", "mcp", "--url", "http://localhost:3485"]
+			"args": ["relog.sh", "mcp", "--url", "http://localhost:3485"]
 		}
 	}
 }
@@ -850,9 +850,9 @@ With auth:
 ```json
 {
 	"mcpServers": {
-		"relog.dev": {
+		"relog.sh": {
 			"command": "npx",
-			"args": ["relog.dev", "mcp", "--url", "http://localhost:3485", "--auth", "my-read-key"]
+			"args": ["relog.sh", "mcp", "--url", "http://localhost:3485", "--auth", "my-read-key"]
 		}
 	}
 }
@@ -871,7 +871,7 @@ With auth:
 ### Programmatic Use
 
 ```typescript
-import { createMcpServer } from "relog.dev/mcp";
+import { createMcpServer } from "relog.sh/mcp";
 
 const server = createMcpServer({
 	url: "http://localhost:3485",
@@ -891,14 +891,14 @@ The MCP server is preferred when available since agents get typed tool schemas w
 
 ## Next.js Integration
 
-relog.dev provides a drop-in integration for Next.js that captures console output, HTTP requests, and unhandled errors with just two files.
+relog.sh provides a drop-in integration for Next.js that captures console output, HTTP requests, and unhandled errors with just two files.
 
 ### Setup
 
 **`instrumentation.ts`** (project root):
 
 ```typescript
-import { createLogger } from "relog.dev/next";
+import { createLogger } from "relog.sh/next";
 
 const relog = createLogger({
 	url: "http://localhost:3485",
@@ -915,7 +915,7 @@ export const onRequestError = relog.onRequestError;
 **`middleware.ts`** (project root):
 
 ```typescript
-import { relogMiddleware } from "relog.dev/next";
+import { relogMiddleware } from "relog.sh/next";
 import { NextResponse } from "next/server";
 
 export default relogMiddleware(() => NextResponse.next());
@@ -928,7 +928,7 @@ That's it. All `console.log/warn/error/info/debug` calls on the server are captu
 Use the `log` export anywhere in server code for explicit structured logs:
 
 ```typescript
-import { log } from "relog.dev/next";
+import { log } from "relog.sh/next";
 
 log.info("user signed in", { userId: "123" });
 log.error(new Error("payment failed"), { orderId: "abc" });
@@ -939,7 +939,7 @@ log.error(new Error("payment failed"), { orderId: "abc" });
 Pass your middleware function to `relogMiddleware`. The trace ID header is automatically added to the response:
 
 ```typescript
-import { relogMiddleware } from "relog.dev/next";
+import { relogMiddleware } from "relog.sh/next";
 
 function myMiddleware(request: Request) {
 	// your logic
@@ -953,7 +953,7 @@ export default relogMiddleware(myMiddleware);
 
 | Option           | Type       | Default                                    | Description                             |
 | ---------------- | ---------- | ------------------------------------------ | --------------------------------------- |
-| `url`            | `string`   | `RELOG_URL` env or `http://localhost:3485` | relog.dev server URL                    |
+| `url`            | `string`   | `RELOG_URL` env or `http://localhost:3485` | relog.sh server URL                     |
 | `service`        | `string`   | `"next"`                                   | Service name                            |
 | `auth`           | `string`   | `RELOG_AUTH` env                           | API key (sent as Bearer token)          |
 | `level`          | `LogLevel` | `"info"`                                   | Minimum log level                       |
@@ -966,21 +966,21 @@ export default relogMiddleware(myMiddleware);
 
 ### How It Works
 
-- **Console patching**: `register()` intercepts `console.log/info/warn/error/debug/trace`, forwarding each call to both the terminal (original behavior preserved) and the relog.dev transport. A recursion guard prevents infinite loops when the transport itself logs warnings. Display-only helpers (`console.group/table/dir`) are intentionally not patched — they don't carry log payloads.
+- **Console patching**: `register()` intercepts `console.log/info/warn/error/debug/trace`, forwarding each call to both the terminal (original behavior preserved) and the relog.sh transport. A recursion guard prevents infinite loops when the transport itself logs warnings. Display-only helpers (`console.group/table/dir`) are intentionally not patched — they don't carry log payloads.
 - **Request logging**: The middleware logs every request with method, path, status code, duration, and a generated trace ID. The trace ID is also set as an `x-trace-id` response header.
 - **Error tracking**: `onRequestError` is a Next.js instrumentation hook that catches unhandled errors from server components, server actions, and route handlers, logging them with full route context.
 - **Edge runtime**: The middleware detects Edge runtime (`NEXT_RUNTIME === "edge"`) and sends logs directly via `fetch` instead of using the full Logger/Transport stack, avoiding Node.js API dependencies. If the edge fetch fails (misconfigured `RELOG_URL`, network down), the failure is surfaced via `console.warn` once-per-process so logs aren't silently dropped forever.
 
 ## Browser Logging
 
-relog.dev provides a browser-safe logger that sends logs through a proxy endpoint on your own server. This keeps the relog server URL and API keys hidden from the client and avoids CORS issues.
+relog.sh provides a browser-safe logger that sends logs through a proxy endpoint on your own server. This keeps the relog server URL and API keys hidden from the client and avoids CORS issues.
 
 This is the crash-reporting half of client instrumentation — uncaught errors, promise rejections, and optionally `console` output. For pageviews and conversions, use [web analytics](#web-analytics) instead; the two are independent and share only the database.
 
 ### Zero-Config Usage
 
 ```typescript
-import { log } from "relog.dev/browser";
+import { log } from "relog.sh/browser";
 
 log.info("page loaded");
 log.error("checkout failed", { orderId: "abc" });
@@ -991,7 +991,7 @@ The singleton auto-initializes on first use. Logs are batched and sent to `/api/
 ### Configured Usage
 
 ```typescript
-import { createLogger } from "relog.dev/browser";
+import { createLogger } from "relog.sh/browser";
 
 const log = createLogger({
 	endpoint: "/api/logs",
@@ -1008,7 +1008,7 @@ The browser logger sends logs to a proxy on your server. For Next.js App Router,
 **`app/api/relog/route.ts`**:
 
 ```typescript
-import { createBrowserProxy } from "relog.dev/next";
+import { createBrowserProxy } from "relog.sh/next";
 
 export const POST = createBrowserProxy();
 ```
@@ -1073,7 +1073,7 @@ By default, `captureErrors: true` hooks `window.onerror` and `unhandledrejection
 The browser logger also supports wide events:
 
 ```typescript
-import { log } from "relog.dev/browser";
+import { log } from "relog.sh/browser";
 
 const ev = log.event("page_interaction");
 ev.set("page", "/checkout");
@@ -1085,7 +1085,7 @@ ev.end(); // emits one event with duration_ms
 ### Child Loggers
 
 ```typescript
-import { log } from "relog.dev/browser";
+import { log } from "relog.sh/browser";
 
 const pageLog = log.child({ page: "/checkout" });
 pageLog.info("step completed", { step: 2 });
@@ -1095,7 +1095,7 @@ Child loggers share the parent's transport and inherit all bound metadata.
 
 ## OpenTelemetry (OTLP)
 
-relog.dev speaks [OTLP/HTTP](https://opentelemetry.io/docs/specs/otlp/#otlphttp) with JSON encoding, so any OpenTelemetry SDK or the OpenTelemetry Collector can export traces and logs to it without relog-specific code. Spans, span events, resource attributes, span kind, and status codes are all preserved and surfaced in the UI's Traces view.
+relog.sh speaks [OTLP/HTTP](https://opentelemetry.io/docs/specs/otlp/#otlphttp) with JSON encoding, so any OpenTelemetry SDK or the OpenTelemetry Collector can export traces and logs to it without relog-specific code. Spans, span events, resource attributes, span kind, and status codes are all preserved and surfaced in the UI's Traces view.
 
 ### Endpoints
 
@@ -1138,7 +1138,7 @@ A runnable example lives in [`examples/otel/`](examples/otel/):
 
 ```bash
 # terminal 1
-bunx relog.dev start
+bunx relog.sh start
 
 # terminal 2
 bun examples/otel/otel-raw.ts
@@ -1146,7 +1146,7 @@ bun examples/otel/otel-raw.ts
 
 ### Python client
 
-The Python client (`pip install relog.dev`) can emit the same OTel-shaped metadata through `EventBuilder`:
+The Python client (`pip install relog.sh`) can emit the same OTel-shaped metadata through `EventBuilder`:
 
 ```python
 from relog import create_logger, SpanKind, SpanStatusCode
@@ -1235,17 +1235,17 @@ relog can double as a self-hosted, cookieless web-analytics service — the Umam
 
 Instrumenting a website uses two separate pieces, and which one you want depends on what you are measuring:
 
-| You want                                              | Use                                 | Integration                                        |
-| ----------------------------------------------------- | ----------------------------------- | -------------------------------------------------- |
-| Pageviews, referrers, UTMs, funnels, conversions      | Web analytics (this section)        | One `<script>` tag, no build step, no server code  |
-| Uncaught errors, promise rejections, `console` output | [Browser logging](#browser-logging) | `relog.dev/browser` plus a proxy route on your app |
+| You want                                              | Use                                 | Integration                                       |
+| ----------------------------------------------------- | ----------------------------------- | ------------------------------------------------- |
+| Pageviews, referrers, UTMs, funnels, conversions      | Web analytics (this section)        | One `<script>` tag, no build step, no server code |
+| Uncaught errors, promise rejections, `console` output | [Browser logging](#browser-logging) | `relog.sh/browser` plus a proxy route on your app |
 
 They are independent — run either alone — but they write to the same database, so [one SQL query can span both](#joining-traffic-against-errors).
 
 Enable it explicitly:
 
 ```bash
-relog.dev start --analytics --analytics-sites my-site,docs
+relog.sh start --analytics --analytics-sites my-site,docs
 ```
 
 Then drop one tag on the pages you want to measure:
@@ -1423,7 +1423,7 @@ Known crawlers, headless browsers, HTTP clients, link-preview fetchers, and AI s
 ### Programmatic use
 
 ```typescript
-import { RelogDatabase } from "relog.dev";
+import { RelogDatabase } from "relog.sh";
 
 const db = new RelogDatabase("./relog.db");
 const range = { site: "my-site", from: Date.now() - 7 * 86_400_000, to: Date.now() };
@@ -1668,7 +1668,7 @@ Indexed on: `created_at`, `level`, `service`, `trace_id`, `project`, `branch`, `
 ## Programmatic Server
 
 ```typescript
-import { startServer } from "relog.dev";
+import { startServer } from "relog.sh";
 
 const { server, db, streamManager, shutdown } = startServer({
 	port: 3485,
@@ -1738,7 +1738,7 @@ Pass `--no-prune` to disable automatic pruning entirely.
 
 ### Defaults
 
-A plain `relog.dev start` automatically prunes with these defaults:
+A plain `relog.sh start` automatically prunes with these defaults:
 
 | Threshold          | Default | Description                              |
 | ------------------ | ------- | ---------------------------------------- |
@@ -1750,23 +1750,23 @@ A plain `relog.dev start` automatically prunes with these defaults:
 
 ```bash
 # Default pruning — just start the server, no flags needed
-relog.dev start
+relog.sh start
 
 # Customize thresholds
-relog.dev start --max-db-size 2gb --max-age-days 90
+relog.sh start --max-db-size 2gb --max-age-days 90
 
 # Disable pruning entirely
-relog.dev start --no-prune
+relog.sh start --no-prune
 
 # Archive to S3 before pruning — no data loss
-relog.dev start \
+relog.sh start \
   --s3-endpoint https://s3.amazonaws.com \
   --s3-bucket my-logs-bucket \
   --s3-access-key AKIA... \
   --s3-secret-key secret...
 
 # MinIO / Tigris (path-style URLs)
-relog.dev start \
+relog.sh start \
   --max-age-days 7 \
   --s3-endpoint http://minio:9000 \
   --s3-bucket logs \
@@ -1777,7 +1777,7 @@ relog.dev start \
 
 ### Hot + Cold Storage
 
-When S3 is configured, relog.dev uses a **hot/cold storage architecture**:
+When S3 is configured, relog.sh uses a **hot/cold storage architecture**:
 
 - **Hot**: Recent logs live in SQLite for fast writes and real-time streaming
 - **Cold**: Archived logs live in S3 as compressed Parquet files (Snappy codec)

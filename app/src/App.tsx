@@ -155,7 +155,7 @@ function AppContent() {
 			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="flex flex-col items-center gap-3">
 					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-					<span className="text-xs text-muted-foreground">Connecting to relog.dev...</span>
+					<span className="text-xs text-muted-foreground">Connecting to relog.sh...</span>
 				</div>
 			</div>
 		);

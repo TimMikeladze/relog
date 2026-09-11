@@ -101,7 +101,7 @@ export class RelogDatabase {
 				if (entry.timestamp) {
 					const parsed = new Date(entry.timestamp).getTime();
 					if (Number.isNaN(parsed)) {
-						console.warn(`[relog.dev] Invalid timestamp "${entry.timestamp}", using server time`);
+						console.warn(`[relog.sh] Invalid timestamp "${entry.timestamp}", using server time`);
 						ts = new Date(now).toISOString();
 						createdAt = now;
 					} else {

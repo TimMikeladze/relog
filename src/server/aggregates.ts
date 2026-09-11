@@ -53,7 +53,7 @@ export class AggregatesManager {
 		} catch (err) {
 			if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
 			throw new Error(
-				`[relog.dev] Failed to read aggregates file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
+				`[relog.sh] Failed to read aggregates file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
 			);
 		}
 		try {
@@ -63,7 +63,7 @@ export class AggregatesManager {
 			}
 		} catch (err) {
 			throw new Error(
-				`[relog.dev] Aggregates file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
+				`[relog.sh] Aggregates file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
 			);
 		}
 	}

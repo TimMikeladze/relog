@@ -113,7 +113,7 @@ export function createLogger(config: RelogNextConfig = {}) {
 		if (singleton) return;
 
 		// Dynamic imports so that middleware.ts (Edge runtime) can import
-		// relog.dev/next without pulling in node:os / node:child_process.
+		// relog.sh/next without pulling in node:os / node:child_process.
 		const { Transport } = await import("./transport.ts");
 		const { Logger } = await import("./logger.ts");
 
@@ -125,7 +125,7 @@ export function createLogger(config: RelogNextConfig = {}) {
 			onError(error) {
 				_insideRelog = true;
 				try {
-					originalConsole.warn(`[relog.dev] Transport error: ${error.message}`);
+					originalConsole.warn(`[relog.sh] Transport error: ${error.message}`);
 				} finally {
 					_insideRelog = false;
 				}
@@ -262,7 +262,7 @@ export function relogProxy(userProxy?: (request: Request) => Response | Promise<
 				if (!edgeIngestWarned) {
 					edgeIngestWarned = true;
 					originalConsole.warn(
-						`[relog.dev] edge-runtime ingest to ${edgeUrl}/ingest failed (further failures suppressed):`,
+						`[relog.sh] edge-runtime ingest to ${edgeUrl}/ingest failed (further failures suppressed):`,
 						err instanceof Error ? err.message : err,
 					);
 				}
@@ -287,7 +287,7 @@ function warnIfNoSingleton(): void {
 	if (!singleton && !logProxyWarned) {
 		logProxyWarned = true;
 		originalConsole.warn(
-			"[relog.dev] log.* called before register(). Logs will be dropped until createLogger().register() is called.",
+			"[relog.sh] log.* called before register(). Logs will be dropped until createLogger().register() is called.",
 		);
 	}
 }
@@ -409,7 +409,7 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 				// server-side and surface a generic status code.
 				const text = await res.text().catch(() => "");
 				originalConsole.warn(
-					`[relog.dev] browser proxy upstream ${res.status}: ${text.slice(0, 500)}`,
+					`[relog.sh] browser proxy upstream ${res.status}: ${text.slice(0, 500)}`,
 				);
 				return Response.json({ error: "Upstream ingest failed" }, { status: 502 });
 			}
@@ -417,7 +417,7 @@ export function createBrowserProxy(options: BrowserProxyOptions = {}) {
 			return Response.json({ ingested: entries.length });
 		} catch (err) {
 			originalConsole.warn(
-				`[relog.dev] browser proxy fetch failed: ${err instanceof Error ? err.message : err}`,
+				`[relog.sh] browser proxy fetch failed: ${err instanceof Error ? err.message : err}`,
 			);
 			return Response.json({ error: "Upstream ingest failed" }, { status: 502 });
 		}

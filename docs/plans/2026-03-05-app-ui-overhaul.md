@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Overhaul the relog.dev web UI to expose every framework capability with power-user features: traces view, query workbench, command palette, keyboard shortcuts, timeline scrubber, export, and enhanced dashboard.
+**Goal:** Overhaul the relog.sh web UI to expose every framework capability with power-user features: traces view, query workbench, command palette, keyboard shortcuts, timeline scrubber, export, and enhanced dashboard.
 
 **Architecture:** Panel-based single-window layout. Five views (Live, Explore, Traces, Query, Dashboard) accessed via tab navigation + hash routing. Status bar at bottom. Command palette (Cmd+K) + vim-style keyboard shortcuts. Timeline strip component shared across Live/Explore/Traces. Right-side slide panel for log detail. Recharts for all charts. CodeMirror for SQL editor. localStorage for saved queries/history/preferences.
 
@@ -428,7 +428,7 @@ function AppContent() {
 			<div className="flex h-screen items-center justify-center bg-background">
 				<div className="flex flex-col items-center gap-3">
 					<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-					<span className="text-xs text-muted-foreground">Connecting to relog.dev...</span>
+					<span className="text-xs text-muted-foreground">Connecting to relog.sh...</span>
 				</div>
 			</div>
 		);

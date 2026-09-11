@@ -166,7 +166,7 @@ export function GettingStartedDialog({ onClose }: { onClose: () => void }) {
 						<div className="space-y-2">
 							<CodeBlock
 								lang="bash"
-								code={`bun add relog.dev\n\n# optional: run your own server at http://localhost:3485\nbun relog.dev start`}
+								code={`bun add relog.sh\n\n# optional: run your own server at http://localhost:3485\nbun relog.sh start`}
 							/>
 						</div>
 					</Step>
@@ -181,7 +181,7 @@ export function GettingStartedDialog({ onClose }: { onClose: () => void }) {
 						<div className="space-y-2">
 							<CodeBlock
 								lang="typescript"
-								code={`import { createLogger } from "relog.dev";
+								code={`import { createLogger } from "relog.sh";
 
 const log = createLogger({
   url: "${serverUrlForSnippet}/ingest",
@@ -222,7 +222,7 @@ log.error("Something went wrong", { code: 500 });`}
   "mcpServers": {
     "relog": {
       "command": "bun",
-      "args": ["relog.dev", "mcp", "--url", "${serverUrlForSnippet}"]
+      "args": ["relog.sh", "mcp", "--url", "${serverUrlForSnippet}"]
     }
   }
 }`}

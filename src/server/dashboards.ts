@@ -38,7 +38,7 @@ export class DashboardsManager {
 			// Same reasoning as the widgets store: a transient read failure must
 			// not be answered by overwriting the user's file with defaults.
 			throw new Error(
-				`[relog.dev] Failed to read dashboards file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
+				`[relog.sh] Failed to read dashboards file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
 			);
 		}
 		try {
@@ -49,7 +49,7 @@ export class DashboardsManager {
 			}
 		} catch (err) {
 			throw new Error(
-				`[relog.dev] Dashboards file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
+				`[relog.sh] Dashboards file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
 			);
 		}
 	}
@@ -109,7 +109,7 @@ export class DashboardsManager {
 			};
 			await atomicWriteFile(this.filePath, JSON.stringify(body, null, 2));
 		} catch (err) {
-			console.error("[relog.dev] Failed to persist dashboards:", err);
+			console.error("[relog.sh] Failed to persist dashboards:", err);
 		}
 	}
 }

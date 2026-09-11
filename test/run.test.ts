@@ -154,7 +154,7 @@ describe("parseArgs", () => {
 	test("infers service from package.json name", () => {
 		const config = parseArgs(["echo", "hello"]);
 		expect(config).not.toBeNull();
-		expect(config!.service).toBe("relog.dev");
+		expect(config!.service).toBe("relog.sh");
 	});
 
 	test("--service overrides package.json inference", () => {

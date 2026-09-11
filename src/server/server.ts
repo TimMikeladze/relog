@@ -155,7 +155,7 @@ function validateCorsConfig(cors: ServerConfig["cors"]): void {
 	for (const o of list) {
 		if (!isValidOrigin(o)) {
 			throw new Error(
-				`[relog.dev] Invalid CORS origin: ${JSON.stringify(o)}. Must be "*" or http(s)://host[:port].`,
+				`[relog.sh] Invalid CORS origin: ${JSON.stringify(o)}. Must be "*" or http(s)://host[:port].`,
 			);
 		}
 	}
@@ -225,23 +225,23 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	);
 	if (analytics?.enabled && (!analytics.sites || analytics.sites.length === 0)) {
 		console.warn(
-			"[relog.dev] Analytics is enabled with no `sites` allowlist. /collect will accept events for any site id — set `analytics.sites` in production.",
+			"[relog.sh] Analytics is enabled with no `sites` allowlist. /collect will accept events for any site id — set `analytics.sites` in production.",
 		);
 	}
 
 	validateCorsConfig(config.cors);
 	if (config.cors === true) {
 		console.warn(
-			"[relog.dev] CORS is configured as `true` (wildcard `*`). Do NOT use this in production — set `cors` to a specific origin or list of origins.",
+			"[relog.sh] CORS is configured as `true` (wildcard `*`). Do NOT use this in production — set `cors` to a specific origin or list of origins.",
 		);
 	}
 
 	const duckdb = new DuckDBReader(config.dbPath, config.archive);
 	await duckdb.init();
-	console.log("[relog.dev] DuckDB read engine initialized");
+	console.log("[relog.sh] DuckDB read engine initialized");
 	if (config.archive) {
 		console.log(
-			`[relog.dev] DuckDB reading archived data from s3://${config.archive.bucket}/${config.archive.prefix ?? "logs"}`,
+			`[relog.sh] DuckDB reading archived data from s3://${config.archive.bucket}/${config.archive.prefix ?? "logs"}`,
 		);
 	}
 
@@ -518,7 +518,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 
 				return response;
 			} catch (err) {
-				console.error("[relog.dev] Unhandled request error:", err);
+				console.error("[relog.sh] Unhandled request error:", err);
 				return Response.json({ error: "Internal server error" }, { status: 500, headers: cors });
 			}
 		},
@@ -533,7 +533,7 @@ export async function startServer(config: ServerConfig): Promise<ServerInstance>
 	let sourcesHandle: SourcesHandle | undefined;
 	if (sourceConfigs && sourceConfigs.length > 0) {
 		sourcesHandle = startSources(db, streamManager, sourceConfigs);
-		console.log(`[relog.dev] ${sourceConfigs.length} source(s) configured`);
+		console.log(`[relog.sh] ${sourceConfigs.length} source(s) configured`);
 	}
 
 	const shutdown = async () => {

@@ -49,12 +49,12 @@ export function startAnalyticsPrune(
 			const result = pruneAnalyticsOnce(db, config);
 			if (result.rawDeleted > 0 || result.aggregatesDeleted > 0) {
 				console.log(
-					`[relog.dev] analytics retention: deleted ${result.rawDeleted} raw events, ${result.aggregatesDeleted} aggregate rows`,
+					`[relog.sh] analytics retention: deleted ${result.rawDeleted} raw events, ${result.aggregatesDeleted} aggregate rows`,
 				);
 			}
 			return result;
 		} catch (err) {
-			console.error("[relog.dev] analytics retention error:", err);
+			console.error("[relog.sh] analytics retention error:", err);
 			return { rawDeleted: 0, aggregatesDeleted: 0 };
 		}
 	};

@@ -70,7 +70,7 @@ export function startSources(
 					}
 
 					if (totalIngested > 0) {
-						console.log(`[relog.dev] source ${sourceId}: ingested ${totalIngested} logs`);
+						console.log(`[relog.sh] source ${sourceId}: ingested ${totalIngested} logs`);
 					}
 
 					consecutiveFailures = 0;
@@ -80,7 +80,7 @@ export function startSources(
 					if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
 						disabled = true;
 						console.error(
-							`[relog.dev] source ${sourceId} disabled after ${consecutiveFailures} consecutive failures. Fix the underlying issue and restart relog. Last error:`,
+							`[relog.sh] source ${sourceId} disabled after ${consecutiveFailures} consecutive failures. Fix the underlying issue and restart relog. Last error:`,
 							err,
 						);
 						return;
@@ -100,7 +100,7 @@ export function startSources(
 					backoffSeconds = withJitter(backoffSeconds);
 					nextAttemptAt = Date.now() + backoffSeconds * 1000;
 					console.error(
-						`[relog.dev] source ${sourceId} error (failure #${consecutiveFailures}, backoff ${backoffSeconds.toFixed(0)}s):`,
+						`[relog.sh] source ${sourceId} error (failure #${consecutiveFailures}, backoff ${backoffSeconds.toFixed(0)}s):`,
 						err,
 					);
 				} finally {

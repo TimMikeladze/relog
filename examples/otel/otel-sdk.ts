@@ -9,7 +9,7 @@
  *           @opentelemetry/exporter-trace-otlp-http
  *
  * Run:
- *   bunx relog.dev start &
+ *   bunx relog.sh start &
  *   bun examples/otel/otel-sdk.ts
  */
 

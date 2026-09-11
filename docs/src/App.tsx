@@ -272,7 +272,7 @@ function Header() {
 		>
 			<div className="max-w-5xl mx-auto px-5 sm:px-8 h-12 flex items-center justify-between">
 				<a href="/" className="text-fg font-semibold tracking-tight text-[14px]">
-					relog.dev
+					relog.sh
 				</a>
 				<nav className="flex items-center gap-1">
 					<a
@@ -283,7 +283,7 @@ function Header() {
 						GitHub
 					</a>
 					<a
-						href="https://app.relog.dev"
+						href="https://app.relog.sh"
 						className="text-bg bg-fg rounded-md px-3 py-1 text-[12px] font-medium hover:bg-fg/85 transition-colors"
 					>
 						Open App
@@ -341,8 +341,8 @@ function Hero() {
 			>
 				<div className="inline-flex bg-bg-code border border-white/[0.06] rounded-lg px-4 py-2.5 font-mono text-[13px] items-center gap-2.5">
 					<span className="text-muted select-none">$</span>
-					<span className="text-fg">bunx relog.dev start</span>
-					<CopyButton text="bunx relog.dev start" />
+					<span className="text-fg">bunx relog.sh start</span>
+					<CopyButton text="bunx relog.sh start" />
 				</div>
 			</motion.div>
 		</section>
@@ -877,7 +877,7 @@ function AppScreenshots() {
 							<span className="w-2 h-2 rounded-full bg-white/[0.08]" />
 							<span className="w-2 h-2 rounded-full bg-white/[0.08]" />
 							<span className="ml-2 text-[10px] text-muted/40 bg-white/[0.03] rounded px-2 py-0.5 flex-1 max-w-40 border border-white/[0.04]">
-								app.relog.dev
+								app.relog.sh
 							</span>
 						</div>
 
@@ -885,7 +885,7 @@ function AppScreenshots() {
 						<div className="bg-bg-code aspect-[16/9] sm:aspect-[2/1] flex items-center justify-center relative">
 							<img
 								src={views[active]!.img}
-								alt={`relog.dev ${views[active]!.label} view`}
+								alt={`relog.sh ${views[active]!.label} view`}
 								className="w-full h-full object-cover object-top"
 								onError={(e) => {
 									// Hide broken image, show placeholder
@@ -1310,8 +1310,8 @@ function ClosingCTA() {
 					</p>
 					<div className="inline-flex bg-bg-code border border-white/[0.06] rounded-lg px-4 py-2.5 font-mono text-[13px] items-center gap-2.5">
 						<span className="text-muted select-none">$</span>
-						<span className="text-fg">bunx relog.dev start</span>
-						<CopyButton text="bunx relog.dev start" />
+						<span className="text-fg">bunx relog.sh start</span>
+						<CopyButton text="bunx relog.sh start" />
 					</div>
 					<div className="flex items-center justify-center gap-3 mt-5">
 						<a
@@ -1322,7 +1322,7 @@ function ClosingCTA() {
 							View on GitHub
 						</a>
 						<a
-							href="https://app.relog.dev"
+							href="https://app.relog.sh"
 							className="inline-flex items-center gap-1.5 text-[12px] font-medium text-bg bg-fg hover:bg-fg/90 transition-colors px-3.5 py-1.5 rounded-md"
 						>
 							Open App
@@ -1371,39 +1371,39 @@ function Examples() {
 	const examples = [
 		{
 			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n});\n\nlog.info("server started", { port: 3000 });\nlog.warn("slow query", { duration_ms: 1200, table: "users" });\nlog.error(new Error("connection failed"));\n\nconst reqLog = log.child({\n  traceId: "abc-123",\n  method: "POST",\n  path: "/users",\n});\nreqLog.info("request started");\nreqLog.info("auth passed", { userId: "u_42" });\n\nawait log.flush();`,
+			code: `import { createLogger } from "relog.sh/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n});\n\nlog.info("server started", { port: 3000 });\nlog.warn("slow query", { duration_ms: 1200, table: "users" });\nlog.error(new Error("connection failed"));\n\nconst reqLog = log.child({\n  traceId: "abc-123",\n  method: "POST",\n  path: "/users",\n});\nreqLog.info("request started");\nreqLog.info("auth passed", { userId: "u_42" });\n\nawait log.flush();`,
 		},
 		{
 			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n  sampleRate: 0.05,\n  slowThresholdMs: 500,\n});\n\nconst ev = log.event("http_request");\nev.request(req);\n\nconst user = await authenticate(req);\nev.set("user_id", user.id);\nif (user.tier === "enterprise") ev.keep();\n\ntry {\n  const result = await handleRequest(req);\n  ev.set("result_count", result.items.length);\n  ev.response(res);\n} catch (err) {\n  ev.error(err);\n}\n\nev.end();`,
+			code: `import { createLogger } from "relog.sh/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n  sampleRate: 0.05,\n  slowThresholdMs: 500,\n});\n\nconst ev = log.event("http_request");\nev.request(req);\n\nconst user = await authenticate(req);\nev.set("user_id", user.id);\nif (user.tier === "enterprise") ev.keep();\n\ntry {\n  const result = await handleRequest(req);\n  ev.set("result_count", result.items.length);\n  ev.response(res);\n} catch (err) {\n  ev.error(err);\n}\n\nev.end();`,
 		},
 		{
 			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n  sampleRate: 0.05,\n  slowThresholdMs: 500,\n});\n\n// Errors always kept\nlog.event("http_request")\n  .request(req)\n  .error(new Error("DB timeout"))\n  .end();\n\n// Slow events kept automatically\nlog.event("http_request")\n  .request(req)\n  .end();\n\n// Force-keep VIP traffic\nconst ev = log.event("http_request");\nev.request(req);\nif (user.tier === "enterprise") ev.keep();\nev.end();`,
+			code: `import { createLogger } from "relog.sh/client";\n\nconst log = createLogger({\n  url: "http://localhost:3485",\n  service: "api",\n  sampleRate: 0.05,\n  slowThresholdMs: 500,\n});\n\n// Errors always kept\nlog.event("http_request")\n  .request(req)\n  .error(new Error("DB timeout"))\n  .end();\n\n// Slow events kept automatically\nlog.event("http_request")\n  .request(req)\n  .end();\n\n// Force-keep VIP traffic\nconst ev = log.event("http_request");\nev.request(req);\nif (user.tier === "enterprise") ev.keep();\nev.end();`,
 		},
 		{
 			lang: "typescript",
-			code: `// instrumentation.ts\nimport { createLogger } from "relog.dev/next";\n\nconst relog = createLogger({\n  url: "http://localhost:3485",\n  service: "my-nextjs-app",\n});\n\nexport async function register() {\n  await relog.register();\n}\n\nexport const onRequestError = relog.onRequestError;\n\n// app/api/relog/route.ts\nimport { createBrowserProxy } from "relog.dev/next";\n\nexport const POST = createBrowserProxy({\n  url: process.env.RELOG_URL,\n  auth: process.env.RELOG_AUTH,\n  service: "my-nextjs-app",\n});`,
+			code: `// instrumentation.ts\nimport { createLogger } from "relog.sh/next";\n\nconst relog = createLogger({\n  url: "http://localhost:3485",\n  service: "my-nextjs-app",\n});\n\nexport async function register() {\n  await relog.register();\n}\n\nexport const onRequestError = relog.onRequestError;\n\n// app/api/relog/route.ts\nimport { createBrowserProxy } from "relog.sh/next";\n\nexport const POST = createBrowserProxy({\n  url: process.env.RELOG_URL,\n  auth: process.env.RELOG_AUTH,\n  service: "my-nextjs-app",\n});`,
 		},
 		{
 			lang: "typescript",
-			code: `import { createLogger } from "relog.dev/browser";\n\nconst log = createLogger({\n  url: "https://logs.example.com",\n  auth: "ik_prod_abc123",\n  service: "web-app",\n  captureConsole: true,\n  captureErrors: true,\n});\n\nlog.info("page loaded", {\n  route: location.pathname,\n  referrer: document.referrer,\n});\n\n// Or proxy through your backend\nconst proxied = createLogger({\n  endpoint: "/api/relog",\n  service: "web-app",\n});`,
+			code: `import { createLogger } from "relog.sh/browser";\n\nconst log = createLogger({\n  url: "https://logs.example.com",\n  auth: "ik_prod_abc123",\n  service: "web-app",\n  captureConsole: true,\n  captureErrors: true,\n});\n\nlog.info("page loaded", {\n  route: location.pathname,\n  referrer: document.referrer,\n});\n\n// Or proxy through your backend\nconst proxied = createLogger({\n  endpoint: "/api/relog",\n  service: "web-app",\n});`,
 		},
 		{
 			lang: "bash",
-			code: `# Start with three auth tiers\nbunx relog.dev start \\\n  --ingest-key ik_prod_abc123 \\\n  --read-key rk_prod_xyz789 \\\n  --admin-key ak_prod_secret456\n\n# Ingest: write-only\ncurl -X POST http://localhost:3485/ingest \\\n  -H "Authorization: Bearer ik_prod_abc123" \\\n  -H "Content-Type: application/json" \\\n  -d '[{"level":"info","message":"deployed","service":"api"}]'\n\n# Read: query, search, stream\ncurl http://localhost:3485/logs/search?q=deployed \\\n  -H "Authorization: Bearer rk_prod_xyz789"`,
+			code: `# Start with three auth tiers\nbunx relog.sh start \\\n  --ingest-key ik_prod_abc123 \\\n  --read-key rk_prod_xyz789 \\\n  --admin-key ak_prod_secret456\n\n# Ingest: write-only\ncurl -X POST http://localhost:3485/ingest \\\n  -H "Authorization: Bearer ik_prod_abc123" \\\n  -H "Content-Type: application/json" \\\n  -d '[{"level":"info","message":"deployed","service":"api"}]'\n\n# Read: query, search, stream\ncurl http://localhost:3485/logs/search?q=deployed \\\n  -H "Authorization: Bearer rk_prod_xyz789"`,
 		},
 		{
 			lang: "jsonc",
-			code: `// ~/.claude/settings.json\n{\n  "mcpServers": {\n    "relog.dev": {\n      "command": "npx",\n      "args": [\n        "relog.dev", "mcp",\n        "--url", "http://localhost:3485",\n        "--auth", "rk_your_read_key"\n      ]\n    }\n  }\n}\n\n// Tools: search_logs, query_logs,\n// get_stats, tail_logs, get_context`,
+			code: `// ~/.claude/settings.json\n{\n  "mcpServers": {\n    "relog.sh": {\n      "command": "npx",\n      "args": [\n        "relog.sh", "mcp",\n        "--url", "http://localhost:3485",\n        "--auth", "rk_your_read_key"\n      ]\n    }\n  }\n}\n\n// Tools: search_logs, query_logs,\n// get_stats, tail_logs, get_context`,
 		},
 		{
 			lang: "bash",
-			code: `# Archive to S3 as Parquet\nbunx relog.dev archive --keep-days 7\n\n# Start with S3 for hot + cold queries\nbunx relog.dev start \\\n  --s3-endpoint https://s3.amazonaws.com \\\n  --s3-bucket my-logs \\\n  --s3-access-key AKIA... \\\n  --s3-secret-key ...\n\n# DuckDB merges SQLite + S3 Parquet\n# Works with AWS S3, R2, MinIO, B2`,
+			code: `# Archive to S3 as Parquet\nbunx relog.sh archive --keep-days 7\n\n# Start with S3 for hot + cold queries\nbunx relog.sh start \\\n  --s3-endpoint https://s3.amazonaws.com \\\n  --s3-bucket my-logs \\\n  --s3-access-key AKIA... \\\n  --s3-secret-key ...\n\n# DuckDB merges SQLite + S3 Parquet\n# Works with AWS S3, R2, MinIO, B2`,
 		},
 		{
 			lang: "bash",
-			code: `# Stream logs in real-time\nbunx relog.dev tail --level error --service api\n\n# Full-text search\nbunx relog.dev search --grep "payment failed" --from 1h\n\n# Run SQL\nbunx relog.dev query --sql \\\n  "SELECT service, level, COUNT(*) as n\n   FROM logs\n   WHERE timestamp > datetime('now', '-1 hour')\n   GROUP BY service, level\n   ORDER BY n DESC"\n\n# Export and stats\nbunx relog.dev export --format csv --from 7d\nbunx relog.dev stats --from 24h`,
+			code: `# Stream logs in real-time\nbunx relog.sh tail --level error --service api\n\n# Full-text search\nbunx relog.sh search --grep "payment failed" --from 1h\n\n# Run SQL\nbunx relog.sh query --sql \\\n  "SELECT service, level, COUNT(*) as n\n   FROM logs\n   WHERE timestamp > datetime('now', '-1 hour')\n   GROUP BY service, level\n   ORDER BY n DESC"\n\n# Export and stats\nbunx relog.sh export --format csv --from 7d\nbunx relog.sh stats --from 24h`,
 		},
 		{
 			lang: "python",
@@ -1596,7 +1596,7 @@ function Footer() {
 						GitHub
 					</a>
 					<a
-						href="https://www.npmjs.com/package/relog.dev"
+						href="https://www.npmjs.com/package/relog.sh"
 						className="hover:text-fg transition-colors"
 					>
 						npm

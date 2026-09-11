@@ -26,7 +26,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 		} catch {
 			origin = url;
 		}
-		console.error(`Cannot reach a relog.dev server at ${origin}`);
+		console.error(`Cannot reach a relog.sh server at ${origin}`);
 		console.error(`  ${(err as Error).message}`);
 		console.error("");
 		console.error("Start one with `relog start`, or pass --url if it listens elsewhere.");

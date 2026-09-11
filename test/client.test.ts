@@ -293,7 +293,7 @@ describe("Transport retry logic", () => {
 		console.warn = origWarn;
 
 		expect(warnings.length).toBeGreaterThan(0);
-		expect(warnings.some((w) => String(w).includes("[relog.dev]"))).toBe(true);
+		expect(warnings.some((w) => String(w).includes("[relog.sh]"))).toBe(true);
 
 		transport.destroy();
 		server.stop();

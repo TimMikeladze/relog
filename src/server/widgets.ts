@@ -30,7 +30,7 @@ export class WidgetsManager {
 			// overwrite — that would risk destroying real user data on a transient
 			// read failure.
 			throw new Error(
-				`[relog.dev] Failed to read widgets file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
+				`[relog.sh] Failed to read widgets file ${this.filePath}: ${err instanceof Error ? err.message : err}`,
 			);
 		}
 		try {
@@ -41,7 +41,7 @@ export class WidgetsManager {
 			}
 		} catch (err) {
 			throw new Error(
-				`[relog.dev] Widgets file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
+				`[relog.sh] Widgets file ${this.filePath} is corrupted: ${err instanceof Error ? err.message : err}. Move/restore it manually.`,
 			);
 		}
 	}
@@ -99,7 +99,7 @@ export class WidgetsManager {
 			};
 			await atomicWriteFile(this.filePath, JSON.stringify(body, null, 2));
 		} catch (err) {
-			console.error("[relog.dev] Failed to persist widgets:", err);
+			console.error("[relog.sh] Failed to persist widgets:", err);
 		}
 	}
 }

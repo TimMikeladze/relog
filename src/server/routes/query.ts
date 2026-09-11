@@ -51,7 +51,7 @@ export async function handleQuery(
 		// server-side (planner crash, OOM, file-not-found on Parquet) →
 		// 500 so clients/monitors don't misinterpret them as bad input.
 		if (err instanceof QueryValidationError) {
-			console.warn(`[relog.dev] /query rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`);
+			console.warn(`[relog.sh] /query rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`);
 			return Response.json({ error: err.message }, { status: 400 });
 		}
 		if (isUserSqlError(err)) {
@@ -120,7 +120,7 @@ export async function handleQueryStream(
 	} catch (err) {
 		if (err instanceof QueryValidationError) {
 			console.warn(
-				`[relog.dev] /query/stream rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`,
+				`[relog.sh] /query/stream rejected: ${err.message} (keyPrefix=${keyPrefix ?? "_"})`,
 			);
 			return Response.json({ error: err.message }, { status: 400 });
 		}

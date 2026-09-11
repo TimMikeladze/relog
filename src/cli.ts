@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 process.on("unhandledRejection", (err) => {
-	console.error("[relog.dev] Unhandled promise rejection:", err);
+	console.error("[relog.sh] Unhandled promise rejection:", err);
 });
 
 import { run } from "@drizzle-team/brocli";
@@ -37,7 +37,7 @@ if (isWrapMode(args)) {
 			deleteDbCommand,
 		],
 		{
-			name: "relog.dev",
+			name: "relog.sh",
 			description: "Universal logging system",
 			// Replaced at build time by scripts/build-binary.ts so a standalone
 			// binary reports the version it was cut from, not a stale literal.

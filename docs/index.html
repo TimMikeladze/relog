@@ -4,42 +4,42 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-		<title>relog.dev — Structured Logging for the Agentic Era</title>
+		<title>relog.sh — Structured Logging for the Agentic Era</title>
 		<meta
 			name="description"
 			content="Free, self-hosted log server for Bun and TypeScript. SQLite-backed with SQL queries, real-time streaming, MCP for AI agents, and Next.js integration."
 		/>
 
-		<link rel="canonical" href="https://relog.dev" />
+		<link rel="canonical" href="https://relog.sh" />
 		<meta name="theme-color" content="#09090b" />
 
 		<!-- Open Graph -->
 		<meta property="og:type" content="website" />
-		<meta property="og:url" content="https://relog.dev" />
+		<meta property="og:url" content="https://relog.sh" />
 		<meta property="og:locale" content="en_US" />
-		<meta property="og:title" content="relog.dev — Structured Logging for the Agentic Era" />
+		<meta property="og:title" content="relog.sh — Structured Logging for the Agentic Era" />
 		<meta
 			property="og:description"
 			content="Free, self-hosted log server for Bun. Ship structured logs, query with SQL, stream in real-time, and let AI agents analyze everything via MCP."
 		/>
-		<meta property="og:site_name" content="relog.dev" />
-		<meta property="og:image" content="https://relog.dev/og.png" />
+		<meta property="og:site_name" content="relog.sh" />
+		<meta property="og:image" content="https://relog.sh/og.png" />
 		<meta property="og:image:width" content="1200" />
 		<meta property="og:image:height" content="630" />
 		<meta property="og:image:type" content="image/png" />
-		<meta property="og:image:alt" content="relog.dev — structured logging for the agentic era" />
+		<meta property="og:image:alt" content="relog.sh — structured logging for the agentic era" />
 
 		<!-- Twitter -->
 		<meta name="twitter:card" content="summary_large_image" />
 		<meta name="twitter:site" content="@linesofcode" />
 		<meta name="twitter:creator" content="@linesofcode" />
-		<meta name="twitter:title" content="relog.dev — Structured Logging for the Agentic Era" />
+		<meta name="twitter:title" content="relog.sh — Structured Logging for the Agentic Era" />
 		<meta
 			name="twitter:description"
 			content="Free, self-hosted log server for Bun. Ship structured logs, query with SQL, stream in real-time, and let AI agents analyze everything via MCP."
 		/>
-		<meta name="twitter:image" content="https://relog.dev/og.png" />
-		<meta name="twitter:image:alt" content="relog.dev — structured logging for the agentic era" />
+		<meta name="twitter:image" content="https://relog.sh/og.png" />
+		<meta name="twitter:image:alt" content="relog.sh — structured logging for the agentic era" />
 
 		<!-- SEO -->
 		<meta
@@ -70,10 +70,10 @@
 			{
 				"@context": "https://schema.org",
 				"@type": "SoftwareApplication",
-				"name": "relog.dev",
+				"name": "relog.sh",
 				"alternateName": ["relog", "bun logger", "typescript logger", "self-hosted logging"],
 				"description": "Free, self-hosted structured logging for Bun and TypeScript. SQLite-backed log server with SQL queries, real-time streaming, distributed tracing, wide events, tail sampling, Next.js integration, S3 archival, and MCP server for AI agent log analysis.",
-				"url": "https://relog.dev",
+				"url": "https://relog.sh",
 				"applicationCategory": "DeveloperApplication",
 				"applicationSubCategory": "Logging & Observability",
 				"operatingSystem": "Any",
@@ -127,12 +127,12 @@
 						"name": "Why not Datadog, Logtail, or Axiom?",
 						"acceptedAnswer": {
 							"@type": "Answer",
-							"text": "relog.dev is free, self-hosted, and MIT licensed. No per-GB ingestion fees, no third-party data sharing. Your logs stay on your infrastructure."
+							"text": "relog.sh is free, self-hosted, and MIT licensed. No per-GB ingestion fees, no third-party data sharing. Your logs stay on your infrastructure."
 						}
 					},
 					{
 						"@type": "Question",
-						"name": "How does relog.dev store logs?",
+						"name": "How does relog.sh store logs?",
 						"acceptedAnswer": {
 							"@type": "Answer",
 							"text": "All logs are stored in a single SQLite file with WAL mode enabled for high write throughput. The schema is indexed by level, service, project, branch, trace ID, and timestamp. No Redis, PostgreSQL, or external databases required."
@@ -172,7 +172,7 @@
 					},
 					{
 						"@type": "Question",
-						"name": "Does relog.dev support authentication?",
+						"name": "Does relog.sh support authentication?",
 						"acceptedAnswer": {
 							"@type": "Answer",
 							"text": "Yes. Three hierarchical roles — ingest (write-only), read (search, query, stream), and admin (full access) — with Bearer token auth on all endpoints. Supports multiple API keys per role for multi-app environments."
@@ -187,8 +187,8 @@
 			{
 				"@context": "https://schema.org",
 				"@type": "WebSite",
-				"name": "relog.dev",
-				"url": "https://relog.dev",
+				"name": "relog.sh",
+				"url": "https://relog.sh",
 				"description": "Free, self-hosted structured logging for Bun and TypeScript"
 			}
 		</script>
@@ -199,27 +199,27 @@
 				"@context": "https://schema.org",
 				"@type": "HowTo",
 				"name": "How to add structured logging to a Bun or TypeScript app",
-				"description": "Install relog.dev and start collecting structured logs with SQL queries, real-time streaming, and AI agent integration in under 60 seconds.",
+				"description": "Install relog.sh and start collecting structured logs with SQL queries, real-time streaming, and AI agent integration in under 60 seconds.",
 				"step": [
 					{
 						"@type": "HowToStep",
-						"name": "Install relog.dev",
-						"text": "Run 'bun add relog.dev' to install the package."
+						"name": "Install relog.sh",
+						"text": "Run 'bun add relog.sh' to install the package."
 					},
 					{
 						"@type": "HowToStep",
 						"name": "Start the log server",
-						"text": "Run 'bunx relog.dev start' to start the SQLite-backed log server on port 3485."
+						"text": "Run 'bunx relog.sh start' to start the SQLite-backed log server on port 3485."
 					},
 					{
 						"@type": "HowToStep",
 						"name": "Send logs from your application",
-						"text": "Import createLogger from 'relog.dev/client', create a logger instance with your server URL and service name, then call log.info(), log.warn(), log.error() with structured metadata."
+						"text": "Import createLogger from 'relog.sh/client', create a logger instance with your server URL and service name, then call log.info(), log.warn(), log.error() with structured metadata."
 					},
 					{
 						"@type": "HowToStep",
 						"name": "Search and tail logs",
-						"text": "Use 'bunx relog.dev tail' to stream logs in real-time, or 'bunx relog.dev search' to filter by level, service, project, and time range."
+						"text": "Use 'bunx relog.sh tail' to stream logs in real-time, or 'bunx relog.sh search' to filter by level, service, project, and time range."
 					}
 				]
 			}

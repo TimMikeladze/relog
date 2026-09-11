@@ -18,5 +18,5 @@ export function logRouteError(
 	fields.error = message;
 	if (err instanceof Error && err.stack)
 		fields.stack = err.stack.split("\n").slice(0, 5).join("\n");
-	console.error(`[relog.dev] route_error ${JSON.stringify(fields)}`);
+	console.error(`[relog.sh] route_error ${JSON.stringify(fields)}`);
 }

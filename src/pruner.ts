@@ -34,7 +34,7 @@ export async function pruneByAge(
 	for (;;) {
 		if (Date.now() >= deadline) {
 			console.warn(
-				`[relog.dev] auto-prune: hit ${budgetMs}ms wall-clock budget on age-based prune (deleted ${totalDeleted}); resuming next cycle`,
+				`[relog.sh] auto-prune: hit ${budgetMs}ms wall-clock budget on age-based prune (deleted ${totalDeleted}); resuming next cycle`,
 			);
 			break;
 		}
@@ -49,7 +49,7 @@ export async function pruneByAge(
 
 		if (result.succeededIds.length === 0) {
 			console.warn(
-				`[relog.dev] auto-prune: archive failed for all partitions during age-based prune, stopping. errors: ${result.errors.join("; ")}`,
+				`[relog.sh] auto-prune: archive failed for all partitions during age-based prune, stopping. errors: ${result.errors.join("; ")}`,
 			);
 			archiveBlocked = true;
 			break;
@@ -74,7 +74,7 @@ export async function pruneBySize(
 	while (db.getDbSize() > maxDbSize) {
 		if (Date.now() >= deadline) {
 			console.warn(
-				`[relog.dev] auto-prune: hit ${budgetMs}ms wall-clock budget on size-based prune (deleted ${totalDeleted}); resuming next cycle`,
+				`[relog.sh] auto-prune: hit ${budgetMs}ms wall-clock budget on size-based prune (deleted ${totalDeleted}); resuming next cycle`,
 			);
 			break;
 		}
@@ -89,7 +89,7 @@ export async function pruneBySize(
 			}
 			if (result.succeededIds.length === 0) {
 				console.warn(
-					`[relog.dev] auto-prune: archive failed for all partitions during size-based prune, stopping. errors: ${result.errors.join("; ")}`,
+					`[relog.sh] auto-prune: archive failed for all partitions during size-based prune, stopping. errors: ${result.errors.join("; ")}`,
 				);
 				archiveBlocked = true;
 				break;
@@ -103,7 +103,7 @@ export async function pruneBySize(
 		const currentSize = db.getDbSize();
 		if (currentSize >= previousSize) {
 			console.warn(
-				`[relog.dev] auto-prune: DB size did not decrease after pruning (${currentSize} bytes >= ${previousSize} bytes, threshold ${maxDbSize} bytes) — stopping`,
+				`[relog.sh] auto-prune: DB size did not decrease after pruning (${currentSize} bytes >= ${previousSize} bytes, threshold ${maxDbSize} bytes) — stopping`,
 			);
 			break;
 		}
@@ -155,30 +155,30 @@ export function startAutoPrune(
 
 			if (deleted > 0) {
 				consecutiveArchiveFailures = 0;
-				console.log(`[relog.dev] auto-prune: deleted ${deleted} logs`);
+				console.log(`[relog.sh] auto-prune: deleted ${deleted} logs`);
 				if (archiveConfig && onArchive) {
 					try {
 						await onArchive();
 					} catch (err) {
-						console.error("[relog.dev] auto-prune: onArchive callback failed:", err);
+						console.error("[relog.sh] auto-prune: onArchive callback failed:", err);
 					}
 				}
 			} else if (archiveBlocked) {
 				consecutiveArchiveFailures++;
 				if (consecutiveArchiveFailures >= 10) {
 					console.error(
-						`[relog.dev] CRITICAL: archive has failed ${consecutiveArchiveFailures} consecutive cycles — database may grow unbounded. Check S3 connectivity and credentials.`,
+						`[relog.sh] CRITICAL: archive has failed ${consecutiveArchiveFailures} consecutive cycles — database may grow unbounded. Check S3 connectivity and credentials.`,
 					);
 				} else if (consecutiveArchiveFailures >= 3) {
 					console.warn(
-						`[relog.dev] auto-prune: archive has failed ${consecutiveArchiveFailures} consecutive cycles`,
+						`[relog.sh] auto-prune: archive has failed ${consecutiveArchiveFailures} consecutive cycles`,
 					);
 				}
 			} else {
 				consecutiveArchiveFailures = 0;
 			}
 		} catch (err) {
-			console.error("[relog.dev] auto-prune error:", err);
+			console.error("[relog.sh] auto-prune error:", err);
 		} finally {
 			inFlight = false;
 		}

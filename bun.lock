@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "relog.dev",
+      "name": "relog.sh",
       "dependencies": {
         "@drizzle-team/brocli": "^0.12.0",
         "@duckdb/node-api": "^1.5.5-r.4",

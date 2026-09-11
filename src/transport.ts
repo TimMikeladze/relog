@@ -129,7 +129,7 @@ export class Transport {
 
 	private async sendBatch(batch: LogRecord[]): Promise<void> {
 		if (typeof fetch === "undefined") {
-			console.warn(`[relog.dev] fetch is not available, dropping ${batch.length} log(s)`);
+			console.warn(`[relog.sh] fetch is not available, dropping ${batch.length} log(s)`);
 			return;
 		}
 
@@ -193,7 +193,7 @@ export class Transport {
 					// onError should not throw
 				}
 			} else {
-				console.warn(`[relog.dev] Failed to send ${batch.length} log(s): ${lastError.message}`);
+				console.warn(`[relog.sh] Failed to send ${batch.length} log(s): ${lastError.message}`);
 			}
 		}
 	}

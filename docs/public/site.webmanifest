@@ -1,5 +1,5 @@
 {
-	"name": "relog.dev",
+	"name": "relog.sh",
 	"short_name": "relog",
 	"description": "Free, self-hosted structured logging for Bun and TypeScript",
 	"start_url": "/",

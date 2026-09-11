@@ -179,7 +179,7 @@ export function AppSidebar({
 					</span>
 					{!collapsed && (
 						<div className="flex min-w-0 flex-1 flex-col leading-tight">
-							<span className="truncate text-xs font-semibold tracking-tight">relog.dev</span>
+							<span className="truncate text-xs font-semibold tracking-tight">relog.sh</span>
 							<span className="truncate text-2xs text-muted-foreground">
 								{health ? `${health.log_count.toLocaleString()} logs` : "connecting…"}
 							</span>
@@ -343,7 +343,7 @@ export function AppSidebar({
 					</IconAction>
 					{/* Inherits the muted icon colour like its neighbours — a pink
 					    heart was the highest-contrast thing in the whole nav. */}
-					<IconAction label="Support relog.dev" onClick={onSupportClick}>
+					<IconAction label="Support relog.sh" onClick={onSupportClick}>
 						<Heart className="h-3.5 w-3.5" />
 					</IconAction>
 				</div>

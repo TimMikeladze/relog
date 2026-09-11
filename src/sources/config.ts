@@ -142,7 +142,7 @@ export function loadSourcesConfig(filePath: string): SourceConfig[] {
 		// Enforce minimum poll interval
 		if (resolved.every < MIN_EVERY_SECONDS) {
 			console.warn(
-				`[relog.dev] source 'every' clamped to ${MIN_EVERY_SECONDS}s (was ${resolved.every}s)`,
+				`[relog.sh] source 'every' clamped to ${MIN_EVERY_SECONDS}s (was ${resolved.every}s)`,
 			);
 			resolved.every = MIN_EVERY_SECONDS;
 		}

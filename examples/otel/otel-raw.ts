@@ -6,7 +6,7 @@
  * relog accepts on the wire.
  *
  * Usage:
- *   bunx relog.dev start &
+ *   bunx relog.sh start &
  *   bun examples/otel/otel-raw.ts
  *
  * Then open http://localhost:3485 and check the Traces view.

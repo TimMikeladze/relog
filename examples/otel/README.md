@@ -1,6 +1,6 @@
 # OpenTelemetry example
 
-Two ways to ship OTLP to relog.dev.
+Two ways to ship OTLP to relog.sh.
 
 ## Raw OTLP/JSON (zero deps)
 
@@ -8,7 +8,7 @@ Hand-crafted OTLP payload POSTed to `/v1/traces` and `/v1/logs`. Useful to see e
 
 ```bash
 # terminal 1
-bunx relog.dev start
+bunx relog.sh start
 
 # terminal 2
 bun examples/otel/otel-raw.ts
